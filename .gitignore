@@ -1,0 +1,15 @@
+# Local OpenClaw runtime state
+openclaw-state/
+.openclaw/
+
+# Keep most workspace files, but exclude private identity notes
+workspace/SOUL.md
+workspace/IDENTITY.md
+workspace/IDENTITY.mD
+workspace/USER.md
+workspace/User.md
+
+# Local environment and editor noise
+.env
+.DS_Store
+**/.DS_Store

@@ -2,12 +2,11 @@
 openclaw-state/
 .openclaw/
 
-# Keep most workspace files, but exclude private identity notes
-workspace/SOUL.md
-workspace/IDENTITY.md
-workspace/IDENTITY.mD
-workspace/USER.md
-workspace/User.md
+# Workspace: ignore everything, include only selected files
+workspace/*
+!workspace/AGENTS.md
+!workspace/HEARTBEAT.md
+!workspace/TOOLS.md
 
 # Local environment and editor noise
 .env

@@ -216,3 +216,4 @@ This is a starting point. Add your own conventions, style, and rules as you figu
 - Reports stored in /workspace/research/
 - Each request gets its own subfolder: topic_name_YYYYMMDD
 - Yashraj may ask about past research anytime
+- Research requests must be triggered using a subagent by default unless stated otherwise.

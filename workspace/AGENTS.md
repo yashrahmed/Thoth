@@ -210,3 +210,9 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
+
+## Research Workflow (from Yashraj)
+- Research requests come ONLY via Discord channel 1476764773868638218
+- Reports stored in /workspace/research/
+- Each request gets its own subfolder: topic_name_YYYYMMDD
+- Yashraj may ask about past research anytime

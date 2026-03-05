@@ -1,3 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+build/
+
+# Bun
+bun.lockb
+
 # Local OpenClaw runtime state
 openclaw-state/
 .openclaw/
@@ -8,7 +19,25 @@ workspace/*
 !workspace/HEARTBEAT.md
 !workspace/TOOLS.md
 
-# Local environment and editor noise
+# Environment
 .env
+.env.local
+.env.*.local
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editor / OS noise
 .DS_Store
 **/.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+*.sublime-*
+
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
+coverage/

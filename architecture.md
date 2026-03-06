@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    Channels                         │
-│   Gmail  ·  Discord  ·  Web App  ·  Mobile App     │
+│              Web App  ·  Mobile App                 │
 └──────────────────────┬──────────────────────────────┘
                        │ normalized messages
 ┌──────────────────────▼──────────────────────────────┐
@@ -44,7 +44,7 @@ packages/
   server/         # HTTP API, WebSocket, gateway/router
   agents/         # Agent definitions, orchestration, tool registry
   knowledge/      # Embeddings, vector search, causal graph CRUD
-  channels/       # Adapters: Gmail, Discord (web/mobile use server directly)
+  channels/       # Adapters: future integrations (web/mobile use server directly)
   web/            # React dashboard
   mobile/         # React Native app
   shared/         # Types, schemas, constants
@@ -84,15 +84,13 @@ agents can invoke. Not a separate service.
 | Causal graphs | Postgres tables (start) → Neo4j (if needed) | Nodes + edges + metadata |
 | Queue | BullMQ + Redis | Async ingestion jobs |
 | Browser automation | Playwright | Headless, Bun/Node compatible |
-| Channel: Gmail | Google API (OAuth) | |
-| Channel: Discord | discord.js | |
 
 ## Build Order
 
 1. **`packages/agents`** — one working agent with tool-use via Vercel AI SDK
 2. **`packages/knowledge`** — pgvector ingestion + retrieval for a single document type
 3. **Wire through `packages/server`** — `/chat` endpoint that takes a message, runs the Q/A agent, returns a response
-4. **Add channels one at a time** — web app first (already scaffolded), then Gmail, then Discord
+4. **Add channels one at a time** — web app first (already scaffolded), then additional integrations as needed
 
 The causal graph work is a research track that develops in parallel inside
 `packages/knowledge` without blocking the rest.

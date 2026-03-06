@@ -11,8 +11,6 @@ An agent system that manages work and personal information.
 
 ### Channels
 
-- Gmail
-- Discord
 - Custom Mobile and Web app
 
 ### Design

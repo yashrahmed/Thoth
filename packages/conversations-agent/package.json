@@ -9,7 +9,6 @@
     "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
-    "@thoth/shared": "workspace:*",
-    "ai": "^6.0.116"
+    "@thoth/shared": "workspace:*"
   }
 }

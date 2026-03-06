@@ -22,7 +22,7 @@ Emails ───────────────┼──►  Knowledge Base
 Banking Apps & APIs ──┤     Composer Agent              │         ▲
 Billing Apps & APIs ──┘                                 │         │
                                                         ▼         │
-Mobile App ──┐                                   Research & Q/A Agent
+Mobile App ──┐                                          Q/A Agent
 Web App ─────┼──────────────────────────────────►
 Email ───────┘
 ```
@@ -57,7 +57,10 @@ For this project, an LLM using a causal graph must demonstrate efficacy in the f
 ### Questions / Comments
 
 - Check Kimi K2.5.
-- Research capabilities outside of ingested data.
+
+### Optional Goals
+
+- Research agent: capabilities outside of ingested data.
 
 ### Wildcards
 

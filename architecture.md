@@ -16,12 +16,12 @@
                        │
 ┌──────────────────────▼──────────────────────────────┐
 │                    Agents                           │
-│  ┌────────────┐ ┌───────────┐ ┌──────────────────┐  │
-│  │  Research   │ │   Q/A     │ │  KB Composer     │  │
-│  │  Agent      │ │   Agent   │ │  (ingestion)     │  │
-│  └─────┬──────┘ └─────┬─────┘ └────────┬─────────┘  │
-│        │              │                │             │
-│        ▼              ▼                ▼             │
+│  ┌───────────┐ ┌──────────────────┐                  │
+│  │   Q/A     │ │  KB Composer     │                  │
+│  │   Agent   │ │  (ingestion)     │                  │
+│  └─────┬─────┘ └────────┬─────────┘                  │
+│        │               │                              │
+│        ▼               ▼                              │
 │  ┌─────────────────────────────────────────────┐     │
 │  │           Tool Registry                     │     │
 │  │  Browser · APIs · Web Search · Calendar     │     │
@@ -92,8 +92,8 @@ agents can invoke. Not a separate service.
 3. **Wire through `packages/server`** — `/chat` endpoint that takes a message, runs the Q/A agent, returns a response
 4. **Add channels one at a time** — web app first (already scaffolded), then additional integrations as needed
 
-The causal graph work is a research track that develops in parallel inside
-`packages/knowledge` without blocking the rest.
+The causal graph work develops in parallel inside `packages/knowledge`
+without blocking the rest.
 
 ## Notes
 

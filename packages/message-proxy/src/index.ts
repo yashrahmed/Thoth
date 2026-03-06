@@ -13,4 +13,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`Thoth server running at http://localhost:${server.port}`);
+console.log(`Thoth message proxy running at http://localhost:${server.port}`);

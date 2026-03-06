@@ -1,0 +1,15 @@
+{
+  "name": "@thoth/conversations-agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "bun x tsc --noEmit"
+  },
+  "dependencies": {
+    "@thoth/shared": "workspace:*",
+    "ai": "^6.0.116"
+  }
+}

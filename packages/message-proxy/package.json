@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/server",
+  "name": "@thoth/message-proxy",
   "version": "0.0.1",
   "private": true,
   "type": "module",

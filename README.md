@@ -11,14 +11,13 @@ An agent system that manages work and personal information.
 ```
 thoth/
 ├── packages/
-│   ├── server/      # HTTP API, WebSocket, proxy layer
-│   ├── agents/      # Agent definitions, orchestration, tool registry
-│   ├── knowledge/   # Embeddings, vector search, causal graph CRUD
-│   ├── channels/    # Proxy + future channel adapters
-│   ├── web/         # React web app
-│   ├── mobile/      # React Native mobile app
-│   └── shared/      # Shared types and utilities
-└── docs/            # Architecture and design docs
+│   ├── message-proxy/             # HTTP API, WebSocket, proxy layer
+│   ├── conversations-agent/       # Primary user-facing agent
+│   ├── knowledge-curation-agent/  # Background knowledge curation
+│   ├── web/                       # React web app
+│   ├── mobile/                    # React Native mobile app
+│   └── shared/                    # Shared types and utilities
+└── docs/                          # Architecture and design docs
 ```
 
 ## Tech Stack

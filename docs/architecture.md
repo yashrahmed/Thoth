@@ -4,39 +4,38 @@
 
 A conversation is a sequence of messages. Messages are multi-modal.
 
-![Architecture](./image.png)
+![Architecture](./arch.png)
 
 ## Components
 
-**Proxy** — Entry point for the Mobile and Web apps. Can be extended to
-handle other channels.
+**Message Proxy** — Entry point for the Mobile and Web apps. Can be
+extended to handle other channels.
 
 **Conversations Agent** — The primary agent. Handles user messages, can use
-tools, and writes to the Conversations Store and Blob Store. Triggers the
-Knowledge Curation Agent via tool calls or a scheduler.
+tools, and writes to the Conversations Store. Can run threads to answer
+difficult questions.
 
-**Knowledge Curation Agent** — Runs asynchronously. Reads from the
-Conversations Store and Blob Store, processes content, and writes to the
+**Conversations Store** — Persists conversation history including non-text
+media (images, audio, documents).
+
+**Background Knowledge Curation Agent** — Runs asynchronously, triggered
+via tool calls from the Conversations Agent or on a scheduler. Reads from
+the Conversations Store, processes content, and writes to the Curated
 Knowledge Store.
 
-**Conversations Store** — Persists conversation history.
-
-**Blob Store** — Stores non-text media (images, audio, documents).
-
-**Knowledge Store** — Vector store + causal graph. The indexed, curated
-knowledge base used for retrieval.
+**Curated Knowledge Store** — Vector store + causal graph. The indexed,
+curated knowledge base used for retrieval.
 
 ## Package Structure
 
 ```
 packages/
-  server/      # HTTP API, WebSocket, proxy layer
-  agents/      # Conversations Agent, Knowledge Curation Agent, tool registry
-  knowledge/   # Embeddings, vector search, causal graph CRUD
-  channels/    # Proxy + future channel adapters
-  web/         # React dashboard
-  mobile/      # React Native app
-  shared/      # Types, schemas, constants
+  message-proxy/             # HTTP API, WebSocket, proxy layer
+  conversations-agent/       # Conversations Agent — primary user-facing agent
+  knowledge-curation-agent/  # Background Knowledge Curation Agent
+  web/                       # React dashboard
+  mobile/                    # React Native app
+  shared/                    # Types, schemas, constants
 ```
 
 ## Design Decisions
@@ -45,17 +44,21 @@ packages/
 calls an LLM in a loop with a tool registry, and returns a response. Uses
 the Vercel AI SDK's tool-use pattern — no heavy framework.
 
-**Knowledge curation is async.** The Knowledge Curation Agent is triggered
-via tool calls from the Conversations Agent or on a scheduler. It picks up
-conversations and media, chunks them, embeds them, and writes to the
-knowledge store. Uses BullMQ + Redis or a cron polling a table.
+**Conversations Agent can spawn threads.** For difficult questions, the
+agent can run sub-threads to break down and answer complex queries.
+
+**Knowledge curation is async.** The Background Knowledge Curation Agent is
+triggered via tool calls from the Conversations Agent or on a scheduler. It
+reads from the Conversations Store, chunks content, embeds it, and writes
+to the Curated Knowledge Store. Uses BullMQ + Redis or a cron polling a
+table.
 
 **Single Postgres instance to start.** `pgvector` for embeddings, regular
 tables for the causal graph (nodes + edges with metadata). Can swap in
 Neo4j for the graph later if queries get complex.
 
-**Blob store for non-text media.** Binary content (images, audio, files) is
-kept separate from the conversation and knowledge stores.
+**Conversations Store holds all media.** Non-text media is stored alongside
+conversation history rather than in a separate blob store.
 
 **Browser automation lives in the tool registry.** Playwright as a tool
 agents can invoke. Not a separate service.
@@ -74,11 +77,10 @@ agents can invoke. Not a separate service.
 
 ## Build Order
 
-1. **`packages/agents`** — Conversations Agent with tool-use via Vercel AI SDK
-2. **`packages/knowledge`** — pgvector ingestion + retrieval for a single document type
-3. **Wire through `packages/server`** — `/chat` endpoint, proxy layer, conversations store
-4. **Knowledge Curation Agent** — triggered from Conversations Agent via tool call or scheduler
-5. **Add channels** — web app first (already scaffolded), extend proxy for other channels as needed
+1. **`packages/conversations-agent`** — Conversations Agent with tool-use via Vercel AI SDK
+2. **`packages/message-proxy`** — `/chat` endpoint, proxy layer, conversations store
+3. **`packages/knowledge-curation-agent`** — triggered from Conversations Agent via tool call or scheduler
+4. **Add channels** — web app first (already scaffolded), extend proxy for other channels as needed
 
 ## Notes
 

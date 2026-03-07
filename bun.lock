@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "thoth",
-      "dependencies": {
-        "ai": "^6.0.116",
-      },
       "devDependencies": {
         "@types/bun": "^1.3.10",
       },
@@ -17,6 +14,7 @@
       "dependencies": {
         "@thoth/contracts": "workspace:*",
         "@thoth/entities": "workspace:*",
+        "ai": "^6.0.116",
         "pg": "^8.16.3",
       },
       "devDependencies": {
@@ -37,9 +35,6 @@
     "packages/message-proxy": {
       "name": "@thoth/message-proxy",
       "version": "0.0.1",
-      "dependencies": {
-        "@thoth/agents": "workspace:*",
-      },
     },
     "packages/mobile": {
       "name": "@thoth/mobile",

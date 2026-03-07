@@ -66,7 +66,7 @@ export class MessageRepository implements MessageQuery {
   }
 
   async createMessage(input: CreateMessageQuery): Promise<Message> {
-    const { conversationId, message } = input;
+    const { message } = input;
     const result = await this.pool.query<MessageRow>(
       `
         INSERT INTO public.messages (
@@ -90,7 +90,7 @@ export class MessageRepository implements MessageQuery {
       `,
       [
         message.id,
-        conversationId,
+        message.conversation_id,
         message.type,
         message.text_content,
         message.media_content?.toString() ?? null,
@@ -150,7 +150,7 @@ export class MessageRepository implements MessageQuery {
   }
 
   async updateMessage(input: UpdateMessageQuery): Promise<Message> {
-    const { conversationId, message } = input;
+    const { message } = input;
     const result = await this.pool.query<MessageRow>(
       `
         UPDATE public.messages
@@ -171,7 +171,7 @@ export class MessageRepository implements MessageQuery {
       `,
       [
         message.id,
-        conversationId,
+        message.conversation_id,
         message.type,
         message.text_content,
         message.media_content?.toString() ?? null,
@@ -187,19 +187,20 @@ export class MessageRepository implements MessageQuery {
   }
 
   async deleteMessage(input: DeleteMessageQuery): Promise<void> {
-    const { conversationId, messageId } = input;
+    const { conversation_id, messageId } = input;
     await this.pool.query(
       `
         DELETE FROM public.messages
         WHERE id = $1 AND conversation_id = $2
       `,
-      [messageId, conversationId],
+      [messageId, conversation_id],
     );
   }
 
   private mapRowToMessage(row: MessageRow): Message {
     return {
       id: row.id,
+      conversation_id: row.conversation_id,
       type: row.type,
       text_content: row.text_content,
       media_content: row.media_content ? new URL(row.media_content) : null,

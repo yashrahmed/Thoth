@@ -9,6 +9,7 @@ export type MessageType = "assistant" | "developer" | "system" | "user";
 
 export interface Message {
   id: MessageId;
+  conversation_id: ConversationId;
   type: MessageType;
   text_content: MarkdownTextContent | null;
   media_content: URL | null;

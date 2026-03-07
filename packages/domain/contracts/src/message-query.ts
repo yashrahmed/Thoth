@@ -5,17 +5,15 @@ import type {
 } from "@thoth/entities";
 
 export interface CreateMessageQuery {
-  conversationId: ConversationId;
   message: Message;
 }
 
 export interface UpdateMessageQuery {
-  conversationId: ConversationId;
   message: Message;
 }
 
 export interface DeleteMessageQuery {
-  conversationId: ConversationId;
+  conversation_id: ConversationId;
   messageId: MessageId;
 }
 

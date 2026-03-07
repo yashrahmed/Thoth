@@ -8,16 +8,12 @@ import type { Message, MessageType } from "@thoth/entities";
 
 interface MessageBody {
   id: string;
+  conversation_id: string;
   type: MessageType;
   text_content: string | null;
   media_content: string | null;
   last_create_ts: string;
   last_update_ts: string;
-}
-
-interface MessageMutationBody {
-  conversationId: string;
-  message: MessageBody;
 }
 
 export class MessageController {
@@ -40,20 +36,20 @@ export class MessageController {
   async delete(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const messageId = url.searchParams.get("messageId");
-    const conversationId = url.searchParams.get("conversationId");
+    const conversationId = url.searchParams.get("conversation_id");
 
     if (!messageId || !conversationId) {
       return Response.json(
         {
           error:
-            "messageId and conversationId query parameters are required.",
+            "messageId and conversation_id query parameters are required.",
         },
         { status: 400 },
       );
     }
 
     const query: DeleteMessageQuery = {
-      conversationId,
+      conversation_id: conversationId,
       messageId,
     };
 
@@ -64,11 +60,11 @@ export class MessageController {
 
   async showAll(req: Request): Promise<Response> {
     const url = new URL(req.url);
-    const conversationId = url.searchParams.get("conversationId");
+    const conversationId = url.searchParams.get("conversation_id");
 
     if (!conversationId) {
       return Response.json(
-        { error: "conversationId query parameter is required." },
+        { error: "conversation_id query parameter is required." },
         { status: 400 },
       );
     }
@@ -86,10 +82,9 @@ export class MessageController {
   private async parseMutationQuery(
     req: Request,
   ): Promise<CreateMessageQuery | UpdateMessageQuery> {
-    const body = (await req.json()) as MessageMutationBody;
+    const body = (await req.json()) as { message: MessageBody };
 
     return {
-      conversationId: body.conversationId,
       message: this.parseMessage(body.message),
     };
   }

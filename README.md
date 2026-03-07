@@ -11,12 +11,14 @@ An agent system that manages work and personal information.
 ```
 thoth/
 ├── packages/
+│   ├── agents/                    # Primary and background agent workflows
+│   ├── domain/
+│   │   ├── entities/              # Shared domain entities
+│   │   └── contracts/             # Shared domain contracts
 │   ├── message-proxy/             # HTTP API, WebSocket, proxy layer
-│   ├── conversations-agent/       # Primary user-facing agent
-│   ├── knowledge-curation-agent/  # Background knowledge curation
 │   ├── web/                       # React web app
 │   ├── mobile/                    # React Native mobile app
-│   └── shared/                    # Shared types and utilities
+│   └── ...                        # Additional adapters and packages as needed
 └── docs/                          # Architecture and design docs
 ```
 
@@ -28,6 +30,7 @@ thoth/
 | Language | TypeScript |
 | Web | React + Vite |
 | Mobile | React Native |
+| Architecture | Hexagonal + DDD |
 | Monorepo | Bun workspaces |
 | LLM layer | Vercel AI SDK (`ai`) |
 | LLM providers | Anthropic / OpenAI / Ollama / Gemini |

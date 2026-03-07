@@ -1,5 +1,3 @@
-import type { Message } from "@thoth/shared";
-
 const server = Bun.serve({
   port: 3000,
   fetch(req) {

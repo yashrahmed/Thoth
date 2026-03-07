@@ -30,12 +30,13 @@ curated knowledge base used for retrieval.
 
 ```
 packages/
+  agents/                    # Conversations + knowledge curation agents
+  domain/
+    entities/                # Shared domain entities
+    contracts/               # Shared domain contracts
   message-proxy/             # HTTP API, WebSocket, proxy layer
-  conversations-agent/       # Conversations Agent — primary user-facing agent
-  knowledge-curation-agent/  # Background Knowledge Curation Agent
   web/                       # React dashboard
   mobile/                    # React Native app
-  shared/                    # Types, schemas, constants
 ```
 
 ## Design Decisions
@@ -77,10 +78,9 @@ agents can invoke. Not a separate service.
 
 ## Build Order
 
-1. **`packages/conversations-agent`** — Conversations Agent with tool-use via Vercel AI SDK
+1. **`packages/agents`** — Conversations and knowledge curation agent workflows
 2. **`packages/message-proxy`** — `/chat` endpoint, proxy layer, conversations store
-3. **`packages/knowledge-curation-agent`** — triggered from Conversations Agent via tool call or scheduler
-4. **Add channels** — web app first (already scaffolded), extend proxy for other channels as needed
+3. **Add channels** — web app first (already scaffolded), extend proxy for other channels as needed
 
 ## Notes
 

@@ -8,8 +8,8 @@
   "scripts": {
     "db:local:setup": "./scripts/db-local-launch.sh",
     "db:local:down": "./scripts/db-local-stop.sh",
-    "db:local:up": "docker compose -f db/local/docker-compose.yml up -d postgres",
-    "db:local:migrate": "docker compose -f db/local/docker-compose.yml up -d postgres && docker compose -f db/local/docker-compose.yml --profile migrations run --rm flyway migrate",
+    "db:local:up": "docker compose --env-file db/local/.env -f db/local/docker-compose.yml up -d postgres",
+    "db:local:migrate": "docker compose --env-file db/local/.env -f db/local/docker-compose.yml up -d postgres && docker compose --env-file db/local/.env -f db/local/docker-compose.yml --profile migrations run --rm flyway migrate",
     "dev:agents": "./scripts/agents-launch.sh",
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",
     "dev:web": "bun run --filter @thoth/web dev",

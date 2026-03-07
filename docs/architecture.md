@@ -2,91 +2,84 @@
 
 ## Overview
 
-A conversation is a sequence of messages. Messages are multi-modal.
+A conversation is a sequence of multi-modal messages. The user reaches the
+system through the proxy. The conversations agent owns the primary dialogue
+loop, can use tools, and persists work into the conversations store. A
+separate planning agent can be invoked for planning-heavy tasks and can call
+specialized planning and simulation systems. Background knowledge curation
+reads from the operational stores and writes curated knowledge back for later
+use.
 
-![Architecture](./arch.png)
+![Architecture](./arch-plan-2.png)
 
 ## Components
 
-**Message Proxy** — Entry point for the Mobile and Web apps. Can be
-extended to handle other channels.
+**Proxy** — Entry point for the mobile and web app. It can be extended later
+to handle additional channels.
 
-**Conversations Agent** — The primary agent. Handles user messages, can use
-tools, and writes to the Conversations Store. Can run threads to answer
-difficult questions.
+**Conversations Agent** — Primary user-facing agent. It handles the live
+conversation, can use tools, and can run threads to answer difficult
+questions.
 
-**Conversations Store** — Persists conversation history including non-text
-media (images, audio, documents).
+**Planning Agent** — Specialized agent for planning-oriented reasoning. It is
+invoked from the conversations flow when a task needs structured planning or
+simulation.
 
-**Background Knowledge Curation Agent** — Runs asynchronously, triggered
-via tool calls from the Conversations Agent or on a scheduler. Reads from
-the Conversations Store, processes content, and writes to the Curated
-Knowledge Store.
+**Frame Resolver System** — Resolves user intent into grounded planning frames
+that the planning agent can work with.
 
-**Curated Knowledge Store** — Vector store + causal graph. The indexed,
-curated knowledge base used for retrieval.
+**Classical Planning System** — Produces structured plans from grounded inputs
+and constraints.
 
-## Package Structure
+**Rapier Simulation & Grounding System** — Runs simulation-oriented grounding
+checks for plans.
 
-```
+**Conversations Store** — Operational store for conversation history and
+non-text media.
+
+**Curated Knowledge Store** — Derived knowledge store used for retrieval and
+curation workflows.
+
+**Background Knowledge Curation Agent** — Asynchronous agent that can use
+tools, reads from the stores, and updates curated knowledge.
+
+## Flow
+
+1. The user interacts with the system through the proxy.
+2. The proxy forwards the request to the conversations agent.
+3. The conversations agent reads from and writes to the conversations store.
+4. When a task requires planning, the conversations agent invokes the
+   planning agent.
+5. The planning agent can call the frame resolver system, the classical
+   planning system, and the Rapier-based simulation and grounding system.
+6. Conversation data and curated knowledge are combined as inputs to the
+   background knowledge curation agent.
+7. The background knowledge curation agent updates the curated knowledge
+   store and can use tools during that process.
+
+## Package Direction
+
+Current package structure follows the same split shown in the diagram:
+
+```text
 packages/
-  agents/                    # Conversations + knowledge curation agents
+  agents/                    # conv-agent, kb-curate-agent, planning-agent
   domain/
-    entities/                # Shared domain entities
-    contracts/               # Shared domain contracts
-  message-proxy/             # HTTP API, WebSocket, proxy layer
-  web/                       # React dashboard
-  mobile/                    # React Native app
+    entities/                # shared domain entities
+    contracts/               # shared domain contracts
+  message-proxy/             # channel-facing proxy layer
+  web/                       # web client
+  mobile/                    # mobile client
 ```
 
-## Design Decisions
-
-**Agents are LLM loops with tools.** Each agent takes a message + context,
-calls an LLM in a loop with a tool registry, and returns a response. Uses
-the Vercel AI SDK's tool-use pattern — no heavy framework.
-
-**Conversations Agent can spawn threads.** For difficult questions, the
-agent can run sub-threads to break down and answer complex queries.
-
-**Knowledge curation is async.** The Background Knowledge Curation Agent is
-triggered via tool calls from the Conversations Agent or on a scheduler. It
-reads from the Conversations Store, chunks content, embeds it, and writes
-to the Curated Knowledge Store. Uses BullMQ + Redis or a cron polling a
-table.
-
-**Single Postgres instance to start.** `pgvector` for embeddings, regular
-tables for the causal graph (nodes + edges with metadata). Can swap in
-Neo4j for the graph later if queries get complex.
-
-**Conversations Store holds all media.** Non-text media is stored alongside
-conversation history rather than in a separate blob store.
-
-**Browser automation lives in the tool registry.** Playwright as a tool
-agents can invoke. Not a separate service.
-
-## Tech Stack
-
-| Concern | Choice | Rationale |
-|---|---|---|
-| LLM layer | Vercel AI SDK (`ai`) | Model-agnostic, TypeScript-first, no platform dependency |
-| LLM providers | Anthropic / OpenAI / Ollama / Gemini | Swappable via AI SDK providers |
-| RAG / indexing | LlamaIndex TypeScript | Strong document ingestion, chunking, retrieval |
-| Vector store | Postgres + pgvector | One database, no extra infra |
-| Causal graphs | Postgres tables (start) → Neo4j (if needed) | Nodes + edges + metadata |
-| Queue | BullMQ + Redis | Async ingestion jobs |
-| Browser automation | Playwright | Headless, Bun/Node compatible |
-
-## Build Order
-
-1. **`packages/agents`** — Conversations and knowledge curation agent workflows
-2. **`packages/message-proxy`** — `/chat` endpoint, proxy layer, conversations store
-3. **Add channels** — web app first (already scaffolded), extend proxy for other channels as needed
+The planning internals currently live inside `packages/agents` under
+`planning-agent` and are organized into `frame`, `plan`, and `sim`.
 
 ## Notes
 
-- The Vercel AI SDK is a standalone open-source package (`npm install ai`).
-  It has no dependency on Vercel's hosting platform.
-- LangChain was considered and rejected: heavy abstraction layer, frequent
-  breaking changes, painful to debug for custom behavior.
-- LlamaIndex TS and the Vercel AI SDK are complementary — AI SDK handles
-  the agent/LLM loop, LlamaIndex handles the knowledge pipeline.
+- The proxy and the agents run as separate services.
+- The conversations store is the operational source for live assistant state.
+- The curated knowledge store is a derived store, not the primary operational
+  record.
+- The planning agent is a specialized capability, not a replacement for the
+  conversations agent.

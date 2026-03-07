@@ -28,6 +28,8 @@ Use ideas from Domain-Driven Design during development.
 - Add new capabilities by extending the domain and ports first, then wiring
   adapters around them.
 - Keep terminology consistent across code, docs, and interfaces.
+- When planning simulations are rebuilt, use Rapier for rigid body physics
+  and Three.js for visualization.
 
 ## Persistence
 

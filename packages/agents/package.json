@@ -8,12 +8,14 @@
   "scripts": {
     "start:conv-agent": "bun run src/conv-agent/server.ts",
     "start:kb-curate-agent": "bun run src/kb-curate-agent/server.ts",
+    "start:planning-agent": "bun run src/planning-agent/server.ts",
     "typecheck": "bun x tsc --noEmit"
   },
   "devDependencies": {
     "@types/pg": "^8.15.5"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
     "@thoth/contracts": "workspace:*",
     "@thoth/entities": "workspace:*",
     "ai": "^6.0.116",

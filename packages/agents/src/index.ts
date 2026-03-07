@@ -1,6 +1,7 @@
 import type { Message } from "@thoth/entities";
 export * from "./conv-agent/controllers/conversation-controller";
 export * from "./conv-agent/controllers/message-controller";
+export * from "./planning-agent";
 export * from "./repositories/conversation-repository";
 export * from "./repositories/message-repository";
 
@@ -19,5 +20,11 @@ export class ConversationsAgent {
 export class KnowledgeCurationAgent {
   async run(): Promise<void> {
     // TODO: read from the conversations store and update curated knowledge.
+  }
+}
+
+export class PlanningAgent {
+  async run(): Promise<void> {
+    // TODO: expose planning workflows through the tool registry.
   }
 }

@@ -22,3 +22,5 @@ const server = Bun.serve({
 });
 
 console.log(`Thoth kb-curate-agent running at http://localhost:${server.port}`);
+
+export {};

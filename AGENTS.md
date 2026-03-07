@@ -9,6 +9,7 @@ Thoth should be developed using a hexagonal architecture.
   adapters around the core application.
 - Define clear ports/interfaces at the application boundary and implement
   infrastructure concerns behind those ports.
+- `message-proxy` and `agents` should run separately as independent services.
 
 ## Domain-Driven Design
 

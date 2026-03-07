@@ -10,7 +10,7 @@
     "db:local:down": "./scripts/db-local-stop.sh",
     "db:local:up": "docker compose -f db/local/docker-compose.yml up -d postgres",
     "db:local:migrate": "docker compose -f db/local/docker-compose.yml up -d postgres && docker compose -f db/local/docker-compose.yml --profile migrations run --rm flyway migrate",
-    "dev:agents": "bun run --filter @thoth/agents start",
+    "dev:agents": "./scripts/agents-launch.sh",
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",
     "dev:web": "bun run --filter @thoth/web dev",
     "build": "bun run --filter '*' build",

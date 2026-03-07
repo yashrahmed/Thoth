@@ -1,1 +1,1 @@
-export * from "./message-contract";
+export * from "./message-query";

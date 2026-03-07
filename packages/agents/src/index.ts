@@ -1,4 +1,5 @@
 import type { Message } from "@thoth/entities";
+export * from "./repositories/message-repository";
 
 export class ConversationsAgent {
   async handle(message: Message): Promise<Message> {

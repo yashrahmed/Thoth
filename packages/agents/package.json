@@ -10,6 +10,7 @@
     "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
+    "@thoth/contracts": "workspace:*",
     "@thoth/entities": "workspace:*"
   }
 }

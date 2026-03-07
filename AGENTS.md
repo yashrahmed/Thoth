@@ -27,3 +27,12 @@ Use ideas from Domain-Driven Design during development.
 - Add new capabilities by extending the domain and ports first, then wiring
   adapters around them.
 - Keep terminology consistent across code, docs, and interfaces.
+
+## Persistence
+
+- Keep SQL migrations as the source of truth for persistence shape.
+- Keep domain entities and contracts independent from the database schema.
+- Add repository integration tests that run against the local Postgres
+  container and exercise contracts end to end.
+- Prefer this approach to preserve explicit SQL control, avoid ORM lock-in,
+  and catch schema drift with real database-backed verification.

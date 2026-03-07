@@ -23,6 +23,11 @@ workspace/*
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+
+# Local database state
+db/local/_data/
 
 # Claude Code local settings
 .claude/settings.local.json
@@ -32,6 +37,7 @@ workspace/*
 **/.DS_Store
 *.swp
 *.swo
+*.log
 .idea/
 .vscode/
 *.sublime-*
@@ -41,3 +47,12 @@ workspace/*
 
 # Test coverage
 coverage/
+
+# Common tool caches
+.cache/
+
+# React Native / Expo
+.expo/
+.expo-shared/
+android/.gradle/
+ios/Pods/

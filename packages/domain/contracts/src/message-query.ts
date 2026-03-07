@@ -4,27 +4,27 @@ import type {
   MessageId,
 } from "@thoth/entities";
 
-export interface CreateMessageInput {
+export interface CreateMessageQuery {
   conversationId: ConversationId;
   message: Message;
 }
 
-export interface UpdateMessageInput {
+export interface UpdateMessageQuery {
   conversationId: ConversationId;
   message: Message;
 }
 
-export interface DeleteMessageInput {
+export interface DeleteMessageQuery {
   conversationId: ConversationId;
   messageId: MessageId;
 }
 
-export interface MessageContract {
-  createMessage(input: CreateMessageInput): Promise<Message>;
+export interface MessageQuery {
+  createMessage(input: CreateMessageQuery): Promise<Message>;
   getMessageById(messageId: MessageId): Promise<Message | null>;
   listMessagesByConversationId(
     conversationId: ConversationId,
   ): Promise<Message[]>;
-  updateMessage(input: UpdateMessageInput): Promise<Message>;
-  deleteMessage(input: DeleteMessageInput): Promise<void>;
+  updateMessage(input: UpdateMessageQuery): Promise<Message>;
+  deleteMessage(input: DeleteMessageQuery): Promise<void>;
 }

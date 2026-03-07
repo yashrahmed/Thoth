@@ -1,5 +1,7 @@
 import type { Message } from "@thoth/entities";
+export * from "./conv-agent/controllers/conversation-controller";
 export * from "./conv-agent/controllers/message-controller";
+export * from "./repositories/conversation-repository";
 export * from "./repositories/message-repository";
 
 export class ConversationsAgent {

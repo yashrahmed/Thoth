@@ -1,8 +1,12 @@
+import { ConversationController } from "./controllers/conversation-controller";
 import { MessageController } from "./controllers/message-controller";
+import { ConversationRepository } from "../repositories/conversation-repository";
 import { MessageRepository } from "../repositories/message-repository";
 
 const DEFAULT_CONV_AGENT_PORT = 3001;
 
+const conversationRepository = new ConversationRepository();
+const conversationController = new ConversationController(conversationRepository);
 const messageRepository = new MessageRepository();
 const messageController = new MessageController(messageRepository);
 
@@ -36,6 +40,29 @@ const server = Bun.serve({
 
       return Response.json(
         { error: `Method ${req.method} is not supported on /messages.` },
+        { status: 405 },
+      );
+    }
+
+    if (url.pathname === "/conversations") {
+      if (req.method === "POST") {
+        return conversationController.insert(req);
+      }
+
+      if (req.method === "PUT") {
+        return conversationController.update(req);
+      }
+
+      if (req.method === "DELETE") {
+        return conversationController.delete(req);
+      }
+
+      if (req.method === "GET") {
+        return conversationController.show(req);
+      }
+
+      return Response.json(
+        { error: `Method ${req.method} is not supported on /conversations.` },
         { status: 405 },
       );
     }

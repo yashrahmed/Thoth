@@ -1,8 +1,6 @@
-const DEFAULT_PLANNING_AGENT_PORT = 3003;
+import { getPortsConfig } from "@thoth/config";
 
-const port = Number(
-  process.env.PLANNING_AGENT_PORT ?? DEFAULT_PLANNING_AGENT_PORT,
-);
+const port = getPortsConfig().planningAgent;
 
 const server = Bun.serve({
   port,

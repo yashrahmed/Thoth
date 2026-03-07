@@ -1,8 +1,6 @@
-const DEFAULT_KB_CURATE_AGENT_PORT = 3002;
+import { getPortsConfig } from "@thoth/config";
 
-const port = Number(
-  process.env.KB_CURATE_AGENT_PORT ?? DEFAULT_KB_CURATE_AGENT_PORT,
-);
+const port = getPortsConfig().kbCurateAgent;
 
 const server = Bun.serve({
   port,

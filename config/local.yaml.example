@@ -1,0 +1,14 @@
+ports:
+  proxy: 3000
+  convAgent: 3001
+  kbCurateAgent: 3002
+  planningAgent: 3003
+
+convStore:
+  db:
+    host: localhost
+    port: 5432
+    database: thoth
+    user: thoth
+    password: thoth
+    ssl: false

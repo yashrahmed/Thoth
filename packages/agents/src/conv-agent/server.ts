@@ -2,15 +2,14 @@ import { ConversationController } from "./controllers/conversation-controller";
 import { MessageController } from "./controllers/message-controller";
 import { ConversationRepository } from "../repositories/conversation-repository";
 import { MessageRepository } from "../repositories/message-repository";
-
-const DEFAULT_CONV_AGENT_PORT = 3001;
+import { getPortsConfig } from "@thoth/config";
 
 const conversationRepository = new ConversationRepository();
 const conversationController = new ConversationController(conversationRepository);
 const messageRepository = new MessageRepository();
 const messageController = new MessageController(messageRepository);
 
-const port = Number(process.env.CONV_AGENT_PORT ?? DEFAULT_CONV_AGENT_PORT);
+const port = getPortsConfig().convAgent;
 
 const server = Bun.serve({
   port,

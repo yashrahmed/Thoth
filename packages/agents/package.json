@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
+    "@thoth/config": "workspace:*",
     "@thoth/contracts": "workspace:*",
     "@thoth/entities": "workspace:*",
     "ai": "^6.0.116",

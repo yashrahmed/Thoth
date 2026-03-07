@@ -41,6 +41,35 @@ thoth/
 | Queue | BullMQ + Redis |
 | Browser automation | Playwright |
 
+## Configuration
+
+Runtime configuration is loaded from a YAML file referenced by `CONFIG_FILE`.
+That file must be injected at startup and is not intended to be source
+controlled.
+
+For local development:
+
+1. Copy [config/local.yaml.example](/Users/yashrahmed/Documents/personal-github-repos/Thoth/config/local.yaml.example) to `config/local.yaml`.
+2. Inject the config path when starting services.
+
+Examples:
+
+- `CONFIG_FILE=config/local.yaml bun run --filter @thoth/agents start:conv-agent`
+- `CONFIG_FILE=config/local.yaml bun run --filter @thoth/message-proxy start`
+
+All server entrypoints fail fast if `CONFIG_FILE` is missing or the referenced
+YAML file is invalid.
+
+For the local full-stack workflow, [config/local.launch.yaml](/Users/yashrahmed/Documents/personal-github-repos/Thoth/config/local.launch.yaml) is a committed non-secret launch config. The local launcher injects it automatically:
+
+- `bun run dev:local:start`
+- `bun run dev:local:stop`
+
+The local database launcher now uses command-based scripts as well:
+
+- `bun run db:local:start`
+- `bun run db:local:stop`
+
 ## Planning
 
 Thoth now includes a dedicated `planning-agent` service for planning-oriented

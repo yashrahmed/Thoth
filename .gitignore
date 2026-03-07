@@ -25,6 +25,9 @@ workspace/*
 .env.*.local
 .env.*
 !.env.example
+config/*.yaml
+!config/*.example.yaml
+!config/local.launch.yaml
 
 # Local database state
 db/local/_data/

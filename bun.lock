@@ -13,6 +13,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@dimforge/rapier3d-compat": "^0.19.3",
+        "@thoth/config": "workspace:*",
         "@thoth/contracts": "workspace:*",
         "@thoth/entities": "workspace:*",
         "ai": "^6.0.116",
@@ -20,6 +21,13 @@
       },
       "devDependencies": {
         "@types/pg": "^8.15.5",
+      },
+    },
+    "packages/config": {
+      "name": "@thoth/config",
+      "version": "0.0.1",
+      "dependencies": {
+        "yaml": "^2.8.1",
       },
     },
     "packages/domain/contracts": {
@@ -36,6 +44,9 @@
     "packages/message-proxy": {
       "name": "@thoth/message-proxy",
       "version": "0.0.1",
+      "dependencies": {
+        "@thoth/config": "workspace:*",
+      },
     },
     "packages/mobile": {
       "name": "@thoth/mobile",
@@ -223,6 +234,8 @@
 
     "@thoth/agents": ["@thoth/agents@workspace:packages/agents"],
 
+    "@thoth/config": ["@thoth/config@workspace:packages/config"],
+
     "@thoth/contracts": ["@thoth/contracts@workspace:packages/domain/contracts"],
 
     "@thoth/entities": ["@thoth/entities@workspace:packages/domain/entities"],
@@ -360,6 +373,8 @@
     "xtend": ["xtend@4.0.2", "", {}, "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ=="],
 
     "yallist": ["yallist@3.1.1", "", {}, "sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g=="],
+
+    "yaml": ["yaml@2.8.2", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A=="],
 
     "zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
   }

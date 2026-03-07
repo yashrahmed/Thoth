@@ -6,11 +6,14 @@
     "packages/domain/*"
   ],
   "scripts": {
-    "db:local:setup": "./scripts/db-local-launch.sh",
-    "db:local:down": "./scripts/db-local-stop.sh",
+    "db:local:setup": "./scripts/db-local.sh start",
+    "db:local:down": "./scripts/db-local.sh stop",
+    "db:local:start": "./scripts/db-local.sh start",
+    "db:local:stop": "./scripts/db-local.sh stop",
     "db:local:up": "docker compose --env-file db/local/.env -f db/local/docker-compose.yml up -d postgres",
     "db:local:migrate": "docker compose --env-file db/local/.env -f db/local/docker-compose.yml up -d postgres && docker compose --env-file db/local/.env -f db/local/docker-compose.yml --profile migrations run --rm flyway migrate",
-    "dev:agents": "./scripts/agents-launch.sh",
+    "dev:local:start": "./scripts/launch-all-local.sh start",
+    "dev:local:stop": "./scripts/launch-all-local.sh stop",
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",
     "dev:web": "bun run --filter @thoth/web dev",
     "build": "bun run --filter '*' build",

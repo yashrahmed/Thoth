@@ -8,9 +8,9 @@ preferred infrastructure stacks. The practical portability target is the
 should remain adapter-driven under the existing hexagonal architecture.
 
 The current message model stores media as a single URL. That is too thin for
-direct uploads, validation, private delivery, derived assets, or lifecycle
-management. Blob metadata should live in Postgres, while object bytes live in
-R2 behind a storage adapter.
+server-managed uploads, validation, private delivery, derived assets, or
+lifecycle management. File metadata should live in Postgres, while object
+bytes live in R2 behind a storage adapter.
 
 ## Storage Research Summary
 
@@ -41,8 +41,8 @@ R2 behind a storage adapter.
 
 ## Design Goals
 
-- Keep blob storage behind ports and adapters.
-- Treat Postgres as the source of truth for blob metadata and relationships.
+- Keep file storage behind ports and adapters.
+- Treat Postgres as the source of truth for file metadata and relationships.
 - Keep the domain independent from S3 SDK request/response shapes.
 - Support private uploads/downloads with presigned URLs.
 - Support future derived assets such as previews, thumbnails, and transcripts.
@@ -50,9 +50,9 @@ R2 behind a storage adapter.
 
 ## Domain Model
 
-Introduce explicit blob concepts instead of a raw media URL.
+Introduce explicit file concepts instead of a raw media URL.
 
-### BlobAsset
+### File
 
 - `id`
 - `provider`
@@ -76,10 +76,25 @@ Suggested enums/value objects:
 - `BlobStatus`: `pending_upload` | `ready` | `deleting` | `deleted`
 - `ObjectKey`, `BucketName`, `ChecksumSha256`
 
+### FileUpload
+
+- `id`
+- `file_id`
+- `status`
+- `expected_content_type`
+- `expected_byte_size`
+- `last_create_ts`
+- `last_update_ts`
+- `expires_at`
+
+Suggested enums/value objects:
+
+- `FileUploadStatus`: `open` | `completed` | `expired`
+
 ### Attachment
 
 - `id`
-- `blob_asset_id`
+- `file_id`
 - `owner_type`
 - `owner_id`
 - `role`
@@ -92,36 +107,33 @@ Suggested enums/value objects:
 - `AttachmentOwnerType`: start with `message`
 - `AttachmentRole`: `original` | `thumbnail` | `preview` | `transcript`
 
-### Grants
-
-Use value objects for short-lived access instead of leaking provider-specific
-responses.
-
-- `UploadGrant`: `blob_asset_id`, `object_key`, `upload_url`, `headers`,
-  `expires_at`
-- `AccessGrant`: `blob_asset_id`, `download_url`, `expires_at`
-
 ## Repository Contracts
 
 Add metadata repositories in `packages/domain/contracts`.
 
 ```ts
-export interface BlobAssetRepository {
-  create(asset: BlobAsset): Promise<BlobAsset>;
-  getById(blobAssetId: BlobAssetId): Promise<BlobAsset | null>;
+export interface FileRepository {
+  create(file: File): Promise<File>;
+  getById(fileId: FileId): Promise<File | null>;
   getByObjectKey(
     bucket: BucketName,
     objectKey: ObjectKey,
-  ): Promise<BlobAsset | null>;
-  markUploaded(input: MarkUploadedInput): Promise<BlobAsset>;
-  markDeleted(blobAssetId: BlobAssetId, deletedAt: Date): Promise<void>;
-  listPendingUploadsOlderThan(cutoff: Date): Promise<BlobAsset[]>;
+  ): Promise<File | null>;
+  markReady(input: MarkFileReadyInput): Promise<File>;
+  markDeleted(fileId: FileId, deletedAt: Date): Promise<void>;
+}
+
+export interface FileUploadRepository {
+  create(upload: FileUpload): Promise<FileUpload>;
+  getById(fileUploadId: FileUploadId): Promise<FileUpload | null>;
+  markCompleted(input: CompleteFileUploadInput): Promise<FileUpload>;
+  listExpiredOpenUploads(cutoff: Date): Promise<FileUpload[]>;
 }
 
 export interface AttachmentRepository {
-  attachToMessage(input: AttachBlobToMessageInput): Promise<Attachment>;
+  attachToMessage(input: AttachFileToMessageInput): Promise<Attachment>;
   listByMessageId(messageId: MessageId): Promise<Attachment[]>;
-  deleteByBlobAssetId(blobAssetId: BlobAssetId): Promise<void>;
+  deleteByFileId(fileId: FileId): Promise<void>;
 }
 ```
 
@@ -133,13 +145,9 @@ Add a dedicated object-storage port for byte operations.
 
 ```ts
 export interface BlobStoragePort {
-  createPresignedUpload(
-    input: CreatePresignedUploadInput,
-  ): Promise<UploadGrant>;
-  createPresignedDownload(
-    input: CreatePresignedDownloadInput,
-  ): Promise<AccessGrant>;
+  putObject(input: PutObjectInput): Promise<StoredObjectMetadata>;
   headObject(input: HeadObjectInput): Promise<StoredObjectMetadata | null>;
+  getObject(input: GetObjectInput): Promise<StoredObjectBody>;
   deleteObject(input: DeleteObjectInput): Promise<void>;
   copyObject(input: CopyObjectInput): Promise<StoredObjectMetadata>;
 }
@@ -147,7 +155,7 @@ export interface BlobStoragePort {
 
 Keep this contract intentionally narrow:
 
-- include upload/download/head/delete/copy
+- include put/get/head/delete/copy
 - add multipart support later if the product needs large uploads
 - do not include ACLs, tagging, version IDs, or provider-specific encryption
   fields in the core port
@@ -157,43 +165,51 @@ Keep this contract intentionally narrow:
 Add application-layer orchestration services rather than pushing workflow into
 controllers or repositories.
 
-### BlobUploadService
+### CreateFileUploadService
 
-- `requestUpload(input)`
-- allocate `BlobAsset`
+- `createUpload(input)`
+- allocate `File`
+- allocate `FileUpload`
 - build an immutable object key
-- return a presigned `PUT` upload grant
+- return a Thoth-managed upload resource
 
-### BlobUploadConfirmationService
+### ReceiveFileUploadService
 
-- `confirmUpload(input)`
-- call `headObject`
+- `receiveBytes(input)`
+- accept bytes through the proxy
+- stream or buffer to R2 through `BlobStoragePort`
 - validate size, content type, and checksum if present
-- transition the asset from `pending_upload` to `ready`
+
+### CompleteFileUploadService
+
+- `completeUpload(input)`
+- call `headObject`
+- mark the `FileUpload` completed
+- transition the `File` from `pending_upload` to `ready`
 
 ### MessageAttachmentService
 
-- `attachUploadedBlobToMessage(input)`
-- only attach blobs in `ready` state
+- `attachUploadedFileToMessage(input)`
+- only attach files in `ready` state
 - create `Attachment` records for the message
 
-### BlobAccessService
+### FileAccessService
 
-- `issueDownloadUrl(input)`
-- issue short-lived presigned `GET` URLs for private assets
+- `fetchFile(input)`
+- return a stream or proxy response for private files
 
-### BlobLifecycleService
+### FileLifecycleService
 
-- `deleteBlob(input)`
-- detach metadata, delete the object, and mark the asset deleted
-- `reapExpiredPendingUploads(cutoff)`
+- `deleteFile(input)`
+- detach metadata, delete the object, and mark the file deleted
+- `expireStaleUploads(cutoff)`
 - clean up abandoned uploads and stale metadata
 
 ## Persistence Shape
 
 Use SQL migrations as the source of truth.
 
-### `blob_assets`
+### `files`
 
 - `id`
 - `provider`
@@ -216,11 +232,28 @@ Constraints/indexes:
 - index on `status`
 - index on `last_update_ts`
 
+### `file_uploads`
+
+- `id`
+- `file_id`
+- `status`
+- `expected_content_type`
+- `expected_byte_size`
+- `expires_at`
+- `last_create_ts`
+- `last_update_ts`
+
+Constraints/indexes:
+
+- foreign key to `files`
+- index on `status`
+- index on `expires_at`
+
 ### `message_attachments`
 
 - `id`
 - `message_id`
-- `blob_asset_id`
+- `file_id`
 - `role`
 - `filename`
 - `last_create_ts`
@@ -229,8 +262,8 @@ Constraints/indexes:
 Constraints/indexes:
 
 - foreign key to `messages`
-- foreign key to `blob_assets`
-- unique `(message_id, blob_asset_id, role)` if appropriate
+- foreign key to `files`
+- unique `(message_id, file_id, role)` if appropriate
 
 ## Object Key Strategy
 
@@ -239,7 +272,7 @@ Use immutable, prefix-based keys so cleanup and lifecycle rules are simple.
 Suggested format:
 
 ```text
-messages/{conversationId}/{messageId}/{blobAssetId}/original
+messages/{conversationId}/{messageId}/{fileId}/original
 ```
 
 Benefits:
@@ -250,19 +283,20 @@ Benefits:
 
 ## Delivery Strategy
 
-- Default to private blobs and presigned downloads.
+- Default to private files delivered through the proxy.
 - If public delivery is required later, use a separate public bucket or a
   clearly separated public prefix behind a custom domain.
 - Do not use `r2.dev` as the production delivery contract.
 
 ## Recommended First Implementation
 
-1. Add new blob and attachment domain entities plus value objects.
-2. Add repository contracts for `BlobAssetRepository` and
+1. Add new file, file-upload, and attachment domain entities plus value
+   objects.
+2. Add repository contracts for `FileRepository`, `FileUploadRepository`, and
    `AttachmentRepository`.
-3. Add `BlobStoragePort` for presigned upload/download and metadata checks.
-4. Add SQL migrations for `blob_assets` and `message_attachments`.
-5. Implement a Postgres adapter for the new repositories.
+3. Add `BlobStoragePort` for object put/get/head/delete/copy.
+4. Add SQL migrations for `files`, `file_uploads`, and `message_attachments`.
+5. Implement Postgres adapters for the new repositories.
 6. Implement an R2 adapter using the S3-compatible API.
 7. Update the message domain to reference attachments rather than a single
    `media_content` URL.
@@ -275,3 +309,5 @@ Benefits:
 - The object store should not become the metadata source of truth.
 - The backend should avoid provider-specific assumptions that R2 does not
   support, especially tagging, ACLs, and versioning.
+- The public API should expose Thoth-managed `File` and `FileUpload`
+  resources, not presigned storage grants.

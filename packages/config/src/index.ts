@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import YAML from "yaml";
+import { parse } from "yaml";
 
 export interface ConvStoreDatabaseConfig {
   host: string;
@@ -18,8 +18,12 @@ export interface PortsConfig {
   planningAgent: number;
 }
 
+export interface ObjectStoreCredentialsConfig {
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
 export interface ThothConfig {
-  LLM_API_KEY: string;
   ports: PortsConfig;
   convStore: {
     db: ConvStoreDatabaseConfig;
@@ -41,7 +45,7 @@ export function getThothConfig(): ThothConfig {
 
   const resolvedPath = resolve(process.cwd(), configFile);
   const rawConfig = readFileSync(resolvedPath, "utf8");
-  const parsedConfig = YAML.parse(rawConfig);
+  const parsedConfig = parse(rawConfig);
 
   cachedConfig = parseConfig(parsedConfig);
 
@@ -53,7 +57,20 @@ export function getConvStoreDatabaseConfig(): ConvStoreDatabaseConfig {
 }
 
 export function getLlmApiKey(): string {
-  return getThothConfig().LLM_API_KEY;
+  return requireString(process.env.OPENAI_API_KEY, "OPENAI_API_KEY");
+}
+
+export function getObjectStoreCredentialsConfig(): ObjectStoreCredentialsConfig {
+  return {
+    accessKeyId: requireString(
+      process.env.R2_ACCESS_KEY_ID,
+      "R2_ACCESS_KEY_ID",
+    ),
+    secretAccessKey: requireString(
+      process.env.R2_SECRET_ACCESS_KEY,
+      "R2_SECRET_ACCESS_KEY",
+    ),
+  };
 }
 
 export function getPortsConfig(): PortsConfig {
@@ -67,7 +84,6 @@ function parseConfig(value: unknown): ThothConfig {
   const convStoreDb = requireObject(convStore.db, "convStore.db");
 
   return {
-    LLM_API_KEY: requireString(config.LLM_API_KEY, "LLM_API_KEY"),
     ports: {
       proxy: requireNumber(ports.proxy, "ports.proxy"),
       convAgent: requireNumber(ports.convAgent, "ports.convAgent"),

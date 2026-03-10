@@ -8,7 +8,8 @@ STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
 CONFIG_PATH="$REPO_ROOT/config/local.launch.yaml"
 RUNTIME_CONFIG_PATH="$STATE_DIR/local.launch.yaml"
-KEYS_CONFIG_PATH="$REPO_ROOT/keys-config.yml"
+LLM_CREDS_PATH="$REPO_ROOT/llm-creds.yaml"
+CLOUDFLARE_CREDS_PATH="$REPO_ROOT/cloudflare-creds.yaml"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then
@@ -23,8 +24,9 @@ read_port() {
   awk -v key="$port_key" '$1 == key ":" { print $2 }' "$CONFIG_PATH"
 }
 
-read_key_config_value() {
-  key_name="$1"
+read_yaml_value() {
+  config_path="$1"
+  key_name="$2"
   awk -v key="$key_name" '
     $1 == key ":" {
       value = substr($0, index($0, ":") + 1)
@@ -40,37 +42,20 @@ read_key_config_value() {
       print value
       exit
     }
-  ' "$KEYS_CONFIG_PATH"
+  ' "$config_path"
 }
 
 write_runtime_config() {
-  llm_api_key="$1"
-
-  awk -v llm_api_key="$llm_api_key" '
-    BEGIN {
-      updated = 0
-    }
-    $1 == "LLM_API_KEY:" {
-      print "LLM_API_KEY: \"" llm_api_key "\""
-      updated = 1
-      next
-    }
-    {
-      print
-    }
-    END {
-      if (!updated) {
-        print ""
-        print "LLM_API_KEY: \"" llm_api_key "\""
-      }
-    }
-  ' "$CONFIG_PATH" >"$RUNTIME_CONFIG_PATH"
+  cp "$CONFIG_PATH" "$RUNTIME_CONFIG_PATH"
 }
 
 start_service() {
   service_name="$1"
   package_name="$2"
   service_command="$3"
+  openai_api_key="$4"
+  r2_access_key_id="$5"
+  r2_secret_access_key="$6"
   pid_file="$STATE_DIR/$service_name.pid"
   log_file="$LOG_DIR/$service_name.log"
 
@@ -86,6 +71,9 @@ start_service() {
   (
     cd "$REPO_ROOT"
     export CONFIG_FILE="$RUNTIME_CONFIG_PATH"
+    export OPENAI_API_KEY="$openai_api_key"
+    export R2_ACCESS_KEY_ID="$r2_access_key_id"
+    export R2_SECRET_ACCESS_KEY="$r2_secret_access_key"
     nohup bun run --filter "$package_name" "$service_command" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
@@ -129,24 +117,41 @@ case "$COMMAND" in
       exit 1
     fi
 
-    if [ ! -f "$KEYS_CONFIG_PATH" ]; then
-      echo "Missing keys config: $KEYS_CONFIG_PATH"
+    if [ ! -f "$LLM_CREDS_PATH" ]; then
+      echo "Missing LLM creds config: $LLM_CREDS_PATH"
       exit 1
     fi
 
-    LLM_API_KEY="$(read_key_config_value OPENAI_API_KEY)"
-
-    if [ -z "$LLM_API_KEY" ]; then
-      echo "Missing OPENAI_API_KEY in $KEYS_CONFIG_PATH"
+    if [ ! -f "$CLOUDFLARE_CREDS_PATH" ]; then
+      echo "Missing Cloudflare creds config: $CLOUDFLARE_CREDS_PATH"
       exit 1
     fi
 
-    write_runtime_config "$LLM_API_KEY"
+    OPENAI_API_KEY="$(read_yaml_value "$LLM_CREDS_PATH" OPENAI_API_KEY)"
+    R2_ACCESS_KEY_ID="$(read_yaml_value "$CLOUDFLARE_CREDS_PATH" R2_ACCESS_KEY_ID)"
+    R2_SECRET_ACCESS_KEY="$(read_yaml_value "$CLOUDFLARE_CREDS_PATH" R2_SECRET_ACCESS_KEY)"
 
-    start_service "message-proxy" "@thoth/message-proxy" "start"
-    start_service "conv-agent" "@thoth/agents" "start:conv-agent"
-    start_service "kb-curate-agent" "@thoth/agents" "start:kb-curate-agent"
-    start_service "planning-agent" "@thoth/agents" "start:planning-agent"
+    if [ -z "$OPENAI_API_KEY" ]; then
+      echo "Missing OPENAI_API_KEY in $LLM_CREDS_PATH"
+      exit 1
+    fi
+
+    if [ -z "$R2_ACCESS_KEY_ID" ]; then
+      echo "Missing R2_ACCESS_KEY_ID in $CLOUDFLARE_CREDS_PATH"
+      exit 1
+    fi
+
+    if [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+      echo "Missing R2_SECRET_ACCESS_KEY in $CLOUDFLARE_CREDS_PATH"
+      exit 1
+    fi
+
+    write_runtime_config
+
+    start_service "message-proxy" "@thoth/message-proxy" "start" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
+    start_service "conv-agent" "@thoth/agents" "start:conv-agent" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
+    start_service "kb-curate-agent" "@thoth/agents" "start:kb-curate-agent" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
+    start_service "planning-agent" "@thoth/agents" "start:planning-agent" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
     ;;
   stop)
     stop_service "message-proxy" "$(read_port proxy)"

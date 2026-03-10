@@ -1,7 +1,9 @@
 # Local launch template for `scripts/launch-all-local.sh`.
-# On `start`, the launcher reads `OPENAI_API_KEY` from `keys-config.yml`,
-# writes a runtime config to `/tmp/thoth-local/local.launch.yaml`, and
-# starts services with `CONFIG_FILE` pointing at that generated file.
+# On `start`, the launcher reads `OPENAI_API_KEY` from `llm-creds.yaml` and
+# `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` from `cloudflare-creds.yaml`,
+# exports them into the service process environment, copies this file to
+# `/tmp/thoth-local/local.launch.yaml`, and starts services with `CONFIG_FILE`
+# pointing at that generated file.
 # This committed file stays non-secret and is not used directly at runtime.
 
 ports:
@@ -18,5 +20,3 @@ convStore:
     user: thoth
     password: thoth
     ssl: false
-
-LLM_API_KEY: ""

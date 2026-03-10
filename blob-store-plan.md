@@ -10,7 +10,8 @@ should remain adapter-driven under the existing hexagonal architecture.
 The current message model stores media as a single URL. That is too thin for
 server-managed uploads, validation, private delivery, derived assets, or
 lifecycle management. File metadata should live in Postgres, while object
-bytes live in R2 behind a storage adapter.
+bytes live in R2 behind a storage adapter. The canonical reference should be
+an object key, not a full R2 URL.
 
 ## Storage Research Summary
 
@@ -44,7 +45,7 @@ bytes live in R2 behind a storage adapter.
 - Keep file storage behind ports and adapters.
 - Treat Postgres as the source of truth for file metadata and relationships.
 - Keep the domain independent from S3 SDK request/response shapes.
-- Support private uploads/downloads with presigned URLs.
+- Keep environment-specific endpoint, bucket, and credential details in config.
 - Support future derived assets such as previews, thumbnails, and transcripts.
 - Avoid domain features that are not portable across R2 and S3.
 
@@ -58,6 +59,7 @@ Introduce explicit file concepts instead of a raw media URL.
 - `provider`
 - `bucket`
 - `object_key`
+- `original_filename`
 - `content_type`
 - `byte_size`
 - `checksum`
@@ -76,6 +78,13 @@ Suggested enums/value objects:
 - `BlobStatus`: `pending_upload` | `ready` | `deleting` | `deleted`
 - `ObjectKey`, `BucketName`, `ChecksumSha256`
 
+Notes:
+
+- `object_key` is the canonical storage reference in the domain.
+- Full URLs should be derived by adapters from environment config.
+- `original_filename` is metadata for display and download behavior, not the
+  stored object identity.
+
 ### FileUpload
 
 - `id`
@@ -83,6 +92,7 @@ Suggested enums/value objects:
 - `status`
 - `expected_content_type`
 - `expected_byte_size`
+- `storage_filename`
 - `last_create_ts`
 - `last_update_ts`
 - `expires_at`
@@ -138,6 +148,7 @@ export interface AttachmentRepository {
 ```
 
 Keep these repository ports focused on Postgres-backed metadata and ownership.
+They should not persist provider-specific absolute URLs as canonical identity.
 
 ## Storage Port
 
@@ -170,6 +181,7 @@ controllers or repositories.
 - `createUpload(input)`
 - allocate `File`
 - allocate `FileUpload`
+- generate a storage filename
 - build an immutable object key
 - return a Thoth-managed upload resource
 
@@ -215,6 +227,7 @@ Use SQL migrations as the source of truth.
 - `provider`
 - `bucket`
 - `object_key`
+- `original_filename`
 - `content_type`
 - `byte_size`
 - `checksum_sha256`
@@ -239,6 +252,7 @@ Constraints/indexes:
 - `status`
 - `expected_content_type`
 - `expected_byte_size`
+- `storage_filename`
 - `expires_at`
 - `last_create_ts`
 - `last_update_ts`
@@ -268,18 +282,30 @@ Constraints/indexes:
 ## Object Key Strategy
 
 Use immutable, prefix-based keys so cleanup and lifecycle rules are simple.
+The key should be server-generated rather than derived from a client filename.
 
 Suggested format:
 
 ```text
-messages/{conversationId}/{messageId}/{fileId}/original
+conversations/{fileId}.{ext}
 ```
 
 Benefits:
 
-- deterministic ownership path
+- canonical identifier is independent of environment-specific endpoint details
+- avoids collisions from client-provided names
+- stored name can be generated while preserving `original_filename` separately
 - easy bulk lifecycle rules by prefix
 - easy placement of derived assets next to originals
+
+Alternative if ownership-based prefixes become useful later:
+
+```text
+conversations/{conversationId}/{messageId}/{fileId}/original.{ext}
+```
+
+Both options are compatible with the same domain rule: store `object_key`, not
+the absolute URL.
 
 ## Delivery Strategy
 
@@ -311,3 +337,5 @@ Benefits:
   support, especially tagging, ACLs, and versioning.
 - The public API should expose Thoth-managed `File` and `FileUpload`
   resources, not presigned storage grants.
+- The domain should reference files by `object_key` and metadata, not by a
+  full environment-specific R2 URL.

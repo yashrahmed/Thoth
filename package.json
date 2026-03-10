@@ -16,6 +16,8 @@
     "dev:local:stop": "./scripts/launch-all-local.sh stop",
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",
     "dev:web": "bun run --filter @thoth/web dev",
+    "r2:upload": "bun scripts/upload-r2.ts upload",
+    "r2:download": "bun scripts/upload-r2.ts download",
     "build": "bun run --filter '*' build",
     "typecheck": "bun run --filter '*' typecheck"
   },

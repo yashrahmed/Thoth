@@ -59,3 +59,7 @@ coverage/
 .expo-shared/
 android/.gradle/
 ios/Pods/
+
+# LLM API keys
+llm-creds.yaml
+cloudflare-creds.yaml

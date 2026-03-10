@@ -19,6 +19,7 @@ export interface PortsConfig {
 }
 
 export interface ThothConfig {
+  LLM_API_KEY: string;
   ports: PortsConfig;
   convStore: {
     db: ConvStoreDatabaseConfig;
@@ -51,6 +52,10 @@ export function getConvStoreDatabaseConfig(): ConvStoreDatabaseConfig {
   return getThothConfig().convStore.db;
 }
 
+export function getLlmApiKey(): string {
+  return getThothConfig().LLM_API_KEY;
+}
+
 export function getPortsConfig(): PortsConfig {
   return getThothConfig().ports;
 }
@@ -62,6 +67,7 @@ function parseConfig(value: unknown): ThothConfig {
   const convStoreDb = requireObject(convStore.db, "convStore.db");
 
   return {
+    LLM_API_KEY: requireString(config.LLM_API_KEY, "LLM_API_KEY"),
     ports: {
       proxy: requireNumber(ports.proxy, "ports.proxy"),
       convAgent: requireNumber(ports.convAgent, "ports.convAgent"),

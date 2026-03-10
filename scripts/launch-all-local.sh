@@ -7,6 +7,8 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
 CONFIG_PATH="$REPO_ROOT/config/local.launch.yaml"
+RUNTIME_CONFIG_PATH="$STATE_DIR/local.launch.yaml"
+KEYS_CONFIG_PATH="$REPO_ROOT/keys-config.yml"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then
@@ -19,6 +21,50 @@ mkdir -p "$LOG_DIR"
 read_port() {
   port_key="$1"
   awk -v key="$port_key" '$1 == key ":" { print $2 }' "$CONFIG_PATH"
+}
+
+read_key_config_value() {
+  key_name="$1"
+  awk -v key="$key_name" '
+    $1 == key ":" {
+      value = substr($0, index($0, ":") + 1)
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+
+      if (value ~ /^".*"$/) {
+        value = substr(value, 2, length(value) - 2)
+      } else if (value ~ /^'\''.*'\''$/) {
+        value = substr(value, 2, length(value) - 2)
+      }
+
+      print value
+      exit
+    }
+  ' "$KEYS_CONFIG_PATH"
+}
+
+write_runtime_config() {
+  llm_api_key="$1"
+
+  awk -v llm_api_key="$llm_api_key" '
+    BEGIN {
+      updated = 0
+    }
+    $1 == "LLM_API_KEY:" {
+      print "LLM_API_KEY: \"" llm_api_key "\""
+      updated = 1
+      next
+    }
+    {
+      print
+    }
+    END {
+      if (!updated) {
+        print ""
+        print "LLM_API_KEY: \"" llm_api_key "\""
+      }
+    }
+  ' "$CONFIG_PATH" >"$RUNTIME_CONFIG_PATH"
 }
 
 start_service() {
@@ -39,7 +85,7 @@ start_service() {
 
   (
     cd "$REPO_ROOT"
-    export CONFIG_FILE="$CONFIG_PATH"
+    export CONFIG_FILE="$RUNTIME_CONFIG_PATH"
     nohup bun run --filter "$package_name" "$service_command" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
@@ -83,6 +129,20 @@ case "$COMMAND" in
       exit 1
     fi
 
+    if [ ! -f "$KEYS_CONFIG_PATH" ]; then
+      echo "Missing keys config: $KEYS_CONFIG_PATH"
+      exit 1
+    fi
+
+    LLM_API_KEY="$(read_key_config_value OPENAI_API_KEY)"
+
+    if [ -z "$LLM_API_KEY" ]; then
+      echo "Missing OPENAI_API_KEY in $KEYS_CONFIG_PATH"
+      exit 1
+    fi
+
+    write_runtime_config "$LLM_API_KEY"
+
     start_service "message-proxy" "@thoth/message-proxy" "start"
     start_service "conv-agent" "@thoth/agents" "start:conv-agent"
     start_service "kb-curate-agent" "@thoth/agents" "start:kb-curate-agent"
@@ -93,6 +153,7 @@ case "$COMMAND" in
     stop_service "conv-agent" "$(read_port convAgent)"
     stop_service "kb-curate-agent" "$(read_port kbCurateAgent)"
     stop_service "planning-agent" "$(read_port planningAgent)"
+    rm -f "$RUNTIME_CONFIG_PATH"
     ;;
   *)
     echo "Unsupported command: $COMMAND"

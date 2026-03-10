@@ -43,40 +43,22 @@ an object key, not a full R2 URL.
 ## Design Goals
 
 - Keep file storage behind ports and adapters.
-- Treat Postgres as the source of truth for file metadata and relationships.
-- Keep the domain independent from S3 SDK request/response shapes.
+- Treat Postgres as the source of truth for file metadata.
+- Keep the first version close to the OpenAI `File` object shape.
 - Keep environment-specific endpoint, bucket, and credential details in config.
-- Support future derived assets such as previews, thumbnails, and transcripts.
-- Avoid domain features that are not portable across R2 and S3.
+- Start with the smallest useful domain model and extend it later if needed.
 
 ## Domain Model
 
-Introduce explicit file concepts instead of a raw media URL.
+Introduce an explicit `File` entity instead of a raw media URL.
 
 ### File
 
 - `id`
-- `provider`
-- `bucket`
 - `object_key`
 - `original_filename`
-- `content_type`
 - `byte_size`
-- `checksum`
-- `etag`
-- `storage_class`
-- `visibility`
-- `status`
 - `last_create_ts`
-- `last_update_ts`
-- `deleted_at`
-
-Suggested enums/value objects:
-
-- `BlobProvider`: `r2`
-- `BlobVisibility`: `private` | `public`
-- `BlobStatus`: `pending_upload` | `ready` | `deleting` | `deleted`
-- `ObjectKey`, `BucketName`, `ChecksumSha256`
 
 Notes:
 
@@ -84,71 +66,26 @@ Notes:
 - Full URLs should be derived by adapters from environment config.
 - `original_filename` is metadata for display and download behavior, not the
   stored object identity.
-
-### FileUpload
-
-- `id`
-- `file_id`
-- `status`
-- `expected_content_type`
-- `expected_byte_size`
-- `storage_filename`
-- `last_create_ts`
-- `last_update_ts`
-- `expires_at`
-
-Suggested enums/value objects:
-
-- `FileUploadStatus`: `open` | `completed` | `expired`
-
-### Attachment
-
-- `id`
-- `file_id`
-- `owner_type`
-- `owner_id`
-- `role`
-- `filename`
-- `last_create_ts`
-- `last_update_ts`
-
-Suggested enums/value objects:
-
-- `AttachmentOwnerType`: start with `message`
-- `AttachmentRole`: `original` | `thumbnail` | `preview` | `transcript`
+- `Message` owns a list of `File` entities directly in the first version.
+- This intentionally stays smaller than the previous `FileUpload` /
+  `Attachment` model.
 
 ## Repository Contracts
 
-Add metadata repositories in `packages/domain/contracts`.
+The first pass only needs a file repository tied to messages.
 
 ```ts
 export interface FileRepository {
-  create(file: File): Promise<File>;
+  create(file: File, messageId: MessageId): Promise<File>;
   getById(fileId: FileId): Promise<File | null>;
-  getByObjectKey(
-    bucket: BucketName,
-    objectKey: ObjectKey,
-  ): Promise<File | null>;
-  markReady(input: MarkFileReadyInput): Promise<File>;
-  markDeleted(fileId: FileId, deletedAt: Date): Promise<void>;
-}
-
-export interface FileUploadRepository {
-  create(upload: FileUpload): Promise<FileUpload>;
-  getById(fileUploadId: FileUploadId): Promise<FileUpload | null>;
-  markCompleted(input: CompleteFileUploadInput): Promise<FileUpload>;
-  listExpiredOpenUploads(cutoff: Date): Promise<FileUpload[]>;
-}
-
-export interface AttachmentRepository {
-  attachToMessage(input: AttachFileToMessageInput): Promise<Attachment>;
-  listByMessageId(messageId: MessageId): Promise<Attachment[]>;
-  deleteByFileId(fileId: FileId): Promise<void>;
+  listByMessageId(messageId: MessageId): Promise<File[]>;
+  getByObjectKey(objectKey: ObjectKey): Promise<File | null>;
+  delete(fileId: FileId): Promise<void>;
 }
 ```
 
-Keep these repository ports focused on Postgres-backed metadata and ownership.
-They should not persist provider-specific absolute URLs as canonical identity.
+Keep this repository focused on Postgres-backed metadata.
+It should not persist provider-specific absolute URLs as canonical identity.
 
 ## Storage Port
 
@@ -176,34 +113,12 @@ Keep this contract intentionally narrow:
 Add application-layer orchestration services rather than pushing workflow into
 controllers or repositories.
 
-### CreateFileUploadService
+### FileService
 
-- `createUpload(input)`
-- allocate `File`
-- allocate `FileUpload`
-- generate a storage filename
-- build an immutable object key
-- return a Thoth-managed upload resource
-
-### ReceiveFileUploadService
-
-- `receiveBytes(input)`
-- accept bytes through the proxy
-- stream or buffer to R2 through `BlobStoragePort`
-- validate size, content type, and checksum if present
-
-### CompleteFileUploadService
-
-- `completeUpload(input)`
-- call `headObject`
-- mark the `FileUpload` completed
-- transition the `File` from `pending_upload` to `ready`
-
-### MessageAttachmentService
-
-- `attachUploadedFileToMessage(input)`
-- only attach files in `ready` state
-- create `Attachment` records for the message
+- `storeFile(input)`
+- generate an object key
+- upload bytes through `BlobStoragePort`
+- persist a `File` row tied to the message
 
 ### FileAccessService
 
@@ -213,9 +128,7 @@ controllers or repositories.
 ### FileLifecycleService
 
 - `deleteFile(input)`
-- detach metadata, delete the object, and mark the file deleted
-- `expireStaleUploads(cutoff)`
-- clean up abandoned uploads and stale metadata
+- delete the object and remove the `File` row
 
 ## Persistence Shape
 
@@ -224,60 +137,17 @@ Use SQL migrations as the source of truth.
 ### `files`
 
 - `id`
-- `provider`
-- `bucket`
+- `message_id`
 - `object_key`
 - `original_filename`
-- `content_type`
 - `byte_size`
-- `checksum_sha256`
-- `etag`
-- `storage_class`
-- `visibility`
-- `status`
 - `last_create_ts`
-- `last_update_ts`
-- `deleted_at`
-
-Constraints/indexes:
-
-- unique `(bucket, object_key)`
-- index on `status`
-- index on `last_update_ts`
-
-### `file_uploads`
-
-- `id`
-- `file_id`
-- `status`
-- `expected_content_type`
-- `expected_byte_size`
-- `storage_filename`
-- `expires_at`
-- `last_create_ts`
-- `last_update_ts`
-
-Constraints/indexes:
-
-- foreign key to `files`
-- index on `status`
-- index on `expires_at`
-
-### `message_attachments`
-
-- `id`
-- `message_id`
-- `file_id`
-- `role`
-- `filename`
-- `last_create_ts`
-- `last_update_ts`
 
 Constraints/indexes:
 
 - foreign key to `messages`
-- foreign key to `files`
-- unique `(message_id, file_id, role)` if appropriate
+- unique `object_key`
+- index on `message_id`
 
 ## Object Key Strategy
 
@@ -295,17 +165,7 @@ Benefits:
 - canonical identifier is independent of environment-specific endpoint details
 - avoids collisions from client-provided names
 - stored name can be generated while preserving `original_filename` separately
-- easy bulk lifecycle rules by prefix
-- easy placement of derived assets next to originals
-
-Alternative if ownership-based prefixes become useful later:
-
-```text
-conversations/{conversationId}/{messageId}/{fileId}/original.{ext}
-```
-
-Both options are compatible with the same domain rule: store `object_key`, not
-the absolute URL.
+- keeps the initial schema and domain model small
 
 ## Delivery Strategy
 
@@ -316,17 +176,14 @@ the absolute URL.
 
 ## Recommended First Implementation
 
-1. Add new file, file-upload, and attachment domain entities plus value
-   objects.
-2. Add repository contracts for `FileRepository`, `FileUploadRepository`, and
-   `AttachmentRepository`.
-3. Add `BlobStoragePort` for object put/get/head/delete/copy.
-4. Add SQL migrations for `files`, `file_uploads`, and `message_attachments`.
-5. Implement Postgres adapters for the new repositories.
-6. Implement an R2 adapter using the S3-compatible API.
-7. Update the message domain to reference attachments rather than a single
-   `media_content` URL.
-8. Add integration tests covering repository contracts against local Postgres.
+1. Add a `File` entity to the domain.
+2. Update `Message` to hold a list of `File`.
+3. Add a `files` table with a foreign key to `messages`.
+4. Add a `FileRepository`.
+5. Add `BlobStoragePort` for object put/get/head/delete/copy.
+6. Implement the Postgres repository and R2 adapter.
+7. Add integration tests covering the repository contract against local
+   Postgres.
 
 ## Notes For Current Code
 
@@ -335,7 +192,8 @@ the absolute URL.
 - The object store should not become the metadata source of truth.
 - The backend should avoid provider-specific assumptions that R2 does not
   support, especially tagging, ACLs, and versioning.
-- The public API should expose Thoth-managed `File` and `FileUpload`
-  resources, not presigned storage grants.
+- The public API should expose Thoth-managed `File` resources.
 - The domain should reference files by `object_key` and metadata, not by a
   full environment-specific R2 URL.
+- If upload-session or attachment abstractions become necessary later, they can
+  be added after the first simple `File` model is working.

@@ -9,7 +9,7 @@ LOG_DIR="$STATE_DIR/logs"
 CONFIG_PATH="$REPO_ROOT/config/launch.yaml"
 LLM_CREDS_PATH="$REPO_ROOT/config/llm-creds.yaml"
 CLOUDFLARE_CREDS_PATH="$REPO_ROOT/config/cloudflare-creds.yaml"
-DB_CREDS_PATH="$REPO_ROOT/config/@db-creds.yaml"
+DB_CREDS_PATH="$REPO_ROOT/config/db-creds.yaml"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then

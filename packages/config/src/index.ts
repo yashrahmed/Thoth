@@ -18,16 +18,21 @@ export interface PortsConfig {
   planningAgent: number;
 }
 
+export interface ObjectStoreConfig {
+  endpoint: string;
+  bucket: string;
+  region: string;
+  service: string;
+}
+
 export interface ObjectStoreCredentialsConfig {
   accessKeyId: string;
   secretAccessKey: string;
 }
 
 export interface ThothConfig {
+  objectStore: ObjectStoreConfig;
   ports: PortsConfig;
-  convStore: {
-    db: ConvStoreDatabaseConfig;
-  };
 }
 
 let cachedConfig: ThothConfig | null = null;
@@ -53,7 +58,26 @@ export function getThothConfig(): ThothConfig {
 }
 
 export function getConvStoreDatabaseConfig(): ConvStoreDatabaseConfig {
-  return getThothConfig().convStore.db;
+  return {
+    host: requireString(process.env.CONV_STORE_DB_HOST, "CONV_STORE_DB_HOST"),
+    port: requireNumber(
+      parseNumber(process.env.CONV_STORE_DB_PORT),
+      "CONV_STORE_DB_PORT",
+    ),
+    database: requireString(
+      process.env.CONV_STORE_DB_NAME,
+      "CONV_STORE_DB_NAME",
+    ),
+    user: requireString(process.env.CONV_STORE_DB_USER, "CONV_STORE_DB_USER"),
+    password: requireString(
+      process.env.CONV_STORE_DB_PASSWORD,
+      "CONV_STORE_DB_PASSWORD",
+    ),
+    ssl: requireBoolean(
+      parseBoolean(process.env.CONV_STORE_DB_SSL),
+      "CONV_STORE_DB_SSL",
+    ),
+  };
 }
 
 export function getLlmApiKey(): string {
@@ -73,17 +97,26 @@ export function getObjectStoreCredentialsConfig(): ObjectStoreCredentialsConfig 
   };
 }
 
+export function getObjectStoreConfig(): ObjectStoreConfig {
+  return getThothConfig().objectStore;
+}
+
 export function getPortsConfig(): PortsConfig {
   return getThothConfig().ports;
 }
 
 function parseConfig(value: unknown): ThothConfig {
   const config = requireObject(value, "config");
+  const objectStore = requireObject(config.objectStore, "objectStore");
   const ports = requireObject(config.ports, "ports");
-  const convStore = requireObject(config.convStore, "convStore");
-  const convStoreDb = requireObject(convStore.db, "convStore.db");
 
   return {
+    objectStore: {
+      endpoint: requireString(objectStore.endpoint, "objectStore.endpoint"),
+      bucket: requireString(objectStore.bucket, "objectStore.bucket"),
+      region: requireString(objectStore.region, "objectStore.region"),
+      service: requireString(objectStore.service, "objectStore.service"),
+    },
     ports: {
       proxy: requireNumber(ports.proxy, "ports.proxy"),
       convAgent: requireNumber(ports.convAgent, "ports.convAgent"),
@@ -96,23 +129,37 @@ function parseConfig(value: unknown): ThothConfig {
         "ports.planningAgent",
       ),
     },
-    convStore: {
-      db: {
-        host: requireString(convStoreDb.host, "convStore.db.host"),
-        port: requireNumber(convStoreDb.port, "convStore.db.port"),
-        database: requireString(
-          convStoreDb.database,
-          "convStore.db.database",
-        ),
-        user: requireString(convStoreDb.user, "convStore.db.user"),
-        password: requireString(
-          convStoreDb.password,
-          "convStore.db.password",
-        ),
-        ssl: requireBoolean(convStoreDb.ssl, "convStore.db.ssl"),
-      },
-    },
   };
+}
+
+function parseNumber(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function parseBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  return undefined;
 }
 
 function requireObject(

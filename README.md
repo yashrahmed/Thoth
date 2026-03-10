@@ -45,7 +45,8 @@ thoth/
 
 Runtime configuration is loaded from a YAML file referenced by `CONFIG_FILE`.
 That file must be injected at startup and is not intended to be source
-controlled.
+controlled. Credentials and database connection settings are injected through
+environment variables, not stored in the YAML config.
 
 For local development:
 
@@ -60,10 +61,28 @@ Examples:
 All server entrypoints fail fast if `CONFIG_FILE` is missing or the referenced
 YAML file is invalid.
 
-For the local full-stack workflow, [config/local.launch.yaml](/Users/yashrahmed/Documents/personal-github-repos/Thoth/config/local.launch.yaml) is a committed non-secret launch config. The local launcher injects it automatically:
+For direct manual starts, also export:
+
+- `OPENAI_API_KEY`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `CONV_STORE_DB_HOST`
+- `CONV_STORE_DB_PORT`
+- `CONV_STORE_DB_NAME`
+- `CONV_STORE_DB_USER`
+- `CONV_STORE_DB_PASSWORD`
+- `CONV_STORE_DB_SSL`
+
+For the local full-stack workflow, [config/launch.yaml](/Users/yashrahmed/Documents/personal-github-repos/Thoth/config/launch.yaml) is a committed non-secret launch config. The local launcher injects it automatically:
 
 - `bun run dev:local:start`
 - `bun run dev:local:stop`
+
+The local launcher expects these local secret files:
+
+- `config/llm-creds.yaml`
+- `config/cloudflare-creds.yaml`
+- `config/@db-creds.yaml`
 
 The local database launcher now uses command-based scripts as well:
 

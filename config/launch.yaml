@@ -1,0 +1,19 @@
+# Local launch template for `scripts/launch-all-servers-local.sh`.
+# On `start`, the launcher reads `OPENAI_API_KEY` from `config/llm-creds.yaml`
+# and `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` from
+# `config/cloudflare-creds.yaml`, conversation-store DB settings from
+# `config/@db-creds.yaml`, exports them into the service process environment,
+# and starts services with `CONFIG_FILE` pointing at this file.
+# This committed file stays non-secret and is not used directly at runtime.
+
+ports:
+  proxy: 3000
+  convAgent: 3001
+  kbCurateAgent: 3002
+  planningAgent: 3003
+
+objectStore:
+  endpoint: https://61caa9d56c5a0143bfda0f07fd01088a.r2.cloudflarestorage.com
+  bucket: thoth-obj-store-dev
+  region: auto
+  service: s3

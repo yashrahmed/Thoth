@@ -6,14 +6,14 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
-CONFIG_PATH="$REPO_ROOT/config/local.launch.yaml"
-RUNTIME_CONFIG_PATH="$STATE_DIR/local.launch.yaml"
-LLM_CREDS_PATH="$REPO_ROOT/llm-creds.yaml"
-CLOUDFLARE_CREDS_PATH="$REPO_ROOT/cloudflare-creds.yaml"
+CONFIG_PATH="$REPO_ROOT/config/launch.yaml"
+LLM_CREDS_PATH="$REPO_ROOT/config/llm-creds.yaml"
+CLOUDFLARE_CREDS_PATH="$REPO_ROOT/config/cloudflare-creds.yaml"
+DB_CREDS_PATH="$REPO_ROOT/config/@db-creds.yaml"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./scripts/launch-all-local.sh <start|stop>"
+  echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop>"
   exit 1
 fi
 
@@ -45,17 +45,10 @@ read_yaml_value() {
   ' "$config_path"
 }
 
-write_runtime_config() {
-  cp "$CONFIG_PATH" "$RUNTIME_CONFIG_PATH"
-}
-
 start_service() {
   service_name="$1"
   package_name="$2"
   service_command="$3"
-  openai_api_key="$4"
-  r2_access_key_id="$5"
-  r2_secret_access_key="$6"
   pid_file="$STATE_DIR/$service_name.pid"
   log_file="$LOG_DIR/$service_name.log"
 
@@ -70,10 +63,7 @@ start_service() {
 
   (
     cd "$REPO_ROOT"
-    export CONFIG_FILE="$RUNTIME_CONFIG_PATH"
-    export OPENAI_API_KEY="$openai_api_key"
-    export R2_ACCESS_KEY_ID="$r2_access_key_id"
-    export R2_SECRET_ACCESS_KEY="$r2_secret_access_key"
+    export CONFIG_FILE="$CONFIG_PATH"
     nohup bun run --filter "$package_name" "$service_command" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
@@ -127,9 +117,20 @@ case "$COMMAND" in
       exit 1
     fi
 
+    if [ ! -f "$DB_CREDS_PATH" ]; then
+      echo "Missing DB creds config: $DB_CREDS_PATH"
+      exit 1
+    fi
+
     OPENAI_API_KEY="$(read_yaml_value "$LLM_CREDS_PATH" OPENAI_API_KEY)"
     R2_ACCESS_KEY_ID="$(read_yaml_value "$CLOUDFLARE_CREDS_PATH" R2_ACCESS_KEY_ID)"
     R2_SECRET_ACCESS_KEY="$(read_yaml_value "$CLOUDFLARE_CREDS_PATH" R2_SECRET_ACCESS_KEY)"
+    CONV_STORE_DB_HOST="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_HOST)"
+    CONV_STORE_DB_PORT="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_PORT)"
+    CONV_STORE_DB_NAME="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_NAME)"
+    CONV_STORE_DB_USER="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_USER)"
+    CONV_STORE_DB_PASSWORD="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_PASSWORD)"
+    CONV_STORE_DB_SSL="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_SSL)"
 
     if [ -z "$OPENAI_API_KEY" ]; then
       echo "Missing OPENAI_API_KEY in $LLM_CREDS_PATH"
@@ -146,23 +147,60 @@ case "$COMMAND" in
       exit 1
     fi
 
-    write_runtime_config
+    if [ -z "$CONV_STORE_DB_HOST" ]; then
+      echo "Missing CONV_STORE_DB_HOST in $DB_CREDS_PATH"
+      exit 1
+    fi
 
-    start_service "message-proxy" "@thoth/message-proxy" "start" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
-    start_service "conv-agent" "@thoth/agents" "start:conv-agent" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
-    start_service "kb-curate-agent" "@thoth/agents" "start:kb-curate-agent" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
-    start_service "planning-agent" "@thoth/agents" "start:planning-agent" "$OPENAI_API_KEY" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY"
+    if [ -z "$CONV_STORE_DB_PORT" ]; then
+      echo "Missing CONV_STORE_DB_PORT in $DB_CREDS_PATH"
+      exit 1
+    fi
+
+    if [ -z "$CONV_STORE_DB_NAME" ]; then
+      echo "Missing CONV_STORE_DB_NAME in $DB_CREDS_PATH"
+      exit 1
+    fi
+
+    if [ -z "$CONV_STORE_DB_USER" ]; then
+      echo "Missing CONV_STORE_DB_USER in $DB_CREDS_PATH"
+      exit 1
+    fi
+
+    if [ -z "$CONV_STORE_DB_PASSWORD" ]; then
+      echo "Missing CONV_STORE_DB_PASSWORD in $DB_CREDS_PATH"
+      exit 1
+    fi
+
+    if [ -z "$CONV_STORE_DB_SSL" ]; then
+      echo "Missing CONV_STORE_DB_SSL in $DB_CREDS_PATH"
+      exit 1
+    fi
+
+    export OPENAI_API_KEY
+    export R2_ACCESS_KEY_ID
+    export R2_SECRET_ACCESS_KEY
+    export CONV_STORE_DB_HOST
+    export CONV_STORE_DB_PORT
+    export CONV_STORE_DB_NAME
+    export CONV_STORE_DB_USER
+    export CONV_STORE_DB_PASSWORD
+    export CONV_STORE_DB_SSL
+
+    start_service "message-proxy" "@thoth/message-proxy" "start"
+    start_service "conv-agent" "@thoth/agents" "start:conv-agent"
+    start_service "kb-curate-agent" "@thoth/agents" "start:kb-curate-agent"
+    start_service "planning-agent" "@thoth/agents" "start:planning-agent"
     ;;
   stop)
     stop_service "message-proxy" "$(read_port proxy)"
     stop_service "conv-agent" "$(read_port convAgent)"
     stop_service "kb-curate-agent" "$(read_port kbCurateAgent)"
     stop_service "planning-agent" "$(read_port planningAgent)"
-    rm -f "$RUNTIME_CONFIG_PATH"
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./scripts/launch-all-local.sh <start|stop>"
+    echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop>"
     exit 1
     ;;
 esac

@@ -27,7 +27,7 @@ workspace/*
 !.env.example
 config/*.yaml
 !config/*.example.yaml
-!config/local.launch.yaml
+!config/launch.yaml
 
 # Local database state
 db/local/_data/
@@ -59,7 +59,3 @@ coverage/
 .expo-shared/
 android/.gradle/
 ios/Pods/
-
-# LLM API keys
-llm-creds.yaml
-cloudflare-creds.yaml

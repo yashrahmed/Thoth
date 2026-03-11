@@ -4,7 +4,7 @@ import { ConversationRepository } from "../repositories/conversation-repository"
 import { FileRepository } from "../repositories/file-repository";
 import { MessageRepository } from "../repositories/message-repository";
 import { getPortsConfig } from "@thoth/config";
-import { R2BlobStorage } from "../storage/r2-blob-storage";
+import { R2BlobRepository } from "../storage/r2-blob-repository";
 import { ConversationService } from "../services/conversation-service";
 import { FileService } from "../services/file-service";
 import { MessageService } from "../services/message-service";
@@ -12,8 +12,8 @@ import { MessageService } from "../services/message-service";
 const fileRepository = new FileRepository();
 const messageRepository = new MessageRepository(undefined, fileRepository);
 const conversationRepository = new ConversationRepository();
-const blobStorage = new R2BlobStorage();
-const fileService = new FileService(fileRepository, blobStorage);
+const blobRepository = new R2BlobRepository();
+const fileService = new FileService(fileRepository, blobRepository);
 const conversationService = new ConversationService(
   conversationRepository,
   messageRepository,

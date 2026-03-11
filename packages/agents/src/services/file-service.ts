@@ -1,5 +1,5 @@
 import type {
-  BlobStoragePort,
+  BlobRepository,
   FileRepository,
   MessageUploadInput,
 } from "@thoth/contracts";
@@ -8,7 +8,7 @@ import type { File, MessageId } from "@thoth/entities";
 export class FileService {
   constructor(
     private readonly fileRepository: FileRepository,
-    private readonly blobStorage: BlobStoragePort,
+    private readonly blobRepository: BlobRepository,
   ) {}
 
   async storeFilesForMessage(input: {
@@ -24,7 +24,7 @@ export class FileService {
         const lastCreateTs = new Date();
         const objectKey = this.buildObjectKey(fileId, upload.original_filename);
 
-        await this.blobStorage.putObject({
+        await this.blobRepository.putObject({
           objectKey,
           body: upload.body,
           contentType: upload.content_type,
@@ -55,7 +55,7 @@ export class FileService {
 
   async deleteFiles(files: File[]): Promise<void> {
     for (const file of files) {
-      await this.blobStorage.deleteObject({ objectKey: file.object_key });
+      await this.blobRepository.deleteObject({ objectKey: file.object_key });
       await this.fileRepository.delete(file.id);
     }
   }
@@ -74,7 +74,7 @@ export class FileService {
 
     for (const objectKey of storedObjectKeys) {
       try {
-        await this.blobStorage.deleteObject({ objectKey });
+        await this.blobRepository.deleteObject({ objectKey });
       } catch {
         // Best-effort cleanup to avoid masking the original failure.
       }

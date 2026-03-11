@@ -23,7 +23,7 @@ the stored bytes back through the API.
 Add a read path for stored files:
 
 - look up file metadata in Postgres
-- fetch object bytes through the blob storage port
+- fetch object bytes through the blob repository
 - return the content to the client with the correct `Content-Type`
 - set `Content-Disposition` based on `original_filename`
 

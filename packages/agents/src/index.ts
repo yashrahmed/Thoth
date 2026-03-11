@@ -8,7 +8,7 @@ export * from "./repositories/message-repository";
 export * from "./services/conversation-service";
 export * from "./services/file-service";
 export * from "./services/message-service";
-export * from "./storage/r2-blob-storage";
+export * from "./storage/r2-blob-repository";
 
 export class ConversationsAgent {
   async handle(message: Message): Promise<Message> {

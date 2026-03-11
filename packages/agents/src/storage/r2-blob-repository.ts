@@ -4,7 +4,7 @@ import {
   getObjectStoreCredentialsConfig,
 } from "@thoth/config";
 import type {
-  BlobStoragePort,
+  BlobRepository,
   CopyObjectInput,
   DeleteObjectInput,
   GetObjectInput,
@@ -22,7 +22,7 @@ interface SignedRequestInput {
   extraHeaders?: Record<string, string>;
 }
 
-export class R2BlobStorage implements BlobStoragePort {
+export class R2BlobRepository implements BlobRepository {
   private readonly config = getObjectStoreConfig();
   private readonly credentials = getObjectStoreCredentialsConfig();
 

@@ -34,7 +34,7 @@ export interface StoredObjectBody extends StoredObjectMetadata {
   body: ReadableStream<Uint8Array>;
 }
 
-export interface BlobStoragePort {
+export interface BlobRepository {
   putObject(input: PutObjectInput): Promise<StoredObjectMetadata>;
   headObject(input: HeadObjectInput): Promise<StoredObjectMetadata | null>;
   getObject(input: GetObjectInput): Promise<StoredObjectBody>;

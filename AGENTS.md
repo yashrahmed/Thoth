@@ -27,6 +27,8 @@ Use ideas from Domain-Driven Design during development.
   shapes.
 - Add new capabilities by extending the domain and ports first, then wiring
   adapters around them.
+- For storage-facing abstractions, prefer the `Repository` suffix consistently
+  instead of mixing `Port` and `Repository` naming.
 - Keep terminology consistent across code, docs, and interfaces.
 - When planning simulations are rebuilt, use Rapier for rigid body physics
   and Three.js for visualization.

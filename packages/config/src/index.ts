@@ -105,6 +105,10 @@ export function getPortsConfig(): PortsConfig {
   return getThothConfig().ports;
 }
 
+export function resetConfigCache(): void {
+  cachedConfig = null;
+}
+
 function parseConfig(value: unknown): ThothConfig {
   const config = requireObject(value, "config");
   const objectStore = requireObject(config.objectStore, "objectStore");

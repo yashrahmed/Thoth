@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "bun x tsc --noEmit",
+    "test": "bun test",
     "typecheck": "bun x tsc --noEmit"
   }
 }

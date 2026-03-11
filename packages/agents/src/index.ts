@@ -1,28 +1,5 @@
-import type { Message } from "@thoth/entities";
-export * from "./conv-agent/controllers/conversation-controller";
-export * from "./conv-agent/controllers/message-controller";
-export * from "./repositories/postgres-conversation-repository";
-export * from "./repositories/postgres-file-repository";
-export * from "./repositories/postgres-message-repository";
-export * from "./services/conversation-service";
-export * from "./services/file-service";
-export * from "./services/message-service";
-export * from "./repositories/r2-blob-repository";
-
-export class ConversationsAgent {
-  async handle(message: Message): Promise<Message> {
-    // TODO: implement the LLM loop and tool registry.
-    return {
-      ...message,
-      id: crypto.randomUUID(),
-      last_create_ts: new Date(),
-      last_update_ts: new Date(),
-    };
-  }
-}
-
-export class KnowledgeCurationAgent {
-  async run(): Promise<void> {
-    // TODO: read from the conversations store and update curated knowledge.
-  }
-}
+export * from "./conversations/application/conversations-service";
+export * from "./conversations/inbound/http/conversations-controller";
+export * from "./conversations/outbound/blob/r2-blob-store";
+export * from "./conversations/outbound/postgres/postgres-conversation-repository";
+export * from "./kb-curate-agent/application/knowledge-curation-service";

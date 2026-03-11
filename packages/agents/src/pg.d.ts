@@ -1,4 +1,12 @@
 declare module "pg" {
+  export interface PoolClient {
+    query<Row = unknown>(
+      text: string,
+      values?: readonly unknown[],
+    ): Promise<QueryResult<Row>>;
+    release(): void;
+  }
+
   export interface QueryResult<Row> {
     rows: Row[];
   }
@@ -14,6 +22,7 @@ declare module "pg" {
 
   export class Pool {
     constructor(config?: PoolConfig);
+    connect(): Promise<PoolClient>;
     query<Row = unknown>(
       text: string,
       values?: readonly unknown[],

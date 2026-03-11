@@ -7,8 +7,10 @@
     "@thoth/config": "workspace:*"
   },
   "scripts": {
+    "build": "bun x tsc --noEmit",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
+    "test": "bun test",
     "typecheck": "bun x tsc --noEmit"
   }
 }

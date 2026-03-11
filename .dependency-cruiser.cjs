@@ -20,53 +20,53 @@ module.exports = {
       },
     },
     {
-      name: "controllers-do-not-depend-on-domain-entities",
+      name: "inbound-does-not-depend-on-domain",
       severity: "error",
       from: {
-        path: "^packages/agents/src/.+/controllers/",
+        path: "^packages/agents/src/.+/inbound/",
       },
       to: {
         path: "^packages/domain/entities/",
       },
     },
     {
-      name: "controllers-do-not-depend-on-repositories",
+      name: "inbound-does-not-depend-on-outbound",
       severity: "error",
       from: {
-        path: "^packages/agents/src/.+/controllers/",
+        path: "^packages/agents/src/.+/inbound/",
       },
       to: {
-        path: "^packages/agents/src/repositories/",
+        path: "^packages/agents/src/.+/outbound/",
       },
     },
     {
-      name: "services-do-not-depend-on-repositories",
+      name: "application-does-not-depend-on-inbound",
       severity: "error",
       from: {
-        path: "^packages/agents/src/services/",
+        path: "^packages/agents/src/.+/application/",
       },
       to: {
-        path: "^packages/agents/src/repositories/",
+        path: "^packages/agents/src/.+/inbound/",
       },
     },
     {
-      name: "repositories-do-not-depend-on-controllers",
+      name: "application-does-not-depend-on-outbound",
       severity: "error",
       from: {
-        path: "^packages/agents/src/repositories/",
+        path: "^packages/agents/src/.+/application/",
       },
       to: {
-        path: "^packages/agents/src/.+/controllers/",
+        path: "^packages/agents/src/.+/outbound/",
       },
     },
     {
-      name: "repositories-do-not-depend-on-services",
+      name: "outbound-does-not-depend-on-inbound",
       severity: "error",
       from: {
-        path: "^packages/agents/src/repositories/",
+        path: "^packages/agents/src/.+/outbound/",
       },
       to: {
-        path: "^packages/agents/src/services/",
+        path: "^packages/agents/src/.+/inbound/",
       },
     },
   ],

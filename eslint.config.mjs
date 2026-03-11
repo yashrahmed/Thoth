@@ -38,7 +38,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/**/src/**/controllers/**/*.ts", "packages/**/src/**/controllers/**/*.tsx"],
+    files: ["packages/**/src/**/inbound/**/*.ts", "packages/**/src/**/inbound/**/*.tsx"],
     ignores: ["**/*.test.ts", "**/*.test.tsx"],
     rules: {
       "no-restricted-imports": [
@@ -50,23 +50,12 @@ export default tseslint.config(
               message:
                 "Inbound adapters must not depend on domain entities or value objects.",
             },
-            {
-              name: "@thoth/contracts",
-              importNames: [
-                "BlobRepository",
-                "ConversationRepository",
-                "FileRepository",
-                "MessageRepository",
-              ],
-              message:
-                "Inbound adapters must not depend on repository interfaces.",
-            },
           ],
           patterns: [
             {
-              group: ["**/repositories/**"],
+              group: ["**/outbound/**"],
               message:
-                "Inbound adapters must not depend on repository implementations.",
+                "Inbound adapters must not depend on outbound adapters.",
             },
           ],
         },
@@ -74,19 +63,19 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/**/src/services/**/*.ts", "packages/**/src/services/**/*.tsx"],
+    files: ["packages/**/src/**/application/**/*.ts", "packages/**/src/**/application/**/*.tsx"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["**/repositories/**"],
+              group: ["**/outbound/**"],
               message:
-                "Application services must depend on repository interfaces, not repository implementations.",
+                "Application code must depend on ports, not outbound adapters.",
             },
             {
-              group: ["**/controllers/**"],
+              group: ["**/inbound/**"],
               message:
                 "Application services must not depend on inbound adapters.",
             },
@@ -108,9 +97,9 @@ export default tseslint.config(
                 "@thoth/agents",
                 "pg",
                 "ai",
-                "**/controllers/**",
-                "**/services/**",
-                "**/repositories/**",
+                "**/inbound/**",
+                "**/application/**",
+                "**/outbound/**",
               ],
               message:
                 "Domain code must not depend on application, infrastructure, or framework adapters.",
@@ -121,16 +110,16 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/**/src/repositories/**/*.ts", "packages/**/src/repositories/**/*.tsx"],
+    files: ["packages/**/src/**/outbound/**/*.ts", "packages/**/src/**/outbound/**/*.tsx"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["**/controllers/**", "**/services/**"],
+              group: ["**/inbound/**", "**/application/**"],
               message:
-                "Outbound adapters must not depend on inbound adapters or application services.",
+                "Outbound adapters must not depend on inbound or application code.",
             },
           ],
         },

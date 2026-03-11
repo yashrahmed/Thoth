@@ -4,7 +4,21 @@
 
 Thoth should be developed using a hexagonal architecture.
 
-- Keep domain logic at the center of the system.
+- Keep domain logic at the center of the system and follow this layer
+  structure:
+
+1. Inbound Adapters (Controllers / UI)
+   Receive external input and translate it into application calls.
+2. Application Layer (Use Cases / Application Services)
+   Orchestrates workflows: loads aggregates, invokes domain logic, calls
+   external ports.
+3. Domain Layer (Core Model)
+   Contains the business model: aggregates, entities, value objects, domain
+   services, and repository/port interfaces.
+4. Outbound Adapters (Infrastructure)
+   Implements technical integrations such as database repositories, external
+   APIs, messaging systems, and executors.
+
 - Treat UI, persistence, queues, LLM providers, and external services as
   adapters around the core application.
 - Define clear ports/interfaces at the application boundary and implement

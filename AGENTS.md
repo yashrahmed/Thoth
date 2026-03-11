@@ -19,6 +19,36 @@ Thoth should be developed using a hexagonal architecture.
    Implements technical integrations such as database repositories, external
    APIs, messaging systems, and executors.
 
+- Layer dependency rules:
+  - Inbound Adapters may define request/response DTOs, transport models, and
+    API mappers.
+  - Inbound Adapters may depend only on application services, DTOs, and
+    mapping utilities.
+  - Inbound Adapters must not depend on domain entities, domain aggregates,
+    domain value objects, repository interfaces, repository implementations,
+    infrastructure adapters, or ORM/database types.
+  - Application Layer may define use cases, commands, queries, application
+    DTOs, and workflow orchestration logic.
+  - Application Layer may depend on domain types, domain services, repository
+    interfaces, and external service interfaces.
+  - Application Layer must not depend on repository implementations,
+    infrastructure adapters, ORM frameworks, HTTP frameworks, or UI
+    components.
+  - Domain Layer may define entities, aggregates, value objects, domain
+    services, domain events, repository interfaces, and domain ports.
+  - Domain Layer may depend only on other domain types and standard library
+    utilities.
+  - Domain Layer must not depend on controllers, UI, application services,
+    DTOs, repository implementations, infrastructure code, databases, HTTP
+    frameworks, or messaging frameworks.
+  - Outbound Adapters may define repository implementations, ORM mappings,
+    external API clients, messaging adapters, cache adapters, file storage
+    adapters, and executor implementations.
+  - Outbound Adapters may depend on domain types, repository interfaces,
+    external service interfaces, and application configuration.
+  - Outbound Adapters must not be depended on by the domain layer,
+    application services, or inbound adapters.
+
 - Treat UI, persistence, queues, LLM providers, and external services as
   adapters around the core application.
 - Define clear ports/interfaces at the application boundary and implement

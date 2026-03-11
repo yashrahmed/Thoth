@@ -1,6 +1,6 @@
 import type { Conversation, File, Message } from "@thoth/entities";
 
-export function serializeFile(file: File) {
+function serializeFile(file: File) {
   return {
     id: file.id,
     object_key: file.object_key,

@@ -15,13 +15,6 @@ const MESSAGE_TYPES: MessageType[] = [
   "user",
 ];
 
-interface MessageBody {
-  id: string;
-  conversation_id: string;
-  type: MessageType;
-  text_content: string | null;
-}
-
 class RequestValidationError extends Error {}
 
 export class MessageController {

@@ -1,11 +1,6 @@
 import { Pool } from "pg";
-export {
-  getConvStoreDatabaseConfig,
-  type ConvStoreDatabaseConfig,
-} from "@thoth/config";
 import {
   getConvStoreDatabaseConfig,
-  type ConvStoreDatabaseConfig,
 } from "@thoth/config";
 
 export function createConvStorePool(

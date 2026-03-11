@@ -1,7 +1,9 @@
 import type { ConversationId, Message, MessageId } from "@thoth/entities";
-import type { MessageRepository as MessageRepositoryContract } from "@thoth/contracts";
+import type {
+  FileRepository,
+  MessageRepository as MessageRepositoryContract,
+} from "@thoth/contracts";
 import { Pool } from "pg";
-import type { FileRepository } from "@thoth/contracts";
 
 interface MessageRow {
   id: string;

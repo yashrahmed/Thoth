@@ -1,9 +1,6 @@
 import type { File as DomainFile, FileId, MessageId } from "@thoth/entities";
 import type { FileRepository as FileRepositoryContract } from "@thoth/contracts";
 import { Pool } from "pg";
-import {
-  getConvStoreDatabaseConfig,
-} from "./conv-store-database";
 
 interface FileRow {
   id: string;
@@ -14,23 +11,8 @@ interface FileRow {
   last_create_ts: Date;
 }
 
-export class FileRepository implements FileRepositoryContract {
-  private readonly pool: Pool;
-
-  constructor(databaseConfig = getConvStoreDatabaseConfig()) {
-    if (Number.isNaN(databaseConfig.port)) {
-      throw new Error("CONV_STORE_DB_PORT must be a valid number.");
-    }
-
-    this.pool = new Pool({
-      host: databaseConfig.host,
-      port: databaseConfig.port,
-      database: databaseConfig.database,
-      user: databaseConfig.user,
-      password: databaseConfig.password,
-      ssl: databaseConfig.ssl,
-    });
-  }
+export class PostgresFileRepository implements FileRepositoryContract {
+  constructor(private readonly pool: Pool) {}
 
   async create(file: DomainFile, messageId: MessageId): Promise<DomainFile> {
     const result = await this.pool.query<FileRow>(

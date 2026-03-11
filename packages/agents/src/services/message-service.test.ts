@@ -1,24 +1,26 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Message } from "@thoth/entities";
+import type { MessageRepository } from "@thoth/contracts";
 import { MessageService } from "./message-service";
 
 describe("MessageService", () => {
   test("creates a message with zero files and server-owned timestamps", async () => {
-    const messageRepository = {
-      async createMessage(message: Message): Promise<Message> {
+    const messageRepository: MessageRepository = {
+      async create(message: Message): Promise<Message> {
         return message;
       },
-      getMessageById: mock(async () => null),
-      listMessagesByConversationId: mock(async () => []),
-      deleteMessage: mock(async () => undefined),
-      deleteMessageById: mock(async () => undefined),
+      getById: mock(async () => null),
+      listByConversationId: mock(async () => []),
+      listByConversationIds: mock(async () => new Map()),
+      delete: mock(async () => undefined),
+      deleteById: mock(async () => undefined),
     };
     const fileService = {
       storeFilesForMessage: mock(async () => []),
       deleteFiles: mock(async () => undefined),
     };
     const service = new MessageService(
-      messageRepository as never,
+      messageRepository,
       fileService as never,
     );
 
@@ -38,14 +40,15 @@ describe("MessageService", () => {
   });
 
   test("deletes the message row when file storage fails after insert", async () => {
-    const messageRepository = {
-      async createMessage(message: Message): Promise<Message> {
+    const messageRepository: MessageRepository = {
+      async create(message: Message): Promise<Message> {
         return message;
       },
-      getMessageById: mock(async () => null),
-      listMessagesByConversationId: mock(async () => []),
-      deleteMessage: mock(async () => undefined),
-      deleteMessageById: mock(async () => undefined),
+      getById: mock(async () => null),
+      listByConversationId: mock(async () => []),
+      listByConversationIds: mock(async () => new Map()),
+      delete: mock(async () => undefined),
+      deleteById: mock(async () => undefined),
     };
     const fileService = {
       storeFilesForMessage: mock(async () => {
@@ -54,7 +57,7 @@ describe("MessageService", () => {
       deleteFiles: mock(async () => undefined),
     };
     const service = new MessageService(
-      messageRepository as never,
+      messageRepository,
       fileService as never,
     );
 
@@ -70,7 +73,7 @@ describe("MessageService", () => {
       }),
     ).rejects.toThrow("upload failed");
 
-    expect(messageRepository.deleteMessageById).toHaveBeenCalledWith(
+    expect(messageRepository.deleteById).toHaveBeenCalledWith(
       "message-2",
     );
   });

@@ -1,9 +1,7 @@
 import type { ConversationId, Message, MessageId } from "@thoth/entities";
+import type { MessageRepository as MessageRepositoryContract } from "@thoth/contracts";
 import { Pool } from "pg";
-import {
-  getConvStoreDatabaseConfig,
-} from "./conv-store-database";
-import { FileRepository } from "./file-repository";
+import type { FileRepository } from "@thoth/contracts";
 
 interface MessageRow {
   id: string;
@@ -14,30 +12,13 @@ interface MessageRow {
   last_update_ts: Date;
 }
 
-export class MessageRepository {
-  private readonly pool: Pool;
-
+export class PostgresMessageRepository implements MessageRepositoryContract {
   constructor(
-    databaseConfig = getConvStoreDatabaseConfig(),
-    private readonly fileRepository: FileRepository = new FileRepository(
-      databaseConfig,
-    ),
-  ) {
-    if (Number.isNaN(databaseConfig.port)) {
-      throw new Error("CONV_STORE_DB_PORT must be a valid number.");
-    }
+    private readonly pool: Pool,
+    private readonly fileRepository: FileRepository,
+  ) {}
 
-    this.pool = new Pool({
-      host: databaseConfig.host,
-      port: databaseConfig.port,
-      database: databaseConfig.database,
-      user: databaseConfig.user,
-      password: databaseConfig.password,
-      ssl: databaseConfig.ssl,
-    });
-  }
-
-  async createMessage(message: Message): Promise<Message> {
+  async create(message: Message): Promise<Message> {
     const result = await this.pool.query<MessageRow>(
       `
         INSERT INTO public.messages (
@@ -70,7 +51,7 @@ export class MessageRepository {
     return this.hydrateRow(result.rows[0], []);
   }
 
-  async getMessageById(messageId: MessageId): Promise<Message | null> {
+  async getById(messageId: MessageId): Promise<Message | null> {
     const result = await this.pool.query<MessageRow>(
       `
         SELECT
@@ -100,17 +81,17 @@ export class MessageRepository {
     );
   }
 
-  async listMessagesByConversationId(
+  async listByConversationId(
     conversationId: ConversationId,
   ): Promise<Message[]> {
-    const groupedMessages = await this.listMessagesByConversationIds([
+    const groupedMessages = await this.listByConversationIds([
       conversationId,
     ]);
 
     return groupedMessages.get(conversationId) ?? [];
   }
 
-  async listMessagesByConversationIds(
+  async listByConversationIds(
     conversationIds: ConversationId[],
   ): Promise<Map<ConversationId, Message[]>> {
     if (conversationIds.length === 0) {
@@ -147,7 +128,7 @@ export class MessageRepository {
     return messagesByConversationId;
   }
 
-  async deleteMessage(
+  async delete(
     messageId: MessageId,
     conversationId: ConversationId,
   ): Promise<void> {
@@ -160,7 +141,7 @@ export class MessageRepository {
     );
   }
 
-  async deleteMessageById(messageId: MessageId): Promise<void> {
+  async deleteById(messageId: MessageId): Promise<void> {
     await this.pool.query(
       `
         DELETE FROM public.messages

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Pool } from "pg";
-import { FileRepository } from "./file-repository";
-import { MessageRepository } from "./message-repository";
+import { createConvStorePool } from "./conv-store-database";
+import { PostgresFileRepository } from "./postgres-file-repository";
+import { PostgresMessageRepository } from "./postgres-message-repository";
 
 const dbConfig = getOptionalDbConfig();
 const maybeTest = dbConfig ? test : test.skip;
@@ -30,9 +30,9 @@ function getOptionalDbConfig() {
 
 describe("FileRepository integration", () => {
   maybeTest("persists file metadata and hydrates message reads with files", async () => {
-    const pool = new Pool(dbConfig!);
-    const fileRepository = new FileRepository(dbConfig!);
-    const messageRepository = new MessageRepository(dbConfig!, fileRepository);
+    const pool = createConvStorePool(dbConfig!);
+    const fileRepository = new PostgresFileRepository(pool);
+    const messageRepository = new PostgresMessageRepository(pool, fileRepository);
     const conversationId = crypto.randomUUID();
     const messageId = crypto.randomUUID();
     const now = new Date("2026-03-10T12:00:00.000Z");
@@ -76,12 +76,12 @@ describe("FileRepository integration", () => {
       );
 
       const files = await fileRepository.listByMessageId(messageId);
-      const hydratedMessage = await messageRepository.getMessageById(messageId);
+      const hydratedMessage = await messageRepository.getById(messageId);
 
       expect(files).toHaveLength(1);
       expect(hydratedMessage?.files).toHaveLength(1);
 
-      await messageRepository.deleteMessage(messageId, conversationId);
+      await messageRepository.delete(messageId, conversationId);
 
       expect(await fileRepository.listByMessageId(messageId)).toEqual([]);
     } finally {

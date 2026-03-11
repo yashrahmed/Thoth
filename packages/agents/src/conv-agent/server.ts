@@ -1,17 +1,22 @@
 import { ConversationController } from "./controllers/conversation-controller";
 import { MessageController } from "./controllers/message-controller";
-import { ConversationRepository } from "../repositories/conversation-repository";
-import { FileRepository } from "../repositories/file-repository";
-import { MessageRepository } from "../repositories/message-repository";
+import { PostgresConversationRepository } from "../repositories/postgres-conversation-repository";
+import { PostgresFileRepository } from "../repositories/postgres-file-repository";
+import { PostgresMessageRepository } from "../repositories/postgres-message-repository";
+import { createConvStorePool } from "../repositories/conv-store-database";
 import { getPortsConfig } from "@thoth/config";
-import { R2BlobRepository } from "../storage/r2-blob-repository";
+import { R2BlobRepository } from "../repositories/r2-blob-repository";
 import { ConversationService } from "../services/conversation-service";
 import { FileService } from "../services/file-service";
 import { MessageService } from "../services/message-service";
 
-const fileRepository = new FileRepository();
-const messageRepository = new MessageRepository(undefined, fileRepository);
-const conversationRepository = new ConversationRepository();
+const convStorePool = createConvStorePool();
+const fileRepository = new PostgresFileRepository(convStorePool);
+const messageRepository = new PostgresMessageRepository(
+  convStorePool,
+  fileRepository,
+);
+const conversationRepository = new PostgresConversationRepository(convStorePool);
 const blobRepository = new R2BlobRepository();
 const fileService = new FileService(fileRepository, blobRepository);
 const conversationService = new ConversationService(

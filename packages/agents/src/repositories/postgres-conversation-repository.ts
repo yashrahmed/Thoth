@@ -1,8 +1,6 @@
 import type { Conversation, ConversationId } from "@thoth/entities";
+import type { ConversationRepository as ConversationRepositoryContract } from "@thoth/contracts";
 import { Pool } from "pg";
-import {
-  getConvStoreDatabaseConfig,
-} from "./conv-store-database";
 
 interface ConversationRow {
   id: string;
@@ -10,25 +8,12 @@ interface ConversationRow {
   last_update_ts: Date;
 }
 
-export class ConversationRepository {
-  private readonly pool: Pool;
+export class PostgresConversationRepository
+  implements ConversationRepositoryContract
+{
+  constructor(private readonly pool: Pool) {}
 
-  constructor(databaseConfig = getConvStoreDatabaseConfig()) {
-    if (Number.isNaN(databaseConfig.port)) {
-      throw new Error("CONV_STORE_DB_PORT must be a valid number.");
-    }
-
-    this.pool = new Pool({
-      host: databaseConfig.host,
-      port: databaseConfig.port,
-      database: databaseConfig.database,
-      user: databaseConfig.user,
-      password: databaseConfig.password,
-      ssl: databaseConfig.ssl,
-    });
-  }
-
-  async createConversation(
+  async create(
     conversationId: ConversationId,
     createdAt: Date,
   ): Promise<Conversation> {
@@ -51,7 +36,7 @@ export class ConversationRepository {
     return this.mapRowToConversation(result.rows[0]);
   }
 
-  async getConversationById(
+  async getById(
     conversationId: ConversationId,
   ): Promise<Conversation | null> {
     const result = await this.pool.query<ConversationRow>(
@@ -73,7 +58,7 @@ export class ConversationRepository {
     return this.mapRowToConversation(result.rows[0]);
   }
 
-  async listConversations(): Promise<Conversation[]> {
+  async list(): Promise<Conversation[]> {
     const result = await this.pool.query<ConversationRow>(
       `
         SELECT
@@ -88,7 +73,7 @@ export class ConversationRepository {
     return result.rows.map((row) => this.mapRowToConversation(row));
   }
 
-  async updateConversation(
+  async update(
     conversationId: ConversationId,
     updatedAt: Date,
   ): Promise<Conversation> {
@@ -115,7 +100,7 @@ export class ConversationRepository {
     return this.mapRowToConversation(result.rows[0]);
   }
 
-  async deleteConversation(conversationId: ConversationId): Promise<void> {
+  async delete(conversationId: ConversationId): Promise<void> {
     await this.pool.query(
       `
         DELETE FROM public.conversations

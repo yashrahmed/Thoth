@@ -1,10 +1,10 @@
 import type {
   CreateMessageQuery,
   DeleteMessageQuery,
+  MessageRepository,
   MessageQuery,
 } from "@thoth/contracts";
 import type { Message } from "@thoth/entities";
-import { MessageRepository } from "../repositories/message-repository";
 import { FileService } from "./file-service";
 
 export class MessageService implements MessageQuery {
@@ -15,7 +15,7 @@ export class MessageService implements MessageQuery {
 
   async createMessage(input: CreateMessageQuery): Promise<Message> {
     const now = new Date();
-    let message = await this.messageRepository.createMessage({
+    let message = await this.messageRepository.create({
       id: input.message.id,
       conversation_id: input.message.conversation_id,
       type: input.message.type,
@@ -36,7 +36,7 @@ export class MessageService implements MessageQuery {
         files,
       };
     } catch (error) {
-      await this.messageRepository.deleteMessageById(message.id);
+      await this.messageRepository.deleteById(message.id);
       throw error;
     }
 
@@ -44,22 +44,22 @@ export class MessageService implements MessageQuery {
   }
 
   getMessageById(messageId: string): Promise<Message | null> {
-    return this.messageRepository.getMessageById(messageId);
+    return this.messageRepository.getById(messageId);
   }
 
   listMessagesByConversationId(conversationId: string): Promise<Message[]> {
-    return this.messageRepository.listMessagesByConversationId(conversationId);
+    return this.messageRepository.listByConversationId(conversationId);
   }
 
   async deleteMessage(input: DeleteMessageQuery): Promise<void> {
-    const message = await this.messageRepository.getMessageById(input.messageId);
+    const message = await this.messageRepository.getById(input.messageId);
 
     if (!message || message.conversation_id !== input.conversation_id) {
       return;
     }
 
     await this.fileService.deleteFiles(message.files);
-    await this.messageRepository.deleteMessage(
+    await this.messageRepository.delete(
       input.messageId,
       input.conversation_id,
     );

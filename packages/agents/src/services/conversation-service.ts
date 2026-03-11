@@ -1,12 +1,12 @@
 import type {
+  ConversationRepository,
   ConversationQuery,
   CreateConversationQuery,
   DeleteConversationQuery,
+  MessageRepository,
   UpdateConversationQuery,
 } from "@thoth/contracts";
 import type { Conversation } from "@thoth/entities";
-import { ConversationRepository } from "../repositories/conversation-repository";
-import { MessageRepository } from "../repositories/message-repository";
 import { FileService } from "./file-service";
 
 export class ConversationService implements ConversationQuery {
@@ -19,7 +19,7 @@ export class ConversationService implements ConversationQuery {
   async createConversation(
     input: CreateConversationQuery,
   ): Promise<Conversation> {
-    return this.conversationRepository.createConversation(
+    return this.conversationRepository.create(
       input.conversation.id,
       new Date(),
     );
@@ -29,7 +29,7 @@ export class ConversationService implements ConversationQuery {
     conversationId: string,
   ): Promise<Conversation | null> {
     const conversation =
-      await this.conversationRepository.getConversationById(conversationId);
+      await this.conversationRepository.getById(conversationId);
 
     if (!conversation) {
       return null;
@@ -37,16 +37,16 @@ export class ConversationService implements ConversationQuery {
 
     return {
       ...conversation,
-      messages: await this.messageRepository.listMessagesByConversationId(
+      messages: await this.messageRepository.listByConversationId(
         conversationId,
       ),
     };
   }
 
   async listConversations(): Promise<Conversation[]> {
-    const conversations = await this.conversationRepository.listConversations();
+    const conversations = await this.conversationRepository.list();
     const messagesByConversationId =
-      await this.messageRepository.listMessagesByConversationIds(
+      await this.messageRepository.listByConversationIds(
         conversations.map((conversation) => conversation.id),
       );
 
@@ -59,14 +59,14 @@ export class ConversationService implements ConversationQuery {
   async updateConversation(
     input: UpdateConversationQuery,
   ): Promise<Conversation> {
-    const conversation = await this.conversationRepository.updateConversation(
+    const conversation = await this.conversationRepository.update(
       input.conversation.id,
       new Date(),
     );
 
     return {
       ...conversation,
-      messages: await this.messageRepository.listMessagesByConversationId(
+      messages: await this.messageRepository.listByConversationId(
         conversation.id,
       ),
     };
@@ -83,6 +83,6 @@ export class ConversationService implements ConversationQuery {
       await this.fileService.deleteFiles(message.files);
     }
 
-    await this.conversationRepository.deleteConversation(input.conversation_id);
+    await this.conversationRepository.delete(input.conversation_id);
   }
 }

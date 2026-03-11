@@ -5,8 +5,9 @@ import type {
   MessageQuery,
   MessageUploadInput,
 } from "@thoth/contracts";
-import type { MessageType } from "@thoth/entities";
 import { serializeMessage } from "./serialization";
+
+type MessageType = CreateMessageInput["type"];
 
 const MESSAGE_TYPES: MessageType[] = [
   "assistant",

@@ -1,11 +1,15 @@
 import type { Conversation, ConversationId } from "@thoth/entities";
 
+export interface ConversationMutationInput {
+  id: ConversationId;
+}
+
 export interface CreateConversationQuery {
-  conversation: Conversation;
+  conversation: ConversationMutationInput;
 }
 
 export interface UpdateConversationQuery {
-  conversation: Conversation;
+  conversation: ConversationMutationInput;
 }
 
 export interface DeleteConversationQuery {

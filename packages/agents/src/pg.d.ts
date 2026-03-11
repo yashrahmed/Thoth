@@ -18,5 +18,6 @@ declare module "pg" {
       text: string,
       values?: readonly unknown[],
     ): Promise<QueryResult<Row>>;
+    end(): Promise<void>;
   }
 }

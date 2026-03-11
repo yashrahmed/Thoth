@@ -1,10 +1,12 @@
 import type {
+  CreateMessageInput,
   CreateMessageQuery,
   DeleteMessageQuery,
   MessageQuery,
-  UpdateMessageQuery,
+  MessageUploadInput,
 } from "@thoth/contracts";
-import type { Message, MessageType } from "@thoth/entities";
+import type { MessageType } from "@thoth/entities";
+import { serializeMessage } from "./serialization";
 
 const MESSAGE_TYPES: MessageType[] = [
   "assistant",
@@ -18,18 +20,15 @@ interface MessageBody {
   conversation_id: string;
   type: MessageType;
   text_content: string | null;
-  media_content: string | null;
-  last_create_ts: string;
-  last_update_ts: string;
 }
 
 class RequestValidationError extends Error {}
 
 export class MessageController {
-  constructor(private readonly messageRepository: MessageQuery) {}
+  constructor(private readonly messageService: MessageQuery) {}
 
   async insert(req: Request): Promise<Response> {
-    let query: CreateMessageQuery | UpdateMessageQuery;
+    let query: CreateMessageQuery;
 
     try {
       query = await this.parseMutationQuery(req);
@@ -41,27 +40,9 @@ export class MessageController {
       throw error;
     }
 
-    const message = await this.messageRepository.createMessage(query);
+    const message = await this.messageService.createMessage(query);
 
-    return Response.json(this.serializeMessage(message), { status: 201 });
-  }
-
-  async update(req: Request): Promise<Response> {
-    let query: CreateMessageQuery | UpdateMessageQuery;
-
-    try {
-      query = await this.parseMutationQuery(req);
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return Response.json({ error: error.message }, { status: 400 });
-      }
-
-      throw error;
-    }
-
-    const message = await this.messageRepository.updateMessage(query);
-
-    return Response.json(this.serializeMessage(message));
+    return Response.json(serializeMessage(message), { status: 201 });
   }
 
   async delete(req: Request): Promise<Response> {
@@ -84,7 +65,7 @@ export class MessageController {
       messageId,
     };
 
-    await this.messageRepository.deleteMessage(query);
+    await this.messageService.deleteMessage(query);
 
     return new Response(null, { status: 204 });
   }
@@ -101,48 +82,75 @@ export class MessageController {
     }
 
     const messages =
-      await this.messageRepository.listMessagesByConversationId(
-        conversationId,
-      );
+      await this.messageService.listMessagesByConversationId(conversationId);
 
-    return Response.json(
-      messages.map((message) => this.serializeMessage(message)),
-    );
+    return Response.json(messages.map((message) => serializeMessage(message)));
   }
 
-  private async parseMutationQuery(
-    req: Request,
-  ): Promise<CreateMessageQuery | UpdateMessageQuery> {
-    const body = await this.parseRequestBody(req);
+  private async parseMutationQuery(req: Request): Promise<CreateMessageQuery> {
+    const contentType = req.headers.get("content-type") ?? "";
+
+    if (!contentType.includes("multipart/form-data")) {
+      throw new RequestValidationError(
+        "Request body must be multipart/form-data.",
+      );
+    }
+
+    let body: FormData;
+
+    try {
+      body = await req.formData();
+    } catch {
+      throw new RequestValidationError(
+        "Request body must be valid multipart/form-data.",
+      );
+    }
+
+    const rawMessage = body.get("message");
+
+    if (typeof rawMessage !== "string") {
+      throw new RequestValidationError(
+        "Multipart form field message must be a JSON string.",
+      );
+    }
+
+    let parsedMessage: unknown;
+
+    try {
+      parsedMessage = JSON.parse(rawMessage);
+    } catch {
+      throw new RequestValidationError("message must be valid JSON.");
+    }
 
     return {
-      message: this.parseMessage(body.message),
+      message: this.parseMessage(parsedMessage),
+      files: await this.parseFiles(body),
     };
   }
 
-  private async parseRequestBody(
-    req: Request,
-  ): Promise<{ message: MessageBody }> {
-    let body: unknown;
+  private async parseFiles(body: FormData): Promise<MessageUploadInput[]> {
+    const formFiles = body.getAll("files");
+    const uploads: MessageUploadInput[] = [];
 
-    try {
-      body = await req.json();
-    } catch {
-      throw new RequestValidationError("Request body must be valid JSON.");
+    for (const formFile of formFiles) {
+      if (!(formFile instanceof File)) {
+        throw new RequestValidationError(
+          "files form fields must be uploaded files.",
+        );
+      }
+
+      uploads.push({
+        original_filename: formFile.name || "blob",
+        content_type: formFile.type || "application/octet-stream",
+        byte_size: formFile.size,
+        body: await formFile.arrayBuffer(),
+      });
     }
 
-    if (!this.isObject(body)) {
-      throw new RequestValidationError("Request body must be a JSON object.");
-    }
-
-    if (!("message" in body)) {
-      throw new RequestValidationError("Request body must include message.");
-    }
-
-    return body as { message: MessageBody };
+    return uploads;
   }
 
-  private parseMessage(message: MessageBody): Message {
+  private parseMessage(message: unknown): CreateMessageInput {
     if (!this.isObject(message)) {
       throw new RequestValidationError("message must be a JSON object.");
     }
@@ -157,7 +165,10 @@ export class MessageController {
       );
     }
 
-    if (!MESSAGE_TYPES.includes(message.type)) {
+    if (
+      typeof message.type !== "string" ||
+      !MESSAGE_TYPES.includes(message.type as MessageType)
+    ) {
       throw new RequestValidationError(
         "message.type must be one of assistant, developer, system, or user.",
       );
@@ -172,72 +183,12 @@ export class MessageController {
       );
     }
 
-    if (
-      message.media_content !== null &&
-      typeof message.media_content !== "string"
-    ) {
-      throw new RequestValidationError(
-        "message.media_content must be a string or null.",
-      );
-    }
-
-    const lastCreateTs = this.parseDate(
-      message.last_create_ts,
-      "message.last_create_ts",
-    );
-    const lastUpdateTs = this.parseDate(
-      message.last_update_ts,
-      "message.last_update_ts",
-    );
-
     return {
-      ...message,
-      media_content: this.parseUrl(
-        message.media_content,
-        "message.media_content",
-      ),
-      last_create_ts: lastCreateTs,
-      last_update_ts: lastUpdateTs,
+      id: message.id,
+      conversation_id: message.conversation_id,
+      type: message.type as MessageType,
+      text_content: message.text_content,
     };
-  }
-
-  private serializeMessage(message: Message) {
-    return {
-      ...message,
-      media_content: message.media_content?.toString() ?? null,
-      last_create_ts: message.last_create_ts.toISOString(),
-      last_update_ts: message.last_update_ts.toISOString(),
-    };
-  }
-
-  private parseDate(value: unknown, fieldName: string): Date {
-    if (typeof value !== "string") {
-      throw new RequestValidationError(`${fieldName} must be a string.`);
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.valueOf())) {
-      throw new RequestValidationError(`${fieldName} must be a valid date.`);
-    }
-
-    return date;
-  }
-
-  private parseUrl(value: unknown, fieldName: string): URL | null {
-    if (value === null) {
-      return null;
-    }
-
-    if (typeof value !== "string") {
-      throw new RequestValidationError(`${fieldName} must be a string or null.`);
-    }
-
-    try {
-      return new URL(value);
-    } catch {
-      throw new RequestValidationError(`${fieldName} must be a valid URL.`);
-    }
   }
 
   private isObject(value: unknown): value is Record<string, unknown> {

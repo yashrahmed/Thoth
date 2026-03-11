@@ -1,13 +1,27 @@
 import { ConversationController } from "./controllers/conversation-controller";
 import { MessageController } from "./controllers/message-controller";
 import { ConversationRepository } from "../repositories/conversation-repository";
+import { FileRepository } from "../repositories/file-repository";
 import { MessageRepository } from "../repositories/message-repository";
 import { getPortsConfig } from "@thoth/config";
+import { R2BlobStorage } from "../storage/r2-blob-storage";
+import { ConversationService } from "../services/conversation-service";
+import { FileService } from "../services/file-service";
+import { MessageService } from "../services/message-service";
 
+const fileRepository = new FileRepository();
+const messageRepository = new MessageRepository(undefined, fileRepository);
 const conversationRepository = new ConversationRepository();
-const conversationController = new ConversationController(conversationRepository);
-const messageRepository = new MessageRepository();
-const messageController = new MessageController(messageRepository);
+const blobStorage = new R2BlobStorage();
+const fileService = new FileService(fileRepository, blobStorage);
+const conversationService = new ConversationService(
+  conversationRepository,
+  messageRepository,
+  fileService,
+);
+const messageService = new MessageService(messageRepository, fileService);
+const conversationController = new ConversationController(conversationService);
+const messageController = new MessageController(messageService);
 
 const port = getPortsConfig().convAgent;
 
@@ -23,10 +37,6 @@ const server = Bun.serve({
     if (url.pathname === "/messages") {
       if (req.method === "POST") {
         return messageController.insert(req);
-      }
-
-      if (req.method === "PUT") {
-        return messageController.update(req);
       }
 
       if (req.method === "DELETE") {

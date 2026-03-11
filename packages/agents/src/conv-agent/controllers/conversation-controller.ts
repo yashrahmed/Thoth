@@ -1,25 +1,23 @@
 import type {
+  ConversationMutationInput,
   ConversationQuery,
   CreateConversationQuery,
   DeleteConversationQuery,
   UpdateConversationQuery,
 } from "@thoth/contracts";
-import type { Conversation } from "@thoth/entities";
+import { serializeConversation } from "./serialization";
 
 interface ConversationBody {
   id: string;
-  messages: unknown[];
-  last_create_ts: string;
-  last_update_ts: string;
 }
 
 class RequestValidationError extends Error {}
 
 export class ConversationController {
-  constructor(private readonly conversationRepository: ConversationQuery) {}
+  constructor(private readonly conversationService: ConversationQuery) {}
 
   async insert(req: Request): Promise<Response> {
-    let query: CreateConversationQuery | UpdateConversationQuery;
+    let query: CreateConversationQuery;
 
     try {
       query = await this.parseMutationQuery(req);
@@ -32,15 +30,15 @@ export class ConversationController {
     }
 
     const conversation =
-      await this.conversationRepository.createConversation(query);
+      await this.conversationService.createConversation(query);
 
-    return Response.json(this.serializeConversation(conversation), {
+    return Response.json(serializeConversation(conversation), {
       status: 201,
     });
   }
 
   async update(req: Request): Promise<Response> {
-    let query: CreateConversationQuery | UpdateConversationQuery;
+    let query: UpdateConversationQuery;
 
     try {
       query = await this.parseMutationQuery(req);
@@ -53,9 +51,9 @@ export class ConversationController {
     }
 
     const conversation =
-      await this.conversationRepository.updateConversation(query);
+      await this.conversationService.updateConversation(query);
 
-    return Response.json(this.serializeConversation(conversation));
+    return Response.json(serializeConversation(conversation));
   }
 
   async delete(req: Request): Promise<Response> {
@@ -73,7 +71,7 @@ export class ConversationController {
       conversation_id: conversationId,
     };
 
-    await this.conversationRepository.deleteConversation(query);
+    await this.conversationService.deleteConversation(query);
 
     return new Response(null, { status: 204 });
   }
@@ -84,7 +82,7 @@ export class ConversationController {
 
     if (conversationId) {
       const conversation =
-        await this.conversationRepository.getConversationById(conversationId);
+        await this.conversationService.getConversationById(conversationId);
 
       if (!conversation) {
         return Response.json(
@@ -93,15 +91,13 @@ export class ConversationController {
         );
       }
 
-      return Response.json(this.serializeConversation(conversation));
+      return Response.json(serializeConversation(conversation));
     }
 
-    const conversations = await this.conversationRepository.listConversations();
+    const conversations = await this.conversationService.listConversations();
 
     return Response.json(
-      conversations.map((conversation) =>
-        this.serializeConversation(conversation),
-      ),
+      conversations.map((conversation) => serializeConversation(conversation)),
     );
   }
 
@@ -139,7 +135,7 @@ export class ConversationController {
     return body as { conversation: ConversationBody };
   }
 
-  private parseConversation(conversation: ConversationBody): Conversation {
+  private parseConversation(conversation: unknown): ConversationMutationInput {
     if (!this.isObject(conversation)) {
       throw new RequestValidationError("conversation must be a JSON object.");
     }
@@ -150,51 +146,9 @@ export class ConversationController {
       );
     }
 
-    if (!Array.isArray(conversation.messages)) {
-      throw new RequestValidationError("conversation.messages must be an array.");
-    }
-
-    if (conversation.messages.length > 0) {
-      throw new RequestValidationError(
-        "conversation.messages must be an empty array for metadata-only responses.",
-      );
-    }
-
     return {
       id: conversation.id,
-      messages: [],
-      last_create_ts: this.parseDate(
-        conversation.last_create_ts,
-        "conversation.last_create_ts",
-      ),
-      last_update_ts: this.parseDate(
-        conversation.last_update_ts,
-        "conversation.last_update_ts",
-      ),
     };
-  }
-
-  private serializeConversation(conversation: Conversation) {
-    return {
-      id: conversation.id,
-      messages: [],
-      last_create_ts: conversation.last_create_ts.toISOString(),
-      last_update_ts: conversation.last_update_ts.toISOString(),
-    };
-  }
-
-  private parseDate(value: unknown, fieldName: string): Date {
-    if (typeof value !== "string") {
-      throw new RequestValidationError(`${fieldName} must be a string.`);
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.valueOf())) {
-      throw new RequestValidationError(`${fieldName} must be a valid date.`);
-    }
-
-    return date;
   }
 
   private isObject(value: unknown): value is Record<string, unknown> {

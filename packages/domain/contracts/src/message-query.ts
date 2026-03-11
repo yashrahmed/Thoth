@@ -1,15 +1,27 @@
 import type {
   ConversationId,
-  Message,
   MessageId,
+  Message,
+  MessageType,
 } from "@thoth/entities";
 
-export interface CreateMessageQuery {
-  message: Message;
+export interface CreateMessageInput {
+  id: MessageId;
+  conversation_id: ConversationId;
+  type: MessageType;
+  text_content: string | null;
 }
 
-export interface UpdateMessageQuery {
-  message: Message;
+export interface MessageUploadInput {
+  original_filename: string;
+  content_type: string;
+  byte_size: number;
+  body: ArrayBuffer;
+}
+
+export interface CreateMessageQuery {
+  message: CreateMessageInput;
+  files: MessageUploadInput[];
 }
 
 export interface DeleteMessageQuery {
@@ -23,6 +35,5 @@ export interface MessageQuery {
   listMessagesByConversationId(
     conversationId: ConversationId,
   ): Promise<Message[]>;
-  updateMessage(input: UpdateMessageQuery): Promise<Message>;
   deleteMessage(input: DeleteMessageQuery): Promise<void>;
 }

@@ -1,14 +1,7 @@
-import type {
-  ConversationQuery,
-  CreateConversationQuery,
-  DeleteConversationQuery,
-  UpdateConversationQuery,
-} from "@thoth/contracts";
 import type { Conversation, ConversationId } from "@thoth/entities";
 import { Pool } from "pg";
 import {
   getConvStoreDatabaseConfig,
-  type ConvStoreDatabaseConfig,
 } from "./conv-store-database";
 
 interface ConversationRow {
@@ -17,7 +10,7 @@ interface ConversationRow {
   last_update_ts: Date;
 }
 
-export class ConversationRepository implements ConversationQuery {
+export class ConversationRepository {
   private readonly pool: Pool;
 
   constructor(databaseConfig = getConvStoreDatabaseConfig()) {
@@ -36,9 +29,9 @@ export class ConversationRepository implements ConversationQuery {
   }
 
   async createConversation(
-    input: CreateConversationQuery,
+    conversationId: ConversationId,
+    createdAt: Date,
   ): Promise<Conversation> {
-    const { conversation } = input;
     const result = await this.pool.query<ConversationRow>(
       `
         INSERT INTO public.conversations (
@@ -52,11 +45,7 @@ export class ConversationRepository implements ConversationQuery {
           last_create_ts,
           last_update_ts
       `,
-      [
-        conversation.id,
-        conversation.last_create_ts,
-        conversation.last_update_ts,
-      ],
+      [conversationId, createdAt, createdAt],
     );
 
     return this.mapRowToConversation(result.rows[0]);
@@ -100,9 +89,9 @@ export class ConversationRepository implements ConversationQuery {
   }
 
   async updateConversation(
-    input: UpdateConversationQuery,
+    conversationId: ConversationId,
+    updatedAt: Date,
   ): Promise<Conversation> {
-    const { conversation } = input;
     const result = await this.pool.query<ConversationRow>(
       `
         UPDATE public.conversations
@@ -114,25 +103,25 @@ export class ConversationRepository implements ConversationQuery {
           last_create_ts,
           last_update_ts
       `,
-      [conversation.id, conversation.last_update_ts],
+      [conversationId, updatedAt],
     );
 
     if (result.rows.length === 0) {
       throw new Error(
-        `Conversation with id "${conversation.id}" does not exist.`,
+        `Conversation with id "${conversationId}" does not exist.`,
       );
     }
 
     return this.mapRowToConversation(result.rows[0]);
   }
 
-  async deleteConversation(input: DeleteConversationQuery): Promise<void> {
+  async deleteConversation(conversationId: ConversationId): Promise<void> {
     await this.pool.query(
       `
         DELETE FROM public.conversations
         WHERE id = $1
       `,
-      [input.conversation_id],
+      [conversationId],
     );
   }
 

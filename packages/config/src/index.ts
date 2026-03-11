@@ -18,6 +18,11 @@ export interface PortsConfig {
   planningAgent: number;
 }
 
+export interface LlmConfig {
+  provider: string;
+  model: string;
+}
+
 export interface ObjectStoreConfig {
   endpoint: string;
   bucket: string;
@@ -31,6 +36,7 @@ export interface ObjectStoreCredentialsConfig {
 }
 
 export interface ThothConfig {
+  llm: LlmConfig;
   objectStore: ObjectStoreConfig;
   ports: PortsConfig;
 }
@@ -84,6 +90,10 @@ export function getLlmApiKey(): string {
   return requireString(process.env.OPENAI_API_KEY, "OPENAI_API_KEY");
 }
 
+export function getLlmConfig(): LlmConfig {
+  return getThothConfig().llm;
+}
+
 export function getObjectStoreCredentialsConfig(): ObjectStoreCredentialsConfig {
   return {
     accessKeyId: requireString(
@@ -107,10 +117,16 @@ export function getPortsConfig(): PortsConfig {
 
 function parseConfig(value: unknown): ThothConfig {
   const config = requireObject(value, "config");
+  const llm = requireObject(config.llm, "llm");
   const objectStore = requireObject(config.objectStore, "objectStore");
   const ports = requireObject(config.ports, "ports");
 
   return {
+    llm: {
+      provider:
+        requireOptionalString(llm.provider, "llm.provider") ?? "openai",
+      model: requireString(llm.model, "llm.model"),
+    },
     objectStore: {
       endpoint: requireString(objectStore.endpoint, "objectStore.endpoint"),
       bucket: requireString(objectStore.bucket, "objectStore.bucket"),
@@ -179,6 +195,17 @@ function requireString(value: unknown, fieldName: string): string {
   }
 
   return value;
+}
+
+function requireOptionalString(
+  value: unknown,
+  fieldName: string,
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return requireString(value, fieldName);
 }
 
 function requireNumber(value: unknown, fieldName: string): number {

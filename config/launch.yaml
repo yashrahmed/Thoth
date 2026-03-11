@@ -12,6 +12,10 @@ ports:
   kbCurateAgent: 3002
   planningAgent: 3003
 
+llm:
+  provider: openai
+  model: gpt-4o-mini
+
 objectStore:
   endpoint: https://61caa9d56c5a0143bfda0f07fd01088a.r2.cloudflarestorage.com
   bucket: thoth-obj-store-dev

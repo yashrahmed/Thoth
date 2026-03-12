@@ -1,16 +1,12 @@
 import { getPortsConfig } from "@thoth/config";
 
-interface ProxyConfig {
-  conversationsBaseUrl: string;
-}
-
 const DEFAULT_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",
   "access-control-allow-headers": "content-type",
 };
 
-export function createProxyFetchHandler(config: ProxyConfig) {
+export function createProxyFetchHandler() {
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
 
@@ -30,17 +26,8 @@ export function createProxyFetchHandler(config: ProxyConfig) {
         Response.json({
           name: "message-proxy",
           version: "2.0.0",
-          forwardsTo: config.conversationsBaseUrl,
         }),
       );
-    }
-
-    if (url.pathname.startsWith("/conversations")) {
-      const response = await fetch(
-        new Request(`${config.conversationsBaseUrl}${url.pathname}${url.search}`, req),
-      );
-
-      return withCors(response);
     }
 
     return withCors(
@@ -68,9 +55,7 @@ function withCors(response: Response): Response {
 
 if (import.meta.main) {
   const ports = getPortsConfig();
-  const handler = createProxyFetchHandler({
-    conversationsBaseUrl: `http://127.0.0.1:${ports.convAgent}`,
-  });
+  const handler = createProxyFetchHandler();
 
   const server = Bun.serve({
     port: ports.proxy,

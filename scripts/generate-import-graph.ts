@@ -7,28 +7,30 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { instance } from "@viz-js/viz";
 import ts from "typescript";
 
-const DEFAULT_INCLUDE_ROOTS = ["packages", "scripts"];
+const DEFAULT_INCLUDE_ROOTS = ["packages"];
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".d.ts"];
 const DEFAULT_OUTPUT_PATH = path.join(
   process.cwd(),
   "docs",
-  "class-injection-dependencies.svg",
+  "class-injection-dependencies.mmd",
 );
 
-export type GraphNodeKind =
-  | "class"
-  | "abstract-class"
-  | "interface"
-  | "external";
+export type GraphNodeKind = "class" | "abstract-class" | "external";
 export type GraphEdgeKind = "declared" | "runtime";
+export type GraphLayer =
+  | "Controller/Workflow"
+  | "App services"
+  | "Domain services"
+  | "Repository / Adapter"
+  | "External";
 
 export interface GraphNode {
   id: string;
   fqName: string;
   kind: GraphNodeKind;
+  layer: GraphLayer;
   packageName: string;
   modulePath: string;
   symbolName: string;
@@ -94,20 +96,20 @@ export async function generateInjectionGraph(
   const outputPath = options.outputPath ?? path.join(
     rootDir,
     "docs",
-    "class-injection-dependencies.svg",
+    "class-injection-dependencies.mmd",
   );
   const graph = buildInjectionGraph(rootDir, outputPath);
-  const svg = await renderGraphSvg(graph);
+  const mermaid = buildMermaid(graph);
 
   mkdirSync(path.dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, svg, "utf8");
+  writeFileSync(outputPath, mermaid, "utf8");
 
   return graph;
 }
 
 export function buildInjectionGraph(
   rootDir: string,
-  outputPath = path.join(rootDir, "docs", "class-injection-dependencies.svg"),
+  outputPath = path.join(rootDir, "docs", "class-injection-dependencies.mmd"),
 ): InjectionGraph {
   const workspacePackages = collectWorkspacePackages(rootDir);
   const relPaths = collectSourcePaths(rootDir);
@@ -173,22 +175,18 @@ export function buildInjectionGraph(
   };
 }
 
-export function buildDot(graph: InjectionGraph): string {
-  const packageOrder = [
-    "@thoth/agents",
-    "@thoth/config",
-    "@thoth/contracts",
-    "@thoth/entities",
-    "@thoth/message-proxy",
-    "@thoth/mobile",
-    "@thoth/web",
-    "scripts",
-    "external",
+export function buildMermaid(graph: InjectionGraph): string {
+  const layerOrder = [
+    "Controller/Workflow",
+    "App services",
+    "Domain services",
+    "Repository / Adapter",
+    "External",
   ];
   const nodeGroups = new Map<string, GraphNode[]>();
 
   for (const node of graph.nodes) {
-    const groupName = node.kind === "external" ? "external" : node.packageName;
+    const groupName = node.layer;
     const group = nodeGroups.get(groupName) ?? [];
 
     group.push(node);
@@ -197,8 +195,8 @@ export function buildDot(graph: InjectionGraph): string {
 
   const orderedGroups = Array.from(nodeGroups.entries()).sort(
     ([leftName], [rightName]) => {
-      const leftIndex = packageOrder.indexOf(leftName);
-      const rightIndex = packageOrder.indexOf(rightName);
+      const leftIndex = layerOrder.indexOf(leftName);
+      const rightIndex = layerOrder.indexOf(rightName);
 
       if (leftIndex !== -1 || rightIndex !== -1) {
         return (leftIndex === -1 ? 999 : leftIndex) - (rightIndex === -1 ? 999 : rightIndex);
@@ -208,65 +206,57 @@ export function buildDot(graph: InjectionGraph): string {
     },
   );
   const lines = [
-    "digraph InjectionDependencies {",
-    "  graph [",
-    '    rankdir=LR,',
-    '    splines=ortho,',
-    '    bgcolor="#fcfcfb",',
-    '    pad="0.4",',
-    '    nodesep="0.35",',
-    '    ranksep="0.8",',
-    '    labelloc="t",',
-    '    label="Class Injection Dependencies\\nNodes are fully qualified class and interface names.\\nSolid edges = declared injection. Dashed edges = runtime wiring."',
-    "  ];",
-    "  node [",
-    '    shape=box,',
-    '    style="rounded,filled",',
-    '    fillcolor="#ffffff",',
-    '    color="#94a3b8",',
-    '    fontname="Menlo",',
-    '    fontsize="10",',
-    '    margin="0.18,0.10"',
-    "  ];",
-    "  edge [",
-    '    arrowsize="0.7",',
-    '    penwidth="1.2"',
-    "  ];",
+    "---",
+    "title: Class Injection Dependencies",
+    "---",
+    "flowchart LR",
+    "%% Nodes are fully qualified class names only.",
+    "%% Contracts, entities, data types, and scripts are excluded.",
+    "%% Solid edges = declared injection. Dashed edges = runtime wiring.",
   ];
 
   for (const [groupName, groupNodes] of orderedGroups) {
-    lines.push(`  subgraph "cluster_${sanitize(groupName)}" {`);
-    lines.push(`    label="${escapeDot(groupName)}";`);
-    lines.push('    color="#d1d5db";');
-    lines.push('    style="rounded";');
+    lines.push(`  subgraph ${sanitize(groupName)}["${escapeMermaid(groupName)}"]`);
 
     for (const node of groupNodes.sort((left, right) => left.fqName.localeCompare(right.fqName))) {
       lines.push(
-        `    "${node.id}" [label="${escapeDot(node.fqName)}", fillcolor="${fillColorForNode(node)}"];`,
+        `    ${node.id}["${escapeMermaid(node.fqName)}"]`,
       );
     }
 
-    lines.push("  }");
+    lines.push("  end");
   }
 
   for (const edge of graph.edges) {
-    const color = edge.kind === "declared" ? "#64748b" : "#2563eb";
-    const style = edge.kind === "declared" ? "solid" : "dashed";
+    const connector = edge.kind === "declared" ? "-->" : "-.->";
 
     lines.push(
-      `  "${sanitize(edge.from)}" -> "${sanitize(edge.to)}" [color="${color}", style="${style}"];`,
+      `  ${sanitize(edge.from)} ${connector} ${sanitize(edge.to)}`,
     );
   }
 
-  lines.push("}");
+  lines.push(
+    `  classDef default fill:#ffffff,stroke:#94a3b8,color:#0f172a`,
+  );
+  lines.push(
+    `  classDef abstract fill:#fff7ed,stroke:#94a3b8,color:#0f172a`,
+  );
+  lines.push(
+    `  classDef external fill:#f1f5f9,stroke:#94a3b8,color:#0f172a`,
+  );
+
+  for (const node of graph.nodes) {
+    const className =
+      node.kind === "external"
+        ? "external"
+        : node.kind === "abstract-class"
+          ? "abstract"
+          : "default";
+
+    lines.push(`  class ${node.id} ${className}`);
+  }
 
   return `${lines.join("\n")}\n`;
-}
-
-export async function renderGraphSvg(graph: InjectionGraph): Promise<string> {
-  const viz = await instance();
-
-  return viz.renderString(buildDot(graph), { format: "svg", engine: "dot" });
 }
 
 function collectWorkspacePackages(rootDir: string): WorkspacePackage[] {
@@ -456,7 +446,12 @@ function buildModulePath(relPath: string, packageRelDir: string): string {
 }
 
 function shouldAnalyzePath(relPath: string): boolean {
-  return !relPath.endsWith(".d.ts") && path.basename(relPath) !== "index.ts";
+  return (
+    !relPath.endsWith(".d.ts") &&
+    path.basename(relPath) !== "index.ts" &&
+    !relPath.endsWith(".test.ts") &&
+    !relPath.endsWith(".integration.test.ts")
+  );
 }
 
 function collectImportBindings(sourceFile: ts.SourceFile): Map<string, ImportBinding> {
@@ -510,12 +505,17 @@ function collectImportBindings(sourceFile: ts.SourceFile): Map<string, ImportBin
 
 function collectRepoNodes(document: SourceDocument, context: GraphContext): void {
   const visit = (node: ts.Node): void => {
-    if (!isRepoDeclarationNode(node) || !node.name) {
+    if (!ts.isClassDeclaration(node) || !node.name) {
       ts.forEachChild(node, visit);
       return;
     }
 
     const graphNode = createRepoNode(document, node);
+
+    if (!graphNode) {
+      ts.forEachChild(node, visit);
+      return;
+    }
 
     context.repoNodesByKey.set(getDeclarationKey(node), graphNode);
     context.allNodesByFqName.set(graphNode.fqName, graphNode);
@@ -556,21 +556,6 @@ function collectDeclaredEdges(document: SourceDocument, context: GraphContext): 
           )) {
             dependencies.add(dependency);
           }
-        }
-      }
-
-      if (
-        ts.isPropertyDeclaration(member) &&
-        !member.initializer &&
-        member.type &&
-        !hasModifier(member, ts.SyntaxKind.StaticKeyword)
-      ) {
-        for (const dependency of resolveDependencyTypes(
-          member.type,
-          document,
-          context,
-        )) {
-          dependencies.add(dependency);
         }
       }
     }
@@ -767,12 +752,15 @@ function resolveDependencyTypes(
       const binding = document.importBindings.get(node.left.text);
 
       if (binding?.namespace && isExternalModuleSpecifier(binding.moduleSpecifier)) {
-        dependencies.add(
-          ensureExternalNode(
-            `${binding.moduleSpecifier}::${node.right.text}`,
-            context,
-          ).fqName,
+        const externalDependency = resolveExternalReference(
+          `${binding.moduleSpecifier}::${node.right.text}`,
+          node.right,
+          context,
         );
+
+        if (externalDependency) {
+          dependencies.add(externalDependency);
+        }
       }
     }
 
@@ -791,15 +779,17 @@ function resolveIdentifierReference(
   classesOnly: boolean,
 ): string | null {
   const importBinding = document.importBindings.get(identifier.text);
+  const symbol = context.checker.getSymbolAtLocation(identifier);
 
   if (importBinding && isExternalModuleSpecifier(importBinding.moduleSpecifier)) {
-    return ensureExternalNode(
+    return resolveExternalReference(
       `${importBinding.moduleSpecifier}::${importBinding.exportedName}`,
+      identifier,
       context,
-    ).fqName;
+      symbol,
+      classesOnly,
+    );
   }
-
-  const symbol = context.checker.getSymbolAtLocation(identifier);
 
   if (!symbol) {
     return importBinding ? fallbackWorkspaceResolution(importBinding, context, classesOnly) : null;
@@ -815,10 +805,6 @@ function resolveIdentifierReference(
     const node = context.repoNodesByKey.get(getDeclarationKey(declaration));
 
     if (!node) {
-      continue;
-    }
-
-    if (classesOnly && node.kind === "interface") {
       continue;
     }
 
@@ -852,19 +838,24 @@ function fallbackWorkspaceResolution(
 
 function createRepoNode(
   document: SourceDocument,
-  declaration: ts.ClassDeclaration | ts.InterfaceDeclaration,
-): GraphNode {
+  declaration: ts.ClassDeclaration,
+): GraphNode | null {
+  const layer = classifyLayer(document.relPath);
+
+  if (!layer) {
+    return null;
+  }
+
   const symbolName = declaration.name?.text ?? "anonymous";
   const fqName = `${document.packageName}::${document.modulePath}::${symbolName}`;
 
   return {
     id: sanitize(fqName),
     fqName,
-    kind: ts.isInterfaceDeclaration(declaration)
-      ? "interface"
-      : hasModifier(declaration, ts.SyntaxKind.AbstractKeyword)
-        ? "abstract-class"
-        : "class",
+    kind: hasModifier(declaration, ts.SyntaxKind.AbstractKeyword)
+      ? "abstract-class"
+      : "class",
+    layer,
     packageName: document.packageName,
     modulePath: document.modulePath,
     symbolName,
@@ -883,6 +874,7 @@ function ensureExternalNode(fqName: string, context: GraphContext): GraphNode {
     id: sanitize(fqName),
     fqName,
     kind: "external",
+    layer: "External",
     packageName: "external",
     modulePath: "external",
     symbolName,
@@ -920,33 +912,11 @@ function addEdge(
   context.allEdgesByKey.set(key, { from, to, kind });
 }
 
-function isRepoDeclarationNode(
-  node: ts.Node,
-): node is ts.ClassDeclaration | ts.InterfaceDeclaration {
-  return ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node);
-}
-
 function hasModifier(
   node: ts.Node,
   kind: ts.SyntaxKind,
 ): boolean {
   return !!node.modifiers?.some((modifier) => modifier.kind === kind);
-}
-
-function fillColorForNode(node: GraphNode): string {
-  if (node.kind === "external") {
-    return "#f1f5f9";
-  }
-
-  if (node.kind === "interface") {
-    return "#f8fafc";
-  }
-
-  if (node.kind === "abstract-class") {
-    return "#fff7ed";
-  }
-
-  return "#ffffff";
 }
 
 function isWorkspaceModuleSpecifier(moduleSpecifier: string): boolean {
@@ -957,15 +927,72 @@ function isExternalModuleSpecifier(moduleSpecifier: string): boolean {
   return !moduleSpecifier.startsWith(".") && !isWorkspaceModuleSpecifier(moduleSpecifier);
 }
 
+function classifyLayer(relPath: string): GraphLayer | null {
+  if (
+    relPath.startsWith("packages/domain/") ||
+    relPath.startsWith("packages/config/") ||
+    relPath.startsWith("packages/message-proxy/") ||
+    relPath.startsWith("packages/web/") ||
+    relPath.startsWith("packages/mobile/")
+  ) {
+    return null;
+  }
+
+  if (relPath.includes("/inbound/") || relPath.includes("/bootstrap/")) {
+    return "Controller/Workflow";
+  }
+
+  if (relPath.includes("/application/")) {
+    return "App services";
+  }
+
+  if (relPath.includes("/domain/")) {
+    return "Domain services";
+  }
+
+  if (relPath.includes("/outbound/")) {
+    return "Repository / Adapter";
+  }
+
+  return null;
+}
+
+function resolveExternalReference(
+  fqName: string,
+  referenceNode: ts.Node,
+  context: GraphContext,
+  symbol = context.checker.getSymbolAtLocation(referenceNode),
+  classesOnly = true,
+): string | null {
+  if (!symbol) {
+    return classesOnly ? null : ensureExternalNode(fqName, context).fqName;
+  }
+
+  const resolvedSymbol =
+    symbol.flags & ts.SymbolFlags.Alias
+      ? context.checker.getAliasedSymbol(symbol)
+      : symbol;
+  const declarations = resolvedSymbol.getDeclarations() ?? [];
+
+  if (classesOnly) {
+    const isClassReference = declarations.some((declaration) =>
+      ts.isClassDeclaration(declaration),
+    );
+
+    if (!isClassReference) {
+      return null;
+    }
+  }
+
+  return ensureExternalNode(fqName, context).fqName;
+}
+
 function getDeclarationKey(node: ts.Node): string {
   return `${canonicalizePath(node.getSourceFile().fileName)}::${getNodeName(node)}`;
 }
 
 function getNodeName(node: ts.Node): string {
-  if (
-    (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) &&
-    node.name
-  ) {
+  if (ts.isClassDeclaration(node) && node.name) {
     return node.name.text;
   }
 
@@ -992,8 +1019,8 @@ function sanitize(value: string): string {
   return value.replaceAll(/[^a-zA-Z0-9]+/g, "_");
 }
 
-function escapeDot(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+function escapeMermaid(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', "&quot;");
 }
 
 if (import.meta.main) {

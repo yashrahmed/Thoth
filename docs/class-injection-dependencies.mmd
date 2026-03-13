@@ -1,0 +1,34 @@
+---
+title: Class Injection Dependencies
+---
+flowchart LR
+%% Nodes are fully qualified class names only.
+%% Contracts, entities, data types, and scripts are excluded.
+%% Solid edges = declared injection. Dashed edges = runtime wiring.
+  subgraph Controller_Workflow["Controller/Workflow"]
+    _thoth_agents_conversations_inbound_http_conversations_controller_ConversationsController["@thoth/agents::conversations/inbound/http/conversations-controller::ConversationsController"]
+    _thoth_agents_conversations_inbound_http_request_validation_error_RequestValidationError["@thoth/agents::conversations/inbound/http/request-validation-error::RequestValidationError"]
+  end
+  subgraph App_services["App services"]
+    _thoth_agents_conversations_application_conversations_service_ConversationsService["@thoth/agents::conversations/application/conversations-service::ConversationsService"]
+  end
+  subgraph Repository_Adapter["Repository / Adapter"]
+    _thoth_agents_conversations_outbound_blob_r2_blob_store_R2BlobStore["@thoth/agents::conversations/outbound/blob/r2-blob-store::R2BlobStore"]
+    _thoth_agents_conversations_outbound_postgres_postgres_conversation_repository_PostgresConversationRepository["@thoth/agents::conversations/outbound/postgres/postgres-conversation-repository::PostgresConversationRepository"]
+  end
+  subgraph External["External"]
+    pg_Pool["pg::Pool"]
+  end
+  _thoth_agents_conversations_outbound_postgres_postgres_conversation_repository_PostgresConversationRepository --> pg_Pool
+  _thoth_agents_conversations_application_conversations_service_ConversationsService -.-> _thoth_agents_conversations_outbound_blob_r2_blob_store_R2BlobStore
+  _thoth_agents_conversations_application_conversations_service_ConversationsService -.-> _thoth_agents_conversations_outbound_postgres_postgres_conversation_repository_PostgresConversationRepository
+  _thoth_agents_conversations_inbound_http_conversations_controller_ConversationsController -.-> _thoth_agents_conversations_application_conversations_service_ConversationsService
+  classDef default fill:#ffffff,stroke:#94a3b8,color:#0f172a
+  classDef abstract fill:#fff7ed,stroke:#94a3b8,color:#0f172a
+  classDef external fill:#f1f5f9,stroke:#94a3b8,color:#0f172a
+  class _thoth_agents_conversations_application_conversations_service_ConversationsService default
+  class _thoth_agents_conversations_inbound_http_conversations_controller_ConversationsController default
+  class _thoth_agents_conversations_inbound_http_request_validation_error_RequestValidationError default
+  class _thoth_agents_conversations_outbound_blob_r2_blob_store_R2BlobStore default
+  class _thoth_agents_conversations_outbound_postgres_postgres_conversation_repository_PostgresConversationRepository default
+  class pg_Pool external

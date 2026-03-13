@@ -8,7 +8,7 @@ import type {
   MessageDto,
   PostMessageCommand,
 } from "@thoth/contracts";
-import { createConversationsHttpHandler } from "./conversations-controller";
+import { ConversationsController } from "./conversations-controller";
 
 class FakeConversationsService implements ConversationsApplicationService {
   public lastCreateCommand: CreateConversationCommand | null = null;
@@ -43,11 +43,11 @@ class FakeConversationsService implements ConversationsApplicationService {
   public async deleteMessage(_input: DeleteMessageCommand): Promise<void> {}
 }
 
-describe("createConversationsHttpHandler", () => {
+describe("ConversationsController", () => {
   test("creates a conversation from JSON", async () => {
     const service = new FakeConversationsService();
-    const handler = createConversationsHttpHandler(service);
-    const response = await handler(
+    const controller = new ConversationsController(service);
+    const response = await controller.handle(
       new Request("http://localhost/conversations", {
         method: "POST",
         headers: {
@@ -63,7 +63,7 @@ describe("createConversationsHttpHandler", () => {
 
   test("creates a message from multipart form-data", async () => {
     const service = new FakeConversationsService();
-    const handler = createConversationsHttpHandler(service);
+    const controller = new ConversationsController(service);
     const formData = new FormData();
 
     formData.set(
@@ -78,7 +78,7 @@ describe("createConversationsHttpHandler", () => {
       new File(["payload"], "payload.txt", { type: "text/plain" }),
     );
 
-    const response = await handler(
+    const response = await controller.handle(
       new Request("http://localhost/conversations/conversation-1/messages", {
         method: "POST",
         body: formData,
@@ -91,8 +91,8 @@ describe("createConversationsHttpHandler", () => {
   });
 
   test("rejects invalid JSON requests", async () => {
-    const handler = createConversationsHttpHandler(new FakeConversationsService());
-    const response = await handler(
+    const controller = new ConversationsController(new FakeConversationsService());
+    const response = await controller.handle(
       new Request("http://localhost/conversations", {
         method: "POST",
         headers: {

@@ -1,6 +1,6 @@
 import { getPortsConfig } from "@thoth/config";
 import { ConversationsService } from "../application/conversations-service";
-import { createConversationsHttpHandler } from "../inbound/http/conversations-controller";
+import { ConversationsController } from "../inbound/http/conversations-controller";
 import { R2BlobStore } from "../outbound/blob/r2-blob-store";
 import { createConvStorePool } from "../outbound/postgres/create-conv-store-pool";
 import { PostgresConversationRepository } from "../outbound/postgres/postgres-conversation-repository";
@@ -12,7 +12,7 @@ const conversationsService = new ConversationsService(
   conversationRepository,
   blobStore,
 );
-const handleConversations = createConversationsHttpHandler(conversationsService);
+const conversationsController = new ConversationsController(conversationsService);
 const port = getPortsConfig().convAgent;
 
 const server = Bun.serve({
@@ -44,7 +44,7 @@ const server = Bun.serve({
     }
 
     if (url.pathname.startsWith("/conversations")) {
-      return handleConversations(req);
+      return conversationsController.handle(req);
     }
 
     return Response.json(

@@ -1,7 +1,5 @@
 import { getPortsConfig } from "@thoth/config";
-import { KnowledgeCurationService } from "../../application/knowledge-curation-service";
 
-const service = new KnowledgeCurationService();
 const port = getPortsConfig().kbCurateAgent;
 
 const server = Bun.serve({
@@ -14,7 +12,13 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/run" && req.method === "POST") {
-      return Response.json(await service.runOnce(), { status: 202 });
+      return Response.json(
+        {
+          status: "idle",
+          checkedAt: new Date().toISOString(),
+        },
+        { status: 202 },
+      );
     }
 
     return Response.json({

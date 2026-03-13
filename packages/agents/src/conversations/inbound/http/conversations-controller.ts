@@ -16,23 +16,40 @@ interface JsonMessageBody {
   textContent: string | null;
 }
 
+interface PostMessageRequestDto {
+  messageId?: string;
+  role: ConversationMessageRole;
+  textContent: string | null;
+  attachments: AttachmentUpload[];
+}
+
 export function createConversationsHttpHandler(
   service: ConversationsApplicationService,
 ): (req: Request) => Promise<Response> {
-  return async (req: Request): Promise<Response> => {
+  const controller = new ConversationsController(service);
+
+  return (req: Request) => controller.handle(req);
+}
+
+export class ConversationsController {
+  public constructor(
+    private readonly service: ConversationsApplicationService,
+  ) {}
+
+  public async handle(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const segments = url.pathname.split("/").filter(Boolean);
 
     try {
       if (req.method === "GET" && isConversationCollection(segments)) {
-        return Response.json(await service.listConversations());
+        return Response.json(await this.service.listConversations());
       }
 
       if (req.method === "POST" && isConversationCollection(segments)) {
         const body = (await parseJsonBody(req)) as CreateConversationBody;
 
         return Response.json(
-          await service.createConversation({
+          await this.service.createConversation({
             conversationId: optionalString(body.conversationId),
           }),
           { status: 201 },
@@ -40,7 +57,7 @@ export function createConversationsHttpHandler(
       }
 
       if (req.method === "GET" && isConversationDocument(segments)) {
-        const conversation = await service.getConversationById(segments[1]!);
+        const conversation = await this.service.getConversationById(segments[1]!);
 
         if (!conversation) {
           return Response.json(
@@ -53,7 +70,7 @@ export function createConversationsHttpHandler(
       }
 
       if (req.method === "DELETE" && isConversationDocument(segments)) {
-        await service.deleteConversation({ conversationId: segments[1]! });
+        await this.service.deleteConversation({ conversationId: segments[1]! });
 
         return new Response(null, { status: 204 });
       }
@@ -62,7 +79,7 @@ export function createConversationsHttpHandler(
         const parsedRequest = await parseMessageRequest(req);
 
         return Response.json(
-          await service.postMessage({
+          await this.service.postMessage({
             conversationId: segments[1]!,
             ...parsedRequest,
           }),
@@ -71,7 +88,7 @@ export function createConversationsHttpHandler(
       }
 
       if (req.method === "DELETE" && isMessageDocument(segments)) {
-        await service.deleteMessage({
+        await this.service.deleteMessage({
           conversationId: segments[1]!,
           messageId: segments[3]!,
         });
@@ -96,15 +113,12 @@ export function createConversationsHttpHandler(
       { error: `Route ${req.method} ${url.pathname} is not supported.` },
       { status: 404 },
     );
-  };
+  }
 }
 
-async function parseMessageRequest(req: Request): Promise<{
-  messageId?: string;
-  role: ConversationMessageRole;
-  textContent: string | null;
-  attachments: AttachmentUpload[];
-}> {
+async function parseMessageRequest(
+  req: Request,
+): Promise<PostMessageRequestDto> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (contentType.includes("multipart/form-data")) {
@@ -121,12 +135,9 @@ async function parseMessageRequest(req: Request): Promise<{
   };
 }
 
-async function parseMultipartMessageRequest(req: Request): Promise<{
-  messageId?: string;
-  role: ConversationMessageRole;
-  textContent: string | null;
-  attachments: AttachmentUpload[];
-}> {
+async function parseMultipartMessageRequest(
+  req: Request,
+): Promise<PostMessageRequestDto> {
   let formData: FormData;
 
   try {

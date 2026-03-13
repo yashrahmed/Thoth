@@ -19,7 +19,7 @@ class FakeConversationsService implements ConversationsApplicationService {
   ): Promise<ConversationDto> {
     this.lastCreateCommand = input;
 
-    return buildConversationDto(input.conversationId ?? "conversation-1");
+    return buildConversationDto("conversation-1");
   }
 
   public async getConversationById(
@@ -50,15 +50,11 @@ describe("ConversationsController", () => {
     const response = await controller.handle(
       new Request("http://localhost/conversations", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ conversationId: "conversation-9" }),
       }),
     );
 
     expect(response.status).toBe(201);
-    expect(service.lastCreateCommand).toEqual({ conversationId: "conversation-9" });
+    expect(service.lastCreateCommand).toEqual({});
   });
 
   test("creates a message from multipart form-data", async () => {
@@ -88,12 +84,13 @@ describe("ConversationsController", () => {
     expect(response.status).toBe(201);
     expect(service.lastPostMessageCommand?.conversationId).toBe("conversation-1");
     expect(service.lastPostMessageCommand?.attachments).toHaveLength(1);
+    expect("messageId" in (service.lastPostMessageCommand ?? {})).toBe(false);
   });
 
-  test("rejects invalid JSON requests", async () => {
+  test("rejects invalid JSON message requests", async () => {
     const controller = new ConversationsController(new FakeConversationsService());
     const response = await controller.handle(
-      new Request("http://localhost/conversations", {
+      new Request("http://localhost/conversations/conversation-1/messages", {
         method: "POST",
         headers: {
           "content-type": "application/json",

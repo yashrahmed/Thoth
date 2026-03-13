@@ -36,13 +36,10 @@ export interface ConversationDto {
   updatedAt: string;
 }
 
-export interface CreateConversationCommand {
-  conversationId?: string;
-}
+export type CreateConversationCommand = Record<never, never>;
 
 export interface PostMessageCommand {
   conversationId: string;
-  messageId?: string;
   role: ConversationMessageRole;
   textContent: string | null;
   attachments: AttachmentUpload[];

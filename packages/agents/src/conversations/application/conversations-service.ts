@@ -29,11 +29,11 @@ export class ConversationsService implements ConversationsApplicationService {
   ) {}
 
   public async createConversation(
-    input: CreateConversationCommand,
+    _input: CreateConversationCommand,
   ): Promise<ConversationDto> {
     const now = new Date();
     const conversation = Conversation.createNew({
-      id: new ConversationId(input.conversationId ?? crypto.randomUUID()),
+      id: new ConversationId(crypto.randomUUID()),
       createdAt: now,
     });
 
@@ -61,7 +61,7 @@ export class ConversationsService implements ConversationsApplicationService {
   public async postMessage(input: PostMessageCommand): Promise<MessageDto> {
     const conversation = await this.requireConversation(input.conversationId);
     const occurredAt = new Date();
-    const messageId = new MessageId(input.messageId ?? crypto.randomUUID());
+    const messageId = new MessageId(crypto.randomUUID());
     const attachments = input.attachments.map((upload) =>
       this.buildAttachment(conversation.id, messageId, upload, occurredAt),
     );

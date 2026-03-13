@@ -85,8 +85,10 @@ describe("ConversationsService", () => {
       attachments: [],
     });
 
+    expect(conversation.id).toBeString();
     expect(message.role).toBe("user");
     expect(message.textContent).toBe("hello");
+    expect(message.id).toBeString();
     expect((await service.getConversationById(conversation.id))?.messages).toHaveLength(1);
   });
 

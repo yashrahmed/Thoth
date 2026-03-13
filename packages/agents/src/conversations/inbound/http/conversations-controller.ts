@@ -6,18 +6,12 @@ import {
 } from "@thoth/contracts";
 import { RequestValidationError } from "./request-validation-error";
 
-interface CreateConversationBody {
-  conversationId?: string;
-}
-
 interface JsonMessageBody {
-  messageId?: string;
   role: ConversationMessageRole;
   textContent: string | null;
 }
 
 interface PostMessageRequestDto {
-  messageId?: string;
   role: ConversationMessageRole;
   textContent: string | null;
   attachments: AttachmentUpload[];
@@ -46,14 +40,9 @@ export class ConversationsController {
       }
 
       if (req.method === "POST" && this.isConversationCollection(segments)) {
-        const body = (await this.parseJsonBody(req)) as CreateConversationBody;
-
-        return Response.json(
-          await this.service.createConversation({
-            conversationId: this.optionalString(body.conversationId),
-          }),
-          { status: 201 },
-        );
+        return Response.json(await this.service.createConversation({}), {
+          status: 201,
+        });
       }
 
       if (req.method === "GET" && this.isConversationDocument(segments)) {
@@ -87,14 +76,6 @@ export class ConversationsController {
         );
       }
 
-      if (req.method === "DELETE" && this.isMessageDocument(segments)) {
-        await this.service.deleteMessage({
-          conversationId: segments[1]!,
-          messageId: segments[3]!,
-        });
-
-        return new Response(null, { status: 204 });
-      }
     } catch (error) {
       if (error instanceof ApplicationError) {
         const status = error.code === "NOT_FOUND" ? 404 : 400;
@@ -127,7 +108,6 @@ export class ConversationsController {
     const body = (await this.parseJsonBody(req)) as unknown as JsonMessageBody;
 
     return {
-      messageId: this.optionalString(body.messageId),
       role: this.parseRole(body.role),
       textContent: this.parseNullableText(body.textContent),
       attachments: [],
@@ -183,7 +163,6 @@ export class ConversationsController {
     }
 
     return {
-      messageId: this.optionalString(messageBody.messageId),
       role: this.parseRole(messageBody.role),
       textContent: this.parseNullableText(messageBody.textContent),
       attachments,
@@ -238,19 +217,6 @@ export class ConversationsController {
 
     return value;
   }
-
-  private optionalString(value: unknown): string | undefined {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-
-    if (typeof value !== "string" || !value.trim()) {
-      throw new RequestValidationError("Expected a non-empty string.");
-    }
-
-    return value;
-  }
-
   private isConversationCollection(segments: string[]): boolean {
     return segments.length === 1 && segments[0] === "conversations";
   }
@@ -262,14 +228,6 @@ export class ConversationsController {
   private isMessageCollection(segments: string[]): boolean {
     return (
       segments.length === 3 &&
-      segments[0] === "conversations" &&
-      segments[2] === "messages"
-    );
-  }
-
-  private isMessageDocument(segments: string[]): boolean {
-    return (
-      segments.length === 4 &&
       segments[0] === "conversations" &&
       segments[2] === "messages"
     );

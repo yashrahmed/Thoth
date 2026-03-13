@@ -61,6 +61,9 @@ Use ideas from Domain-Driven Design during development.
 
 - Model the core business concepts explicitly in the domain layer.
 - Prefer rich domain entities and value objects over scattered primitive data.
+- Define repositories around aggregate roots. Do not create separate
+  repositories for entities or value objects that live inside an aggregate;
+  load and persist them through the aggregate root's repository.
 - Keep bounded contexts clear as the system grows.
 - Use application services to orchestrate use cases without pushing business
   rules into framework or transport code.

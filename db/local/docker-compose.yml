@@ -50,7 +50,7 @@ services:
     environment:
       FLYWAY_DEFAULT_SCHEMA: flyway
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${LOCAL_POSTGRES_DB}
-      FLYWAY_SCHEMAS: flyway,public
+      FLYWAY_SCHEMAS: flyway,thoth
       FLYWAY_USER: ${LOCAL_POSTGRES_USER}
       FLYWAY_PASSWORD: ${LOCAL_POSTGRES_PASSWORD}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql

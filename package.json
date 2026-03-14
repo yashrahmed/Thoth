@@ -16,8 +16,6 @@
     "dev:local:stop": "./scripts/launch-all-servers-local.sh stop",
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",
     "dev:web": "bun run --filter @thoth/web dev",
-    "graph:inject": "bun run scripts/generate-import-graph.ts",
-    "graph:imports": "bun run scripts/generate-import-graph.ts",
     "r2:upload": "bun scripts/upload-r2.ts upload",
     "r2:download": "bun scripts/upload-r2.ts download",
     "lint": "bun x eslint .",

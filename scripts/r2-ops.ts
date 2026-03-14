@@ -16,7 +16,7 @@ async function main() {
 
   if (!command || !isCommand(command) || !filePath) {
     printJsonError(
-      "Usage: bun scripts/upload-r2.ts <upload|download> <file-path>",
+      "Usage: bun scripts/r2-ops.ts <upload|download> <file-path>",
     );
   }
 

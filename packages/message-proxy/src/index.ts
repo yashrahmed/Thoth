@@ -1,4 +1,4 @@
-import { getPortsConfig } from "@thoth/config";
+import { getProxyConfig } from "@thoth/config";
 
 const DEFAULT_HEADERS = {
   "access-control-allow-origin": "*",
@@ -25,7 +25,7 @@ export function createProxyFetchHandler() {
       return withCors(
         Response.json({
           name: "message-proxy",
-          version: "2.0.0",
+          status: "placeholder",
         }),
       );
     }
@@ -54,11 +54,10 @@ function withCors(response: Response): Response {
 }
 
 if (import.meta.main) {
-  const ports = getPortsConfig();
   const handler = createProxyFetchHandler();
 
   const server = Bun.serve({
-    port: ports.proxy,
+    port: getProxyConfig().port,
     fetch: handler,
   });
 

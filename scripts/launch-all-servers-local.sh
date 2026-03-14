@@ -7,9 +7,6 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
 CONFIG_PATH="$REPO_ROOT/config/launch.yaml"
-LLM_CREDS_PATH="$REPO_ROOT/config/llm-creds.yaml"
-CLOUDFLARE_CREDS_PATH="$REPO_ROOT/config/cloudflare-creds.yaml"
-DB_CREDS_PATH="$REPO_ROOT/config/db-creds.yaml"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then
@@ -20,29 +17,22 @@ fi
 mkdir -p "$LOG_DIR"
 
 read_port() {
-  port_key="$1"
-  awk -v key="$port_key" '$1 == key ":" { print $2 }' "$CONFIG_PATH"
-}
+  service_key="$1"
+  awk -v service="$service_key" '
+    $1 == service ":" {
+      in_service = 1
+      next
+    }
 
-read_yaml_value() {
-  config_path="$1"
-  key_name="$2"
-  awk -v key="$key_name" '
-    $1 == key ":" {
-      value = substr($0, index($0, ":") + 1)
-      sub(/^[[:space:]]+/, "", value)
-      sub(/[[:space:]]+$/, "", value)
-
-      if (value ~ /^".*"$/) {
-        value = substr(value, 2, length(value) - 2)
-      } else if (value ~ /^'\''.*'\''$/) {
-        value = substr(value, 2, length(value) - 2)
-      }
-
-      print value
+    in_service && $1 == "port:" {
+      print $2
       exit
     }
-  ' "$config_path"
+
+    in_service && $0 ~ /^[^[:space:]]/ {
+      in_service = 0
+    }
+  ' "$CONFIG_PATH"
 }
 
 start_service() {
@@ -106,86 +96,6 @@ case "$COMMAND" in
       echo "Missing local launch config: $CONFIG_PATH"
       exit 1
     fi
-
-    if [ ! -f "$LLM_CREDS_PATH" ]; then
-      echo "Missing LLM creds config: $LLM_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ ! -f "$CLOUDFLARE_CREDS_PATH" ]; then
-      echo "Missing Cloudflare creds config: $CLOUDFLARE_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ ! -f "$DB_CREDS_PATH" ]; then
-      echo "Missing DB creds config: $DB_CREDS_PATH"
-      exit 1
-    fi
-
-    OPENAI_API_KEY="$(read_yaml_value "$LLM_CREDS_PATH" OPENAI_API_KEY)"
-    R2_ACCESS_KEY_ID="$(read_yaml_value "$CLOUDFLARE_CREDS_PATH" R2_ACCESS_KEY_ID)"
-    R2_SECRET_ACCESS_KEY="$(read_yaml_value "$CLOUDFLARE_CREDS_PATH" R2_SECRET_ACCESS_KEY)"
-    CONV_STORE_DB_HOST="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_HOST)"
-    CONV_STORE_DB_PORT="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_PORT)"
-    CONV_STORE_DB_NAME="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_NAME)"
-    CONV_STORE_DB_USER="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_USER)"
-    CONV_STORE_DB_PASSWORD="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_PASSWORD)"
-    CONV_STORE_DB_SSL="$(read_yaml_value "$DB_CREDS_PATH" CONV_STORE_DB_SSL)"
-
-    if [ -z "$OPENAI_API_KEY" ]; then
-      echo "Missing OPENAI_API_KEY in $LLM_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$R2_ACCESS_KEY_ID" ]; then
-      echo "Missing R2_ACCESS_KEY_ID in $CLOUDFLARE_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$R2_SECRET_ACCESS_KEY" ]; then
-      echo "Missing R2_SECRET_ACCESS_KEY in $CLOUDFLARE_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$CONV_STORE_DB_HOST" ]; then
-      echo "Missing CONV_STORE_DB_HOST in $DB_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$CONV_STORE_DB_PORT" ]; then
-      echo "Missing CONV_STORE_DB_PORT in $DB_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$CONV_STORE_DB_NAME" ]; then
-      echo "Missing CONV_STORE_DB_NAME in $DB_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$CONV_STORE_DB_USER" ]; then
-      echo "Missing CONV_STORE_DB_USER in $DB_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$CONV_STORE_DB_PASSWORD" ]; then
-      echo "Missing CONV_STORE_DB_PASSWORD in $DB_CREDS_PATH"
-      exit 1
-    fi
-
-    if [ -z "$CONV_STORE_DB_SSL" ]; then
-      echo "Missing CONV_STORE_DB_SSL in $DB_CREDS_PATH"
-      exit 1
-    fi
-
-    export OPENAI_API_KEY
-    export R2_ACCESS_KEY_ID
-    export R2_SECRET_ACCESS_KEY
-    export CONV_STORE_DB_HOST
-    export CONV_STORE_DB_PORT
-    export CONV_STORE_DB_NAME
-    export CONV_STORE_DB_USER
-    export CONV_STORE_DB_PASSWORD
-    export CONV_STORE_DB_SSL
 
     start_service "message-proxy" "@thoth/message-proxy" "start"
     start_service "conv-agent" "@thoth/agents" "start:conv-agent"

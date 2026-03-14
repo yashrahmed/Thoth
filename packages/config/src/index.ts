@@ -2,42 +2,32 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse } from "yaml";
 
-export interface ConvStoreDatabaseConfig {
-  host: string;
+export interface ProxyConfig {
   port: number;
-  database: string;
-  user: string;
-  password: string;
-  ssl: boolean;
 }
 
-export interface PortsConfig {
-  proxy: number;
-  convAgent: number;
-  kbCurateAgent: number;
-  planningAgent: number;
+export interface ConvAgentConfig {
+  port: number;
 }
 
-export interface ObjectStoreConfig {
-  endpoint: string;
-  bucket: string;
-  region: string;
-  service: string;
+export interface KbCurateAgentConfig {
+  port: number;
 }
 
-export interface ObjectStoreCredentialsConfig {
-  accessKeyId: string;
-  secretAccessKey: string;
+export interface PlanningAgentConfig {
+  port: number;
 }
 
-export interface ThothConfig {
-  objectStore: ObjectStoreConfig;
-  ports: PortsConfig;
+interface ThothConfig {
+  proxy: ProxyConfig;
+  convAgent: ConvAgentConfig;
+  kbCurateAgent: KbCurateAgentConfig;
+  planningAgent: PlanningAgentConfig;
 }
 
 let cachedConfig: ThothConfig | null = null;
 
-export function getThothConfig(): ThothConfig {
+function getThothConfig(): ThothConfig {
   if (cachedConfig) {
     return cachedConfig;
   }
@@ -57,113 +47,43 @@ export function getThothConfig(): ThothConfig {
   return cachedConfig;
 }
 
-export function getConvStoreDatabaseConfig(): ConvStoreDatabaseConfig {
-  return {
-    host: requireString(process.env.CONV_STORE_DB_HOST, "CONV_STORE_DB_HOST"),
-    port: requireNumber(
-      parseNumber(process.env.CONV_STORE_DB_PORT),
-      "CONV_STORE_DB_PORT",
-    ),
-    database: requireString(
-      process.env.CONV_STORE_DB_NAME,
-      "CONV_STORE_DB_NAME",
-    ),
-    user: requireString(process.env.CONV_STORE_DB_USER, "CONV_STORE_DB_USER"),
-    password: requireString(
-      process.env.CONV_STORE_DB_PASSWORD,
-      "CONV_STORE_DB_PASSWORD",
-    ),
-    ssl: requireBoolean(
-      parseBoolean(process.env.CONV_STORE_DB_SSL),
-      "CONV_STORE_DB_SSL",
-    ),
-  };
+export function getProxyConfig(): ProxyConfig {
+  return getThothConfig().proxy;
 }
 
-export function getLlmApiKey(): string {
-  return requireString(process.env.OPENAI_API_KEY, "OPENAI_API_KEY");
+export function getConvAgentConfig(): ConvAgentConfig {
+  return getThothConfig().convAgent;
 }
 
-export function getObjectStoreCredentialsConfig(): ObjectStoreCredentialsConfig {
-  return {
-    accessKeyId: requireString(
-      process.env.R2_ACCESS_KEY_ID,
-      "R2_ACCESS_KEY_ID",
-    ),
-    secretAccessKey: requireString(
-      process.env.R2_SECRET_ACCESS_KEY,
-      "R2_SECRET_ACCESS_KEY",
-    ),
-  };
+export function getKbCurateAgentConfig(): KbCurateAgentConfig {
+  return getThothConfig().kbCurateAgent;
 }
 
-export function getObjectStoreConfig(): ObjectStoreConfig {
-  return getThothConfig().objectStore;
-}
-
-export function getPortsConfig(): PortsConfig {
-  return getThothConfig().ports;
-}
-
-export function resetConfigCache(): void {
-  cachedConfig = null;
+export function getPlanningAgentConfig(): PlanningAgentConfig {
+  return getThothConfig().planningAgent;
 }
 
 function parseConfig(value: unknown): ThothConfig {
   const config = requireObject(value, "config");
-  const objectStore = requireObject(config.objectStore, "objectStore");
-  const ports = requireObject(config.ports, "ports");
+  const proxy = requireObject(config.proxy, "proxy");
+  const convAgent = requireObject(config.convAgent, "convAgent");
+  const kbCurateAgent = requireObject(config.kbCurateAgent, "kbCurateAgent");
+  const planningAgent = requireObject(config.planningAgent, "planningAgent");
 
   return {
-    objectStore: {
-      endpoint: requireString(objectStore.endpoint, "objectStore.endpoint"),
-      bucket: requireString(objectStore.bucket, "objectStore.bucket"),
-      region: requireString(objectStore.region, "objectStore.region"),
-      service: requireString(objectStore.service, "objectStore.service"),
+    proxy: {
+      port: requireNumber(proxy.port, "proxy.port"),
     },
-    ports: {
-      proxy: requireNumber(ports.proxy, "ports.proxy"),
-      convAgent: requireNumber(ports.convAgent, "ports.convAgent"),
-      kbCurateAgent: requireNumber(
-        ports.kbCurateAgent,
-        "ports.kbCurateAgent",
-      ),
-      planningAgent: requireNumber(
-        ports.planningAgent,
-        "ports.planningAgent",
-      ),
+    convAgent: {
+      port: requireNumber(convAgent.port, "convAgent.port"),
+    },
+    kbCurateAgent: {
+      port: requireNumber(kbCurateAgent.port, "kbCurateAgent.port"),
+    },
+    planningAgent: {
+      port: requireNumber(planningAgent.port, "planningAgent.port"),
     },
   };
-}
-
-function parseNumber(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-
-  if (Number.isNaN(parsed)) {
-    return undefined;
-  }
-
-  return parsed;
-}
-
-function parseBoolean(value: string | undefined): boolean | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === "true") {
-    return true;
-  }
-
-  if (value === "false") {
-    return false;
-  }
-
-  return undefined;
 }
 
 function requireObject(
@@ -177,25 +97,9 @@ function requireObject(
   return value as Record<string, unknown>;
 }
 
-function requireString(value: unknown, fieldName: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${fieldName} must be a non-empty string.`);
-  }
-
-  return value;
-}
-
 function requireNumber(value: unknown, fieldName: string): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     throw new Error(`${fieldName} must be a valid number.`);
-  }
-
-  return value;
-}
-
-function requireBoolean(value: unknown, fieldName: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${fieldName} must be a boolean.`);
   }
 
   return value;

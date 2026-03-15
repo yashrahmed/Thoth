@@ -71,6 +71,7 @@ type UploadFileRequest = {
 
 - PersistToMessageDBStore(message: Message): void
 - ReadFromMessageDBStore(id: string): Message
+- ReadPageFromMessageDBStore(conversationId: string, fromSequence: number, pageSize: number): Message[]
 - RemoveFromMessageDBStore(id: string): void
 
 - PersistToFileDBStore(file: File): void
@@ -118,11 +119,17 @@ type UploadFileRequest = {
 
 1. ReadFromConversationDBStore(conversationId) → fail if not found.
 
+### GetMessagesOnConversation (conversationId: string, pageNum: number, pageSize: number): Message[]
+
+1. GetConversation(conversationId: string) -> conversation: Conversation.
+2. Compute fromSequence = (pageNum - 1) * pageSize + 1.
+3. ReadPageFromMessageDBStore(conversationId, fromSequence, pageSize) -> messages: Message[].
+
 ### CreateMessage (request: CreateMessageRequest): Message
 
 1. GenerateId() → id.
 2. Now() → timestamp.
-3. Construct Message(id, request.conversationId, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds).
+3. Construct Message(id, request.conversationId, request.sequenceNumber, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds).
 4. PersistToMessageDBStore(message).
 
 ### GetMessage (messageId: string): Message
@@ -134,12 +141,12 @@ type UploadFileRequest = {
 1. ReadFromMessageDBStore(messageId) → fail if not found.
 2. RemoveFromMessageDBStore(messageId).
 
-### UploadFile (request: UploadFileRequest): File
+### UploadFile (content: FileContent): File
 
 1. GenerateId() → id.
-2. UploadToBlobStore(request.content) → canonicalUrl.
+2. UploadToBlobStore(content) → canonicalUrl.
 3. Now() → timestamp.
-4. Construct File(id, canonicalUrl, request.filename, request.mimeType, sizeInBytes, createdAt: timestamp, updatedAt: timestamp).
+4. Construct File(id, canonicalUrl, createdAt: timestamp, updatedAt: timestamp).
 5. PersistToFileDBStore(file).
 
 ### GetFile (fileId: string): FileContent
@@ -152,3 +159,12 @@ type UploadFileRequest = {
 1. ReadFromFileDBStore(fileId) → file.
 2. DeleteFromBlobStore(file.canonicalUrl).
 3. RemoveFromFileDBStore(fileId).
+
+## Notes
+
+- `messageIds` on `Conversation` is redundant. Message ordering and pagination
+  can be derived entirely from `sequenceNumber` on `Message` combined with
+  `conversationId`. It is kept for now as a denormalized index so that
+  `DeleteConversation` and `AppendMessageToConversation` can resolve related
+  messages without querying the message store. This may be removed in a future
+  iteration once those actions query by `conversationId` directly.

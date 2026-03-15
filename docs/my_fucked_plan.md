@@ -32,6 +32,19 @@ class File {
 type SortDirection = "asc" | "desc";
 type FileContent = Buffer | ReadableStream;
 type Attachment = { content: FileContent };
+
+type AppendMessageRequest = {
+  conversationId: string;
+  textContent: string;
+  attachments: Attachment[];
+};
+
+type CreateMessageRequest = {
+  conversationId: string;
+  sequenceNumber: number;
+  textContent: string;
+  fileIds: string[];
+};
 ```
 
 ## Atomic Operations
@@ -68,12 +81,12 @@ type Attachment = { content: FileContent };
    3. DeleteMessage(messageId: string) -> void.
 3. DeleteConversation(conversationId: string) -> void.
 
-### AppendMessageToConversation (conversationId: string, textContent: string, attachments: Attachment[]): Message
+### AppendMessageToConversation (request: AppendMessageRequest): Message
 
-1. GetConversation(conversationId: string) -> conversation: Conversation.
-2. For each attachment: Attachment in attachments:
+1. GetConversation(request.conversationId: string) -> conversation: Conversation.
+2. For each attachment: Attachment in request.attachments:
    1. UploadFile(attachment.content: FileContent) -> file: File.
-3. CreateMessage(id: string, conversationId: string, sequenceNumber: number, textContent: string, createdAt: Date, updatedAt: Date, fileIds: string[]) -> message: Message.
+3. CreateMessage(request: CreateMessageRequest) -> message: Message.
 4. UpdateConversation(conversation: Conversation) -> Conversation.
 
 ### CreateConversation (): Conversation
@@ -92,11 +105,11 @@ type Attachment = { content: FileContent };
 
 1. ReadFromConversationDBStore(conversationId) → fail if not found.
 
-### CreateMessage (id: string, conversationId: string, sequenceNumber: number, textContent: string, createdAt: Date, updatedAt: Date, fileIds: string[]): Message
+### CreateMessage (request: CreateMessageRequest): Message
 
 1. GenerateId() → id.
 2. Now() → timestamp.
-3. Construct Message(id, conversationId, sequenceNumber, textContent, createdAt: timestamp, updatedAt: timestamp, fileIds).
+3. Construct Message(id, request.conversationId, request.sequenceNumber, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds).
 4. PersistToMessageDBStore(message).
 
 ### GetMessage (messageId: string): Message

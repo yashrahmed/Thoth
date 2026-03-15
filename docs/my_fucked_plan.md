@@ -21,6 +21,9 @@ class Message {
 class File {
   readonly id: string;
   readonly canonicalUrl: string;
+  readonly filename: string;
+  readonly mimeType: string;
+  readonly sizeInBytes: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -31,7 +34,11 @@ class File {
 ```ts
 type SortDirection = "asc" | "desc";
 type FileContent = Buffer | ReadableStream;
-type Attachment = { content: FileContent };
+type Attachment = {
+  content: FileContent;
+  filename: string;
+  mimeType: string;
+};
 
 type AppendMessageRequest = {
   conversationId: string;
@@ -41,9 +48,14 @@ type AppendMessageRequest = {
 
 type CreateMessageRequest = {
   conversationId: string;
-  sequenceNumber: number;
   textContent: string;
   fileIds: string[];
+};
+
+type UploadFileRequest = {
+  content: FileContent;
+  filename: string;
+  mimeType: string;
 };
 ```
 
@@ -84,10 +96,11 @@ type CreateMessageRequest = {
 ### AppendMessageToConversation (request: AppendMessageRequest): Message
 
 1. GetConversation(request.conversationId: string) -> conversation: Conversation.
-2. For each attachment: Attachment in request.attachments:
-   1. UploadFile(attachment.content: FileContent) -> file: File.
-3. CreateMessage(request: CreateMessageRequest) -> message: Message.
-4. UpdateConversation(conversation: Conversation) -> Conversation.
+2. Derive sequenceNumber from conversation.messageIds.length + 1.
+3. For each attachment: Attachment in request.attachments:
+   1. UploadFile(request: UploadFileRequest) -> file: File.
+4. CreateMessage(request: CreateMessageRequest) -> message: Message.
+5. UpdateConversation(conversation: Conversation) -> Conversation.
 
 ### CreateConversation (): Conversation
 
@@ -109,7 +122,7 @@ type CreateMessageRequest = {
 
 1. GenerateId() → id.
 2. Now() → timestamp.
-3. Construct Message(id, request.conversationId, request.sequenceNumber, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds).
+3. Construct Message(id, request.conversationId, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds).
 4. PersistToMessageDBStore(message).
 
 ### GetMessage (messageId: string): Message
@@ -121,12 +134,12 @@ type CreateMessageRequest = {
 1. ReadFromMessageDBStore(messageId) → fail if not found.
 2. RemoveFromMessageDBStore(messageId).
 
-### UploadFile (content: FileContent): File
+### UploadFile (request: UploadFileRequest): File
 
 1. GenerateId() → id.
-2. UploadToBlobStore(content) → canonicalUrl.
+2. UploadToBlobStore(request.content) → canonicalUrl.
 3. Now() → timestamp.
-4. Construct File(id, canonicalUrl, createdAt: timestamp, updatedAt: timestamp).
+4. Construct File(id, canonicalUrl, request.filename, request.mimeType, sizeInBytes, createdAt: timestamp, updatedAt: timestamp).
 5. PersistToFileDBStore(file).
 
 ### GetFile (fileId: string): FileContent

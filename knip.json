@@ -5,7 +5,15 @@
       "entry": ["scripts/**/*.ts"],
       "project": ["scripts/**/*.ts"]
     },
-    "packages/agents": {
+    "packages/conv-agent": {
+      "entry": ["src/**/*server.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/kb-curate-agent": {
+      "entry": ["src/**/*server.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/planning-agent": {
       "entry": ["src/**/*server.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
@@ -13,10 +21,10 @@
       "project": ["src/**/*.ts"]
     },
     "packages/domain/contracts": {
-      "project": ["src/**/*.ts"]
+      "project": ["**/*.ts"]
     },
     "packages/domain/entities": {
-      "project": ["src/**/*.ts"]
+      "project": ["**/*.ts"]
     },
     "packages/message-proxy": {
       "project": ["src/**/*.ts"]

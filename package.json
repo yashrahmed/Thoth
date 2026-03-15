@@ -2,8 +2,7 @@
   "name": "thoth",
   "private": true,
   "workspaces": [
-    "packages/*",
-    "packages/domain/*"
+    "packages/*"
   ],
   "scripts": {
     "db:local:setup": "./scripts/db-local.sh start",
@@ -22,9 +21,9 @@
     "lint:fix": "bun x eslint . --fix",
     "lint:dead": "bun x knip",
     "lint:deps": "bun x depcruise --config .dependency-cruiser.cjs packages",
-    "build": "bun run --filter '*' build",
+    "build": "bun x tsc --noEmit -p tsconfig.domain.json && bun run --filter '*' build",
     "test": "bun test",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun x tsc --noEmit -p tsconfig.domain.json && bun run --filter '*' typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

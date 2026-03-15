@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/contracts",
+  "name": "@thoth/kb-curate-agent",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -7,7 +7,12 @@
   "types": "src/index.ts",
   "scripts": {
     "build": "bun x tsc --noEmit",
+    "dev": "bun run --watch src/server.ts",
+    "start": "bun run src/server.ts",
     "test": "bun test",
     "typecheck": "bun x tsc --noEmit"
+  },
+  "dependencies": {
+    "@thoth/config": "workspace:*"
   }
 }

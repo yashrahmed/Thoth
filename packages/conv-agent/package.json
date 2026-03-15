@@ -1,5 +1,5 @@
 {
-  "name": "@thoth/agents",
+  "name": "@thoth/conv-agent",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -7,9 +7,8 @@
   "types": "src/index.ts",
   "scripts": {
     "build": "bun x tsc --noEmit",
-    "start:conv-agent": "bun run src/conversations/bootstrap/server.ts",
-    "start:kb-curate-agent": "bun run src/kb-curate-agent/inbound/http/server.ts",
-    "start:planning-agent": "bun run src/planning-agent/server.ts",
+    "dev": "bun run --watch src/server.ts",
+    "start": "bun run src/server.ts",
     "test": "bun test",
     "typecheck": "bun x tsc --noEmit"
   },

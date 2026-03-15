@@ -63,7 +63,9 @@ Current package structure follows the same split shown in the diagram:
 
 ```text
 packages/
-  agents/                    # conv-agent, kb-curate-agent, planning-agent
+  conv-agent/                # primary user-facing conversation service
+  kb-curate-agent/           # background knowledge curation service
+  planning-agent/            # planning-oriented service
   domain/
     entities/                # shared domain entities
     contracts/               # shared domain contracts
@@ -72,8 +74,9 @@ packages/
   mobile/                    # mobile client
 ```
 
-The planning internals currently live inside `packages/agents` under
-`planning-agent` and are organized into `frame`, `plan`, and `sim`.
+The planning service now lives in the top-level `packages/planning-agent`
+workspace. Its deeper `frame`, `plan`, and `sim` modules have not been added
+yet in this repository.
 
 ## Notes
 

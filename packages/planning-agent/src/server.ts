@@ -1,5 +1,5 @@
 import { getPlanningAgentConfig } from "@thoth/config";
-import { createPlaceholderFetchHandler } from "../shared/placeholder-fetch-handler";
+import { createPlaceholderFetchHandler } from "./placeholder-fetch-handler";
 
 export const createPlanningAgentFetchHandler = () =>
   createPlaceholderFetchHandler("planning-agent");

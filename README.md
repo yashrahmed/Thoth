@@ -12,8 +12,9 @@ An agent system that manages work and personal information.
 ```
 thoth/
 ├── packages/
-│   ├── agents/                    # Primary and background agent workflows
-│   │   └── planning-agent/        # Planning logic with frame, plan, and sim modules
+│   ├── conv-agent/                # Primary user-facing conversation service
+│   ├── kb-curate-agent/           # Background knowledge curation service
+│   ├── planning-agent/            # Planning-oriented service
 │   ├── domain/
 │   │   ├── entities/              # Shared domain entities
 │   │   └── contracts/             # Shared domain contracts
@@ -58,7 +59,7 @@ For local development:
 
 Examples:
 
-- `CONFIG_FILE=config/launch.yaml bun run --filter @thoth/agents start:conv-agent`
+- `CONFIG_FILE=config/launch.yaml bun run --filter @thoth/conv-agent start`
 - `CONFIG_FILE=config/launch.yaml bun run --filter @thoth/message-proxy start`
 
 All server entrypoints fail fast if `CONFIG_FILE` is missing or the referenced

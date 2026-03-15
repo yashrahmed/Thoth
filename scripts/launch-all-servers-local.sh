@@ -98,9 +98,9 @@ case "$COMMAND" in
     fi
 
     start_service "message-proxy" "@thoth/message-proxy" "start"
-    start_service "conv-agent" "@thoth/agents" "start:conv-agent"
-    start_service "kb-curate-agent" "@thoth/agents" "start:kb-curate-agent"
-    start_service "planning-agent" "@thoth/agents" "start:planning-agent"
+    start_service "conv-agent" "@thoth/conv-agent" "start"
+    start_service "kb-curate-agent" "@thoth/kb-curate-agent" "start"
+    start_service "planning-agent" "@thoth/planning-agent" "start"
     ;;
   stop)
     stop_service "message-proxy" "$(read_port proxy)"

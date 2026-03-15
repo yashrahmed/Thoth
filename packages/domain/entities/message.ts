@@ -1,19 +1,8 @@
-import { FileReference } from "./file-reference";
 import {
   requireDate,
   requireNonEmptyString,
   requirePositiveInteger,
 } from "./shared/guards";
-
-export interface MessageProps {
-  id: string;
-  conversationId: string;
-  sequenceNumber: number;
-  textContent: string;
-  createdAt: Date;
-  updatedAt: Date;
-  fileReferences?: ReadonlyArray<FileReference>;
-}
 
 export class Message {
   readonly id: string;
@@ -22,9 +11,17 @@ export class Message {
   readonly textContent: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
-  readonly fileReferences: ReadonlyArray<FileReference>;
+  readonly fileIds: ReadonlyArray<string>;
 
-  constructor(props: MessageProps) {
+  constructor(props: {
+    id: string;
+    conversationId: string;
+    sequenceNumber: number;
+    textContent: string;
+    createdAt: Date;
+    updatedAt: Date;
+    fileIds?: ReadonlyArray<string>;
+  }) {
     this.id = requireNonEmptyString(props.id, "message.id");
     this.conversationId = requireNonEmptyString(
       props.conversationId,
@@ -34,6 +31,7 @@ export class Message {
       props.sequenceNumber,
       "message.sequenceNumber",
     );
+
     if (typeof props.textContent !== "string") {
       throw new Error("message.textContent must be a string.");
     }
@@ -41,7 +39,11 @@ export class Message {
     this.textContent = props.textContent;
     this.createdAt = requireDate(props.createdAt, "message.createdAt");
     this.updatedAt = requireDate(props.updatedAt, "message.updatedAt");
-    this.fileReferences = Object.freeze([...(props.fileReferences ?? [])]);
+    this.fileIds = Object.freeze(
+      [...(props.fileIds ?? [])].map((fileId) =>
+        requireNonEmptyString(fileId, "message.fileIds"),
+      ),
+    );
 
     if (this.updatedAt < this.createdAt) {
       throw new Error(

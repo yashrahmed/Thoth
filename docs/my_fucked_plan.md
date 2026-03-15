@@ -33,7 +33,7 @@ class File {
 
 ```ts
 type SortDirection = "asc" | "desc";
-type FileContent = Buffer | ReadableStream;
+type FileContent = { readonly _brand: "FileContent" };
 type Attachment = {
   content: FileContent;
   filename: string;
@@ -245,6 +245,10 @@ type ConstructionError = {
 - `GenerateId()` and `Now()` are infallible — not wrapped in `Result`.
 - `NotFoundError` is separate from `StoreError` so callers can map to different
   HTTP status codes (404 vs 500).
+- `FileContent` is opaque in the domain layer — the domain never inspects or
+  transforms it. The implementations of `UploadToBlobStore` and
+  `FetchFromBlobStore` are responsible for checking and casting to the actual
+  runtime representation (e.g. `Buffer`, `ReadableStream`).
 - `messageIds` on `Conversation` is redundant. Message ordering and pagination
   can be derived entirely from `sequenceNumber` on `Message` combined with
   `conversationId`. It is kept for now as a denormalized index so that

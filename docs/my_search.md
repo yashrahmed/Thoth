@@ -5,3 +5,7 @@ What am I looking for?
 - The generate code must be human readable.
 - Subsequent versions must not regress.
 - The technique must scale to a high level of complexity.
+
+Why is this difficult?
+
+- I am trying to codify thought.

@@ -57,27 +57,6 @@ tools, reads from the stores, and updates curated knowledge.
 7. The background knowledge curation agent updates the curated knowledge
    store and can use tools during that process.
 
-## Package Direction
-
-Current package structure follows the same split shown in the diagram:
-
-```text
-packages/
-  conv-agent/                # primary user-facing conversation service
-  kb-curate-agent/           # background knowledge curation service
-  planning-agent/            # planning-oriented service
-  domain/
-    entities/                # shared domain entities
-    contracts/               # shared domain contracts
-  message-proxy/             # channel-facing proxy layer
-  web/                       # web client
-  mobile/                    # mobile client
-```
-
-The planning service now lives in the top-level `packages/planning-agent`
-workspace. Its deeper `frame`, `plan`, and `sim` modules have not been added
-yet in this repository.
-
 ## Notes
 
 - The proxy and the agents run as separate services.

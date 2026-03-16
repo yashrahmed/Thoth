@@ -77,7 +77,12 @@ export class AppendMessageToConversationFlow {
     }
 
     const uploadFilesResult = await this.fileDomainService.uploadFiles({
-      files: request.attachments,
+      files: request.attachments.map((attachment) => ({
+        conversationId: conversationIdResult.value,
+        content: attachment.content,
+        filename: attachment.filename,
+        mimeType: attachment.mimeType,
+      })),
     });
 
     if (!uploadFilesResult.ok) {

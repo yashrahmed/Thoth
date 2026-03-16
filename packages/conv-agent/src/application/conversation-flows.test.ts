@@ -210,20 +210,38 @@ describe("conversation flows", () => {
     expect(fileRepository.createdRecords).toEqual([]);
   });
 
-  test("GetMessagesOnConversation validates pagination and computes the sequence window", async () => {
+  test("GetMessagesOnConversation validates pagination and returns file metadata", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     conversationRepository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
     ]);
     const messageRepository = new InMemoryMessageRepository();
     messageRepository.seed([
-      mustCreateMessage("message-1", "conversation-1", 1, "one", [], "2026-03-16T12:00:00.000Z"),
+      mustCreateMessage(
+        "message-1",
+        "conversation-1",
+        1,
+        "one",
+        ["file-1"],
+        "2026-03-16T12:00:00.000Z",
+      ),
       mustCreateMessage("message-2", "conversation-1", 2, "two", [], "2026-03-16T12:01:00.000Z"),
       mustCreateMessage("message-3", "conversation-1", 3, "three", [], "2026-03-16T12:02:00.000Z"),
+    ]);
+    const fileRepository = new InMemoryFileRepository();
+    fileRepository.seed([
+      mustCreateFile(
+        "file-1",
+        "/conversations/conversation-1/file-1-a.txt",
+        "a.txt",
+        "text/plain",
+        1,
+      ),
     ]);
     const useCase = new GetMessagesOnConversationFlow(
       conversationRepository,
       new MessageDomainService(messageRepository),
+      new FileDomainService(fileRepository, new InMemoryBlobRepository()),
     );
 
     const invalidResult = await useCase.execute({
@@ -240,7 +258,7 @@ describe("conversation flows", () => {
 
     const validResult = await useCase.execute({
       conversationId: "conversation-1",
-      pageNum: 2,
+      pageNum: 1,
       pageSize: 1,
     });
 
@@ -251,10 +269,21 @@ describe("conversation flows", () => {
 
     expect(messageRepository.lastPageRequest).toEqual({
       conversationId: "conversation-1",
-      fromSequence: 2,
+      fromSequence: 1,
       limit: 1,
     });
-    expect(validResult.value.map((message) => message.id)).toEqual(["message-2"]);
+    expect(validResult.value.map((message) => message.id)).toEqual(["message-1"]);
+    expect(validResult.value[0]?.files).toEqual([
+      {
+        id: "file-1",
+        canonicalUrl: "/conversations/conversation-1/file-1-a.txt",
+        filename: "a.txt",
+        mimeType: "text/plain",
+        sizeInBytes: 1,
+        createdAt: new Date("2026-03-16T12:00:00.000Z"),
+        updatedAt: new Date("2026-03-16T12:00:00.000Z"),
+      },
+    ]);
   });
 
   test("DeleteConversation deletes files, then messages, then the conversation", async () => {
@@ -275,13 +304,25 @@ describe("conversation flows", () => {
     ]);
     const fileRepository = new InMemoryFileRepository();
     fileRepository.seed([
-      mustCreateFile("file-1", "https://blob/file-1", "a.txt", "text/plain", 1),
-      mustCreateFile("file-2", "https://blob/file-2", "b.txt", "text/plain", 1),
+      mustCreateFile(
+        "file-1",
+        "/conversations/conversation-1/file-1-a.txt",
+        "a.txt",
+        "text/plain",
+        1,
+      ),
+      mustCreateFile(
+        "file-2",
+        "/conversations/conversation-1/file-2-b.txt",
+        "b.txt",
+        "text/plain",
+        1,
+      ),
     ]);
     const blobRepository = new InMemoryBlobRepository();
     blobRepository.seed([
-      ["https://blob/file-1", new TextEncoder().encode("a").buffer],
-      ["https://blob/file-2", new TextEncoder().encode("b").buffer],
+      ["/conversations/conversation-1/file-1-a.txt", new TextEncoder().encode("a").buffer],
+      ["/conversations/conversation-1/file-2-b.txt", new TextEncoder().encode("b").buffer],
     ]);
     const useCase = new DeleteConversationFlow(
       conversationRepository,
@@ -293,8 +334,8 @@ describe("conversation flows", () => {
 
     expect(result).toEqual(success(undefined));
     expect(blobRepository.deletedUrls).toEqual([
-      "https://blob/file-1",
-      "https://blob/file-2",
+      "/conversations/conversation-1/file-1-a.txt",
+      "/conversations/conversation-1/file-2-b.txt",
     ]);
     expect(messageRepository.deletedIds).toEqual(["message-1"]);
     expect(conversationRepository.deletedIds).toEqual(["conversation-1"]);
@@ -318,7 +359,13 @@ describe("conversation flows", () => {
     ]);
     const fileRepository = new InMemoryFileRepository();
     fileRepository.seed([
-      mustCreateFile("file-1", "https://blob/file-1", "a.txt", "text/plain", 1),
+      mustCreateFile(
+        "file-1",
+        "/conversations/conversation-1/file-1-a.txt",
+        "a.txt",
+        "text/plain",
+        1,
+      ),
     ]);
     const blobRepository = new InMemoryBlobRepository();
     blobRepository.deleteFailure = new BlobStoreError("delete", "boom");
@@ -525,6 +572,7 @@ class InMemoryFileRepository implements FileRepository {
 
 class InMemoryBlobRepository implements BlobRepository {
   readonly uploads: Array<{
+    readonly conversationId: string;
     readonly filename: string;
     readonly mimeType: string;
     readonly content: ArrayBuffer;
@@ -542,12 +590,13 @@ class InMemoryBlobRepository implements BlobRepository {
   }
 
   async upload(request: {
+    readonly conversationId: string;
     readonly content: ArrayBuffer;
     readonly filename: string;
     readonly mimeType: string;
   }) {
     this.uploads.push(request);
-    const url = `https://blob/file-${this.uploads.length}`;
+    const url = `/conversations/${request.conversationId}/file-${this.uploads.length}-${request.filename}`;
     this.blobs.set(url, request.content);
     return success(url);
   }

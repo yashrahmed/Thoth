@@ -18,6 +18,7 @@ import type { Result } from "../objects/result";
 import { requireNonEmptyString, requirePresent } from "../validators";
 
 export interface UploadFileRequest {
+  readonly conversationId: string;
   readonly content: FileContent;
   readonly filename: string;
   readonly mimeType: string;
@@ -25,6 +26,10 @@ export interface UploadFileRequest {
 
 export interface UploadFilesRequest {
   readonly files: ReadonlyArray<UploadFileRequest>;
+}
+
+export interface GetFilesRequest {
+  readonly fileIds: ReadonlyArray<string>;
 }
 
 export class FileDomainService {
@@ -48,6 +53,15 @@ export class FileDomainService {
       return contentResult;
     }
 
+    const conversationIdResult = requireNonEmptyString(
+      request.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
     const filenameResult = requireNonEmptyString(request.filename, "filename");
 
     if (!filenameResult.ok) {
@@ -61,6 +75,7 @@ export class FileDomainService {
     }
 
     const uploadResult = await this.blobRepository.upload({
+      conversationId: conversationIdResult.value,
       content: request.content,
       filename: filenameResult.value,
       mimeType: mimeTypeResult.value,
@@ -117,6 +132,27 @@ export class FileDomainService {
     }
 
     return this.fileRepository.deleteById(fileId);
+  }
+
+  async getFiles(
+    request: GetFilesRequest,
+  ): Promise<Result<ReadonlyArray<FileEntity>, NotFoundError | StoreError>> {
+    const files: FileEntity[] = [];
+
+    for (const fileId of request.fileIds) {
+      const fileResult = await this.fileRepository.getById(fileId);
+
+      if (!fileResult.ok) {
+        return fileResult;
+      }
+
+      files.push(fileResult.value);
+    }
+
+    return {
+      ok: true,
+      value: files,
+    };
   }
 
   private buildRecord(

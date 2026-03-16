@@ -10,7 +10,7 @@ CONFIG_PATH="$REPO_ROOT/config/launch.yaml"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop>"
+  echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop|restart>"
   exit 1
 fi
 
@@ -35,10 +35,41 @@ read_port() {
   ' "$CONFIG_PATH"
 }
 
+kill_service_pids() {
+  service_name="$1"
+  pid_file="$2"
+  service_port="$3"
+  stopped=1
+
+  if [ -f "$pid_file" ]; then
+    pid="$(cat "$pid_file")"
+
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid"
+      wait "$pid" 2>/dev/null || true
+      echo "Stopped $service_name."
+      stopped=0
+    else
+      echo "$service_name pid file was stale."
+    fi
+  fi
+
+  fallback_pids="$(lsof -ti tcp:"$service_port" || true)"
+  if [ -n "$fallback_pids" ]; then
+    kill $fallback_pids 2>/dev/null || true
+    echo "Stopped $service_name via port $service_port."
+    stopped=0
+  fi
+
+  rm -f "$pid_file"
+  return "$stopped"
+}
+
 start_service() {
   service_name="$1"
   package_name="$2"
   service_command="$3"
+  service_port="$4"
   pid_file="$STATE_DIR/$service_name.pid"
   log_file="$LOG_DIR/$service_name.log"
 
@@ -49,6 +80,13 @@ start_service() {
       return
     fi
     rm -f "$pid_file"
+  fi
+
+  port_pids="$(lsof -ti tcp:"$service_port" || true)"
+  if [ -n "$port_pids" ]; then
+    echo "$service_name could not start because port $service_port is already in use."
+    echo "Run ./scripts/launch-all-servers-local.sh restart to replace the existing process."
+    exit 1
   fi
 
   (
@@ -66,28 +104,23 @@ stop_service() {
   service_port="$2"
   pid_file="$STATE_DIR/$service_name.pid"
 
-  if [ ! -f "$pid_file" ]; then
+  if ! kill_service_pids "$service_name" "$pid_file" "$service_port"; then
     echo "$service_name is not running."
-    return
   fi
+}
 
-  pid="$(cat "$pid_file")"
+start_all_services() {
+  start_service "message-proxy" "@thoth/message-proxy" "start" "$(read_port proxy)"
+  start_service "conv-agent" "@thoth/conv-agent" "start" "$(read_port convAgent)"
+  start_service "kb-curate-agent" "@thoth/kb-curate-agent" "start" "$(read_port kbCurateAgent)"
+  start_service "planning-agent" "@thoth/planning-agent" "start" "$(read_port planningAgent)"
+}
 
-  if kill -0 "$pid" 2>/dev/null; then
-    kill "$pid"
-    wait "$pid" 2>/dev/null || true
-    echo "Stopped $service_name."
-  else
-    fallback_pids="$(lsof -ti tcp:"$service_port" || true)"
-    if [ -n "$fallback_pids" ]; then
-      kill $fallback_pids
-      echo "Stopped $service_name via port $service_port."
-    else
-      echo "$service_name pid file was stale."
-    fi
-  fi
-
-  rm -f "$pid_file"
+stop_all_services() {
+  stop_service "message-proxy" "$(read_port proxy)"
+  stop_service "conv-agent" "$(read_port convAgent)"
+  stop_service "kb-curate-agent" "$(read_port kbCurateAgent)"
+  stop_service "planning-agent" "$(read_port planningAgent)"
 }
 
 case "$COMMAND" in
@@ -97,20 +130,23 @@ case "$COMMAND" in
       exit 1
     fi
 
-    start_service "message-proxy" "@thoth/message-proxy" "start"
-    start_service "conv-agent" "@thoth/conv-agent" "start"
-    start_service "kb-curate-agent" "@thoth/kb-curate-agent" "start"
-    start_service "planning-agent" "@thoth/planning-agent" "start"
+    start_all_services
     ;;
   stop)
-    stop_service "message-proxy" "$(read_port proxy)"
-    stop_service "conv-agent" "$(read_port convAgent)"
-    stop_service "kb-curate-agent" "$(read_port kbCurateAgent)"
-    stop_service "planning-agent" "$(read_port planningAgent)"
+    stop_all_services
+    ;;
+  restart)
+    if [ ! -f "$CONFIG_PATH" ]; then
+      echo "Missing local launch config: $CONFIG_PATH"
+      exit 1
+    fi
+
+    stop_all_services
+    start_all_services
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop>"
+    echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop|restart>"
     exit 1
     ;;
 esac

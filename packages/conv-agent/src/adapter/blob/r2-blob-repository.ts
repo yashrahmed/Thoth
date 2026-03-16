@@ -19,6 +19,8 @@ export interface R2BlobCredentials {
   readonly secretAccessKey: string;
 }
 
+const CONVERSATIONS_CANONICAL_PATH_PREFIX = "/conversations/";
+
 export class R2BlobRepository implements BlobRepository {
   constructor(
     private readonly config: R2BlobConfig,
@@ -28,9 +30,11 @@ export class R2BlobRepository implements BlobRepository {
   async upload(
     request: BlobUploadRequest,
   ): Promise<Result<string, BlobStoreError>> {
-    const objectKey = `${trimSlashes(this.config.folder)}/${randomUUID()}-${sanitizeFilename(
+    const canonicalPath = this.getCanonicalPath(
+      request.conversationId,
       request.filename,
-    )}`;
+    );
+    const objectKey = this.getObjectKey(canonicalPath);
 
     try {
       const response = await this.signedFetch({
@@ -46,7 +50,7 @@ export class R2BlobRepository implements BlobRepository {
         );
       }
 
-      return success(this.getRequestUrl(objectKey));
+      return success(canonicalPath);
     } catch (error) {
       return failure(new BlobStoreError("upload", getErrorMessage(error)));
     }
@@ -146,21 +150,27 @@ export class R2BlobRepository implements BlobRepository {
     });
   }
 
-  private getRequestUrl(objectKey: string): string {
-    return `${this.config.endpoint}/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(
-      objectKey,
-    )}`;
+  private getCanonicalPath(conversationId: string, filename: string): string {
+    return `${CONVERSATIONS_CANONICAL_PATH_PREFIX}${encodePathSegment(
+      conversationId,
+    )}/${randomUUID()}-${sanitizeFilename(filename)}`;
   }
 
-  private getObjectKey(canonicalUrl: string): string {
-    const url = new URL(canonicalUrl);
-    const prefix = `/${this.config.bucket}/`;
-
-    if (!url.pathname.startsWith(prefix)) {
-      throw new Error(`Blob URL does not belong to bucket ${this.config.bucket}.`);
+  private getObjectKey(canonicalPath: string): string {
+    if (!canonicalPath.startsWith(CONVERSATIONS_CANONICAL_PATH_PREFIX)) {
+      throw new Error(
+        "Blob canonical path must start with /conversations/.",
+      );
     }
 
-    return decodeURIComponent(url.pathname.slice(prefix.length));
+    const trimmedFolder = trimSlashes(this.config.folder);
+    const trimmedPath = canonicalPath.replace(/^\/+/, "");
+
+    if (trimmedFolder.length === 0) {
+      return trimmedPath;
+    }
+
+    return `${trimmedFolder}/${trimmedPath}`;
   }
 }
 

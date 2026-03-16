@@ -162,12 +162,31 @@ describe("createConversationHttpHandler", () => {
     ]);
     const messageRepository = new InMemoryMessageRepository();
     messageRepository.seed([
-      mustCreateMessage("message-1", "conversation-1", 1, "one", [], "2026-03-16T12:00:00.000Z"),
+      mustCreateMessage(
+        "message-1",
+        "conversation-1",
+        1,
+        "one",
+        ["file-1"],
+        "2026-03-16T12:00:00.000Z",
+      ),
       mustCreateMessage("message-2", "conversation-1", 2, "two", [], "2026-03-16T12:01:00.000Z"),
+    ]);
+    const fileRepository = new InMemoryFileRepository();
+    fileRepository.seed([
+      mustCreateFile(
+        "file-1",
+        "/conversations/conversation-1/file-1-one.txt",
+        "one.txt",
+        "text/plain",
+        3,
+        "2026-03-16T11:59:00.000Z",
+      ),
     ]);
     const handler = buildHandler({
       conversationRepository,
       messageRepository,
+      fileRepository,
     });
 
     const response = await handler(
@@ -184,7 +203,17 @@ describe("createConversationHttpHandler", () => {
           conversationId: "conversation-1",
           sequenceNumber: 1,
           textContent: "one",
-          fileIds: [],
+          files: [
+            {
+              id: "file-1",
+              canonicalUrl: "/conversations/conversation-1/file-1-one.txt",
+              filename: "one.txt",
+              mimeType: "text/plain",
+              sizeInBytes: 3,
+              createdAt: "2026-03-16T11:59:00.000Z",
+              updatedAt: "2026-03-16T11:59:00.000Z",
+            },
+          ],
           createdAt: "2026-03-16T12:00:00.000Z",
           updatedAt: "2026-03-16T12:00:00.000Z",
         },
@@ -193,7 +222,7 @@ describe("createConversationHttpHandler", () => {
           conversationId: "conversation-1",
           sequenceNumber: 2,
           textContent: "two",
-          fileIds: [],
+          files: [],
           createdAt: "2026-03-16T12:01:00.000Z",
           updatedAt: "2026-03-16T12:01:00.000Z",
         },
@@ -281,6 +310,7 @@ function buildHandler(overrides?: {
     new GetMessagesOnConversationFlow(
       conversationRepository,
       messageDomainService,
+      fileDomainService,
     ),
   );
 }
@@ -410,6 +440,14 @@ class InMemoryMessageRepository implements MessageRepository {
 class InMemoryFileRepository implements FileRepository {
   private readonly files = new Map<string, StoredFile>();
 
+  seed(files: StoredFile[]): void {
+    this.files.clear();
+
+    for (const file of files) {
+      this.files.set(file.id, file);
+    }
+  }
+
   async create(record: CreateFileRecord) {
     const file = mustCreateFile(
       `file-${this.files.size + 1}`,
@@ -443,11 +481,12 @@ class InMemoryBlobRepository implements BlobRepository {
   private readonly blobs = new Map<string, ArrayBuffer>();
 
   async upload(request: {
+    readonly conversationId: string;
     readonly content: ArrayBuffer;
     readonly filename: string;
     readonly mimeType: string;
   }) {
-    const url = `https://blob/file-${this.blobs.size + 1}`;
+    const url = `/conversations/${request.conversationId}/file-${this.blobs.size + 1}-${request.filename}`;
     this.blobs.set(url, request.content);
     return success(url);
   }

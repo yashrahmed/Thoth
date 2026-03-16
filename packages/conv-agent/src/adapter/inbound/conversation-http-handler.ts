@@ -217,7 +217,16 @@ function toMessageResponse(message: {
   readonly conversationId: string;
   readonly sequenceNumber: number;
   readonly textContent: string;
-  readonly fileIds: ReadonlyArray<string>;
+  readonly files?: ReadonlyArray<{
+    readonly id: string;
+    readonly canonicalUrl: string;
+    readonly filename: string;
+    readonly mimeType: string;
+    readonly sizeInBytes: number;
+    readonly createdAt: Date;
+    readonly updatedAt: Date;
+  }>;
+  readonly fileIds?: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }) {
@@ -226,7 +235,21 @@ function toMessageResponse(message: {
     conversationId: message.conversationId,
     sequenceNumber: message.sequenceNumber,
     textContent: message.textContent,
-    fileIds: [...message.fileIds],
+    ...(message.files
+      ? {
+          files: message.files.map((file) => ({
+            id: file.id,
+            canonicalUrl: file.canonicalUrl,
+            filename: file.filename,
+            mimeType: file.mimeType,
+            sizeInBytes: file.sizeInBytes,
+            createdAt: file.createdAt.toISOString(),
+            updatedAt: file.updatedAt.toISOString(),
+          })),
+        }
+      : {
+          fileIds: [...(message.fileIds ?? [])],
+        }),
     createdAt: message.createdAt.toISOString(),
     updatedAt: message.updatedAt.toISOString(),
   };

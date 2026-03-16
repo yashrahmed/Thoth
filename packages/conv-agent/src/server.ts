@@ -45,6 +45,7 @@ const server = Bun.serve({
     new GetMessagesOnConversationFlow(
       conversationRepository,
       messageDomainService,
+      fileDomainService,
     ),
   ),
 });

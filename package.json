@@ -12,6 +12,7 @@
     "db:local:up": "docker compose --env-file db/local/.env -f db/local/docker-compose.yml up -d postgres",
     "db:local:migrate": "docker compose --env-file db/local/.env -f db/local/docker-compose.yml up -d postgres && docker compose --env-file db/local/.env -f db/local/docker-compose.yml --profile migrations run --rm flyway migrate",
     "dev:local:start": "./scripts/launch-all-servers-local.sh start",
+    "dev:local:restart": "./scripts/launch-all-servers-local.sh restart",
     "dev:local:stop": "./scripts/launch-all-servers-local.sh stop",
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",
     "dev:web": "bun run --filter @thoth/web dev",

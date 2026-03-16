@@ -1,4 +1,5 @@
 import type { ConversationRepository } from "../domain/contracts/conversation-repository";
+import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
@@ -15,7 +16,17 @@ export interface GetMessagesOnConversationItem {
   readonly conversationId: string;
   readonly sequenceNumber: number;
   readonly textContent: string;
-  readonly fileIds: ReadonlyArray<string>;
+  readonly files: ReadonlyArray<GetMessagesOnConversationFile>;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface GetMessagesOnConversationFile {
+  readonly id: string;
+  readonly canonicalUrl: string;
+  readonly filename: string;
+  readonly mimeType: string;
+  readonly sizeInBytes: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -24,6 +35,7 @@ export class GetMessagesOnConversationFlow {
   constructor(
     private readonly conversationRepository: ConversationRepository,
     private readonly messageDomainService: MessageDomainService,
+    private readonly fileDomainService: FileDomainService,
   ) {}
 
   async execute(
@@ -70,17 +82,39 @@ export class GetMessagesOnConversationFlow {
       return result;
     }
 
-    return {
-      ok: true,
-      value: result.value.map((message) => ({
+    const items: GetMessagesOnConversationItem[] = [];
+
+    for (const message of result.value) {
+      const filesResult = await this.fileDomainService.getFiles({
+        fileIds: message.fileIds,
+      });
+
+      if (!filesResult.ok) {
+        return filesResult;
+      }
+
+      items.push({
         id: message.id,
         conversationId: message.conversationId,
         sequenceNumber: message.sequenceNumber,
         textContent: message.textContent,
-        fileIds: [...message.fileIds],
+        files: filesResult.value.map((file) => ({
+          id: file.id,
+          canonicalUrl: file.canonicalUrl,
+          filename: file.filename,
+          mimeType: file.mimeType,
+          sizeInBytes: file.sizeInBytes,
+          createdAt: file.createdAt,
+          updatedAt: file.updatedAt,
+        })),
         createdAt: message.createdAt,
         updatedAt: message.updatedAt,
-      })),
+      });
+    }
+
+    return {
+      ok: true,
+      value: items,
     };
   }
 }

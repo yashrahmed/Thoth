@@ -106,7 +106,6 @@ type ConstructionError = {
 
 ## Atomic Operations
 
-- GenerateId(): string
 - Now(): Date
 - Construct<T>(...props): Result<T, ConstructionError>
 - RequireNonEmptyString(value: string, fieldName: string): Result<string, ValidationError>
@@ -155,11 +154,10 @@ type ConstructionError = {
 
 ### CreateConversation (): Result<Conversation, ConstructionError | StoreError>
 
-1. GenerateId() → id.
-2. Now() → timestamp.
-3. Construct Conversation(id, createdAt: timestamp, updatedAt: timestamp) → conversation → if failure, return failure.
-4. PersistToConversationDBStore(conversation) → if failure, return failure.
-5. Return succeed(conversation).
+1. Now() → timestamp.
+2. Construct Conversation(createdAt: timestamp, updatedAt: timestamp) → conversation → if failure, return failure.
+3. PersistToConversationDBStore(conversation) → conversation → if failure, return failure.
+4. Return succeed(conversation).
 
 ### UpdateConversation (conversation: Conversation): Result<Conversation, NotFoundError | StoreError>
 
@@ -178,11 +176,10 @@ type ConstructionError = {
 2. RequirePresent(request.textContent, "textContent") → if failure, return failure.
 3. For each fileId: string in request.fileIds:
    1. RequireNonEmptyString(fileId, "fileId") → if failure, return failure.
-4. GenerateId() → id.
-5. Now() → timestamp.
-6. Construct Message(id, request.conversationId, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds) → message → if failure, return failure.
-7. PersistToMessageDBStore(message) → if failure, return failure.
-8. Return succeed(message).
+4. Now() → timestamp.
+5. Construct Message(request.conversationId, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds) → message → if failure, return failure.
+6. PersistToMessageDBStore(message) → message → if failure, return failure.
+7. Return succeed(message).
 
 ### GetMessage (messageId: string): Result<Message, NotFoundError | StoreError>
 
@@ -200,12 +197,11 @@ type ConstructionError = {
 1. RequirePresent(request.content, "content") → if failure, return failure.
 2. RequireNonEmptyString(request.filename, "filename") → if failure, return failure.
 3. RequireNonEmptyString(request.mimeType, "mimeType") → if failure, return failure.
-4. GenerateId() → id.
-5. UploadToBlobStore(request.content) → canonicalUrl → if failure, return failure.
-6. Now() → timestamp.
-7. Construct File(id, canonicalUrl, request.filename, request.mimeType, sizeInBytes, createdAt: timestamp, updatedAt: timestamp) → file → if failure, return failure.
-8. PersistToFileDBStore(file) → if failure, return failure.
-9. Return succeed(file).
+4. UploadToBlobStore(request.content) → canonicalUrl → if failure, return failure.
+5. Now() → timestamp.
+6. Construct File(canonicalUrl, request.filename, request.mimeType, sizeInBytes, createdAt: timestamp, updatedAt: timestamp) → file → if failure, return failure.
+7. PersistToFileDBStore(file) → file → if failure, return failure.
+8. Return succeed(file).
 
 ### GetFile (fileId: string): Result<FileContent, NotFoundError | StoreError | BlobStoreError>
 
@@ -220,9 +216,9 @@ type ConstructionError = {
 3. RemoveFromFileDBStore(fileId) → if failure, return failure.
 4. Return succeed(void).
 
-### PersistToConversationDBStore (conversation: Conversation): Result<void, StoreError>
+### PersistToConversationDBStore (conversation: Conversation): Result<Conversation, StoreError>
 
-1. Infra.UpsertConversationRow(conversation) → if failure, return failure.
+1. Infra.UpsertConversationRow(conversation) → conversation → if failure, return failure.
 
 ### ReadFromConversationDBStore (id: string): Result<Conversation, NotFoundError | StoreError>
 
@@ -232,9 +228,9 @@ type ConstructionError = {
 
 1. Infra.DeleteConversationRow(id) → if failure, return failure.
 
-### PersistToMessageDBStore (message: Message): Result<void, StoreError>
+### PersistToMessageDBStore (message: Message): Result<Message, StoreError>
 
-1. Infra.UpsertMessageRow(message) → if failure, return failure.
+1. Infra.UpsertMessageRow(message) → message → if failure, return failure.
 
 ### ReadFromMessageDBStore (id: string): Result<Message, NotFoundError | StoreError>
 
@@ -256,9 +252,9 @@ type ConstructionError = {
 
 1. Infra.DeleteMessageRow(id) → if failure, return failure.
 
-### PersistToFileDBStore (file: File): Result<void, StoreError>
+### PersistToFileDBStore (file: File): Result<File, StoreError>
 
-1. Infra.UpsertFileRow(file) → if failure, return failure.
+1. Infra.UpsertFileRow(file) → file → if failure, return failure.
 
 ### ReadFromFileDBStore (id: string): Result<File, NotFoundError | StoreError>
 
@@ -282,11 +278,12 @@ type ConstructionError = {
 
 ## Infra Actions
 
-### Infra.UpsertConversationRow (conversation: Conversation): Result<void, StoreError>
+### Infra.UpsertConversationRow (conversation: Conversation): Result<Conversation, StoreError>
 
 1. MapToRow(conversation) → row.
-2. PostgresClient.query(UpsertQuery("conversations", row)) → if error, return StoreError.
-3. Return succeed(void).
+2. PostgresClient.query(UpsertQuery("conversations", row)) → resultRow → if error, return StoreError.
+3. MapFromRow(resultRow) → conversation.
+4. Return succeed(conversation).
 
 ### Infra.SelectConversationRow (id: string): Result<Conversation, NotFoundError | StoreError>
 
@@ -300,11 +297,12 @@ type ConstructionError = {
 1. PostgresClient.query(DeleteByIdQuery("conversations", id)) → if error, return StoreError.
 2. Return succeed(void).
 
-### Infra.UpsertMessageRow (message: Message): Result<void, StoreError>
+### Infra.UpsertMessageRow (message: Message): Result<Message, StoreError>
 
 1. MapToRow(message) → row.
-2. PostgresClient.query(UpsertQuery("messages", row)) → if error, return StoreError.
-3. Return succeed(void).
+2. PostgresClient.query(UpsertQuery("messages", row)) → resultRow → if error, return StoreError.
+3. MapFromRow(resultRow) → message.
+4. Return succeed(message).
 
 ### Infra.SelectMessageRow (id: string): Result<Message, NotFoundError | StoreError>
 
@@ -335,11 +333,12 @@ type ConstructionError = {
 1. PostgresClient.query(DeleteByIdQuery("messages", id)) → if error, return StoreError.
 2. Return succeed(void).
 
-### Infra.UpsertFileRow (file: File): Result<void, StoreError>
+### Infra.UpsertFileRow (file: File): Result<File, StoreError>
 
 1. MapToRow(file) → row.
-2. PostgresClient.query(UpsertQuery("files", row)) → if error, return StoreError.
-3. Return succeed(void).
+2. PostgresClient.query(UpsertQuery("files", row)) → resultRow → if error, return StoreError.
+3. MapFromRow(resultRow) → file.
+4. Return succeed(file).
 
 ### Infra.SelectFileRow (id: string): Result<File, NotFoundError | StoreError>
 
@@ -372,7 +371,9 @@ type ConstructionError = {
 
 - Actions use early-return-on-failure: the first `Failure` result short-circuits
   the action. Loops also short-circuit on the first failure.
-- `GenerateId()` and `Now()` are infallible — not wrapped in `Result`.
+- `Now()` is infallible — not wrapped in `Result`.
+- Entity IDs are auto-generated by the database during insert. The
+  `PersistTo*DBStore` operations return the entity with its generated ID.
 - `NotFoundError` is separate from `StoreError` so callers can map to different
   HTTP status codes (404 vs 500).
 - `FileContent` is opaque in the domain layer — the domain never inspects or

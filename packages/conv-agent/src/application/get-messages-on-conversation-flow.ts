@@ -3,7 +3,6 @@ import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
-import { requirePositiveInteger } from "./validators";
 
 export interface GetMessagesQuery {
   readonly conversationId: string;
@@ -43,18 +42,6 @@ export class GetMessagesOnConversationFlow {
   ): Promise<
     Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>
   > {
-    const pageNumResult = requirePositiveInteger(query.pageNum, "pageNum");
-
-    if (!pageNumResult.ok) {
-      return pageNumResult;
-    }
-
-    const pageSizeResult = requirePositiveInteger(query.pageSize, "pageSize");
-
-    if (!pageSizeResult.ok) {
-      return pageSizeResult;
-    }
-
     const conversationResult = await this.conversationRepository.getById(
       query.conversationId,
     );
@@ -65,8 +52,8 @@ export class GetMessagesOnConversationFlow {
 
     const result = await this.messageDomainService.listPageByConversation({
       conversationId: query.conversationId,
-      fromSequence: (pageNumResult.value - 1) * pageSizeResult.value + 1,
-      limit: pageSizeResult.value,
+      pageNum: query.pageNum,
+      pageSize: query.pageSize,
     });
 
     if (!result.ok) {

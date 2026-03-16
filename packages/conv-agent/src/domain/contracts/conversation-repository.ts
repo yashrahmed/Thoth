@@ -1,5 +1,5 @@
 import type { Conversation } from "../objects/conversation";
-import type { NotFoundError, StoreError } from "../objects/errors";
+import type { NotFoundError, StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
 
 export interface CreateConversationRecord {
@@ -8,17 +8,19 @@ export interface CreateConversationRecord {
 }
 
 export interface ConversationPageRequest {
-  readonly offset: number;
-  readonly limit: number;
+  readonly pageNum: number;
+  readonly pageSize: number;
 }
 
 export interface ConversationRepository {
   create(
     record: CreateConversationRecord,
   ): Promise<Result<Conversation, StoreError>>;
-  getById(id: string): Promise<Result<Conversation, NotFoundError | StoreError>>;
+  getById(
+    id: string,
+  ): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>>;
   listPage(
     request: ConversationPageRequest,
-  ): Promise<Result<Conversation[], StoreError>>;
-  deleteById(id: string): Promise<Result<void, StoreError>>;
+  ): Promise<Result<Conversation[], ValidationError | StoreError>>;
+  deleteById(id: string): Promise<Result<void, ValidationError | StoreError>>;
 }

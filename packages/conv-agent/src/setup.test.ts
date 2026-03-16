@@ -17,11 +17,16 @@ import type {
 } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
 import { File as StoredFile } from "./domain/objects/file";
-import { NotFoundError, type StoreError } from "./domain/objects/errors";
+import { NotFoundError, ValidationError, type StoreError } from "./domain/objects/errors";
 import { Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
+import {
+  requireNonEmptyString,
+  requirePositiveInteger,
+  requirePresent,
+} from "./domain/validation";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
 import { DeleteConversationFlow } from "./application/delete-conversation-flow";
@@ -337,16 +342,34 @@ class InMemoryConversationRepository implements ConversationRepository {
   }
 
   async getById(id: string) {
-    const conversation = this.conversations.get(id);
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    const conversation = this.conversations.get(idResult.value);
 
     if (!conversation) {
-      return failure(new NotFoundError("Conversation", id));
+      return failure(new NotFoundError("Conversation", idResult.value));
     }
 
     return success(conversation);
   }
 
   async listPage(request: ConversationPageRequest) {
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
     const items = [...this.conversations.values()].sort((left, right) => {
       const updatedAtDelta =
         right.updatedAt.getTime() - left.updatedAt.getTime();
@@ -358,12 +381,20 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    return success(items.slice(request.offset, request.offset + request.limit));
+    const offset = (pageNumResult.value - 1) * pageSizeResult.value;
+
+    return success(items.slice(offset, offset + pageSizeResult.value));
   }
 
   async deleteById(id: string) {
-    this.deletedIds.push(id);
-    this.conversations.delete(id);
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    this.deletedIds.push(idResult.value);
+    this.conversations.delete(idResult.value);
     return success(undefined);
   }
 }
@@ -380,6 +411,12 @@ class InMemoryMessageRepository implements MessageRepository {
   }
 
   async create(record: CreateMessageRecord) {
+    const validationResult = validateCreateMessageRecord(record);
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
     const message = mustCreateMessage(
       `message-${this.messages.size + 1}`,
       record.conversationId,
@@ -403,30 +440,71 @@ class InMemoryMessageRepository implements MessageRepository {
   }
 
   async listPageByConversation(request: MessagePageRequest) {
+    const conversationIdResult = requireNonEmptyString(
+      request.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
+    const fromSequence = (pageNumResult.value - 1) * pageSizeResult.value + 1;
+
     return success(
       [...this.messages.values()]
         .filter(
           (message) =>
-            message.conversationId === request.conversationId &&
-            message.sequenceNumber >= request.fromSequence,
+            message.conversationId === conversationIdResult.value &&
+            message.sequenceNumber >= fromSequence,
         )
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
-        .slice(0, request.limit),
+        .slice(0, pageSizeResult.value),
     );
   }
 
   async listByConversation(conversationId: string) {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
     return success(
       [...this.messages.values()].filter(
-        (message) => message.conversationId === conversationId,
+        (message) => message.conversationId === conversationIdResult.value,
       ),
     );
   }
 
   async countByConversation(conversationId: string) {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
     return success(
       [...this.messages.values()].filter(
-        (message) => message.conversationId === conversationId,
+        (message) => message.conversationId === conversationIdResult.value,
       ).length,
     );
   }
@@ -486,7 +564,34 @@ class InMemoryBlobRepository implements BlobRepository {
     readonly filename: string;
     readonly mimeType: string;
   }) {
-    const url = `/conversations/${request.conversationId}/file-${this.blobs.size + 1}-${request.filename}`;
+    const contentResult = requirePresent(request.content, "content");
+
+    if (!contentResult.ok) {
+      return contentResult;
+    }
+
+    const conversationIdResult = requireNonEmptyString(
+      request.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const filenameResult = requireNonEmptyString(request.filename, "filename");
+
+    if (!filenameResult.ok) {
+      return filenameResult;
+    }
+
+    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
+
+    if (!mimeTypeResult.ok) {
+      return mimeTypeResult;
+    }
+
+    const url = `/conversations/${conversationIdResult.value}/file-${this.blobs.size + 1}-${filenameResult.value}`;
     this.blobs.set(url, request.content);
     return success(url);
   }
@@ -541,4 +646,42 @@ function mustCreateFile(
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
+}
+
+function validateCreateMessageRecord(
+  record: CreateMessageRecord,
+): Result<void, ValidationError> {
+  const conversationIdResult = requireNonEmptyString(
+    record.conversationId,
+    "conversationId",
+  );
+
+  if (!conversationIdResult.ok) {
+    return conversationIdResult;
+  }
+
+  const sequenceNumberResult = requirePositiveInteger(
+    record.sequenceNumber,
+    "sequenceNumber",
+  );
+
+  if (!sequenceNumberResult.ok) {
+    return sequenceNumberResult;
+  }
+
+  const textContentResult = requirePresent(record.textContent, "textContent");
+
+  if (!textContentResult.ok) {
+    return textContentResult;
+  }
+
+  for (const fileId of record.fileIds) {
+    const fileIdResult = requireNonEmptyString(fileId, "fileId");
+
+    if (!fileIdResult.ok) {
+      return fileIdResult;
+    }
+  }
+
+  return success(undefined);
 }

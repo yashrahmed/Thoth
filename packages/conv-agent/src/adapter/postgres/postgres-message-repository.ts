@@ -4,8 +4,13 @@ import type {
   MessageRepository,
 } from "../../domain/contracts/message-repository";
 import { Message } from "../../domain/objects/message";
-import { NotFoundError, StoreError } from "../../domain/objects/errors";
+import { NotFoundError, StoreError, ValidationError } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
+import {
+  requireNonEmptyString,
+  requirePositiveInteger,
+  requirePresent,
+} from "../../domain/validation";
 import type { PostgresDatabase } from "./postgres-database";
 
 interface MessageRow {
@@ -26,6 +31,12 @@ export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
   async create(record: CreateMessageRecord) {
+    const validationResult = validateCreateRecord(record);
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
     try {
       const rows = await this.sql<MessageRow[]>`
         insert into thoth.messages (
@@ -123,6 +134,29 @@ export class PostgresMessageRepository implements MessageRepository {
   }
 
   async listPageByConversation(request: MessagePageRequest) {
+    const conversationIdResult = requireNonEmptyString(
+      request.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
+    const fromSequence = (pageNumResult.value - 1) * pageSizeResult.value + 1;
+
     try {
       const rows = await this.sql<MessageRow[]>`
         select
@@ -143,10 +177,10 @@ export class PostgresMessageRepository implements MessageRepository {
           ) as file_ids
         from thoth.messages m
         where
-          m.conversation_id = ${request.conversationId}
-          and m.sequence_number >= ${request.fromSequence}
+          m.conversation_id = ${conversationIdResult.value}
+          and m.sequence_number >= ${fromSequence}
         order by m.sequence_number asc
-        limit ${request.limit}
+        limit ${pageSizeResult.value}
       `;
 
       return mapRows(rows, "readPage");
@@ -156,6 +190,15 @@ export class PostgresMessageRepository implements MessageRepository {
   }
 
   async listByConversation(conversationId: string) {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
     try {
       const rows = await this.sql<MessageRow[]>`
         select
@@ -175,7 +218,7 @@ export class PostgresMessageRepository implements MessageRepository {
             array[]::text[]
           ) as file_ids
         from thoth.messages m
-        where m.conversation_id = ${conversationId}
+        where m.conversation_id = ${conversationIdResult.value}
         order by m.sequence_number asc
       `;
 
@@ -186,11 +229,20 @@ export class PostgresMessageRepository implements MessageRepository {
   }
 
   async countByConversation(conversationId: string) {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
     try {
       const rows = await this.sql<CountRow[]>`
         select count(*)::int as count
         from thoth.messages
-        where conversation_id = ${conversationId}
+        where conversation_id = ${conversationIdResult.value}
       `;
 
       const row = rows[0];
@@ -282,4 +334,42 @@ function toDate(value: string | Date): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
+}
+
+function validateCreateRecord(
+  record: CreateMessageRecord,
+): Result<void, ValidationError> {
+  const conversationIdResult = requireNonEmptyString(
+    record.conversationId,
+    "conversationId",
+  );
+
+  if (!conversationIdResult.ok) {
+    return conversationIdResult;
+  }
+
+  const sequenceNumberResult = requirePositiveInteger(
+    record.sequenceNumber,
+    "sequenceNumber",
+  );
+
+  if (!sequenceNumberResult.ok) {
+    return sequenceNumberResult;
+  }
+
+  const textContentResult = requirePresent(record.textContent, "textContent");
+
+  if (!textContentResult.ok) {
+    return textContentResult;
+  }
+
+  for (const fileId of record.fileIds) {
+    const fileIdResult = requireNonEmptyString(fileId, "fileId");
+
+    if (!fileIdResult.ok) {
+      return fileIdResult;
+    }
+  }
+
+  return success(undefined);
 }

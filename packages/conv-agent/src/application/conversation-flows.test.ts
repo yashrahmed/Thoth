@@ -20,11 +20,17 @@ import {
   BlobStoreError,
   NotFoundError,
   StoreError,
+  ValidationError,
 } from "../domain/objects/errors";
 import { Message } from "../domain/objects/message";
 import { failure, success, type Result } from "../domain/objects/result";
 import { FileDomainService } from "../domain/services/file-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
+import {
+  requireNonEmptyString,
+  requirePositiveInteger,
+  requirePresent,
+} from "../domain/validation";
 import { AppendMessageToConversationFlow } from "./append-message-to-conversation-flow";
 import { CreateConversationFlow } from "./create-conversation-flow";
 import { DeleteConversationFlow } from "./delete-conversation-flow";
@@ -88,7 +94,7 @@ describe("conversation flows", () => {
       return;
     }
 
-    expect(repository.lastPageRequest).toEqual({ offset: 1, limit: 1 });
+    expect(repository.lastPageRequest).toEqual({ pageNum: 2, pageSize: 1 });
     expect(validResult.value.map((conversation) => conversation.id)).toEqual([
       "conversation-2",
     ]);
@@ -269,8 +275,8 @@ describe("conversation flows", () => {
 
     expect(messageRepository.lastPageRequest).toEqual({
       conversationId: "conversation-1",
-      fromSequence: 1,
-      limit: 1,
+      pageNum: 1,
+      pageSize: 1,
     });
     expect(validResult.value.map((message) => message.id)).toEqual(["message-1"]);
     expect(validResult.value[0]?.files).toEqual([
@@ -410,10 +416,16 @@ class InMemoryConversationRepository implements ConversationRepository {
   }
 
   async getById(id: string) {
-    const conversation = this.conversations.get(id);
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    const conversation = this.conversations.get(idResult.value);
 
     if (!conversation) {
-      return failure(new NotFoundError("Conversation", id));
+      return failure(new NotFoundError("Conversation", idResult.value));
     }
 
     return success(conversation);
@@ -421,7 +433,19 @@ class InMemoryConversationRepository implements ConversationRepository {
 
   async listPage(
     request: ConversationPageRequest,
-  ): Promise<Result<Conversation[], StoreError>> {
+  ): Promise<Result<Conversation[], ValidationError | StoreError>> {
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
     this.lastPageRequest = request;
     const items = [...this.conversations.values()].sort((left, right) => {
       const updatedAtDelta =
@@ -434,12 +458,20 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    return success(items.slice(request.offset, request.offset + request.limit));
+    const offset = (pageNumResult.value - 1) * pageSizeResult.value;
+
+    return success(items.slice(offset, offset + pageSizeResult.value));
   }
 
-  async deleteById(id: string): Promise<Result<void, StoreError>> {
-    this.deletedIds.push(id);
-    this.conversations.delete(id);
+  async deleteById(id: string): Promise<Result<void, ValidationError | StoreError>> {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    this.deletedIds.push(idResult.value);
+    this.conversations.delete(idResult.value);
     return success(undefined);
   }
 }
@@ -459,7 +491,15 @@ class InMemoryMessageRepository implements MessageRepository {
     }
   }
 
-  async create(record: CreateMessageRecord): Promise<Result<Message, StoreError>> {
+  async create(
+    record: CreateMessageRecord,
+  ): Promise<Result<Message, ValidationError | StoreError>> {
+    const validationResult = validateCreateMessageRecord(record);
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
     this.createdRecords.push(record);
     const message = mustCreateMessage(
       `message-${this.createdRecords.length}`,
@@ -485,32 +525,76 @@ class InMemoryMessageRepository implements MessageRepository {
 
   async listPageByConversation(
     request: MessagePageRequest,
-  ): Promise<Result<Message[], StoreError>> {
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(
+      request.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
     this.lastPageRequest = request;
+    const fromSequence = (pageNumResult.value - 1) * pageSizeResult.value + 1;
     return success(
       [...this.messages.values()]
         .filter(
           (message) =>
-            message.conversationId === request.conversationId &&
-            message.sequenceNumber >= request.fromSequence,
+            message.conversationId === conversationIdResult.value &&
+            message.sequenceNumber >= fromSequence,
         )
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
-        .slice(0, request.limit),
+        .slice(0, pageSizeResult.value),
     );
   }
 
-  async listByConversation(conversationId: string): Promise<Result<Message[], StoreError>> {
+  async listByConversation(
+    conversationId: string,
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
     return success(
       [...this.messages.values()]
-        .filter((message) => message.conversationId === conversationId)
+        .filter((message) => message.conversationId === conversationIdResult.value)
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber),
     );
   }
 
-  async countByConversation(conversationId: string): Promise<Result<number, StoreError>> {
+  async countByConversation(
+    conversationId: string,
+  ): Promise<Result<number, ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
     return success(
       [...this.messages.values()].filter(
-        (message) => message.conversationId === conversationId,
+        (message) => message.conversationId === conversationIdResult.value,
       ).length,
     );
   }
@@ -595,8 +679,35 @@ class InMemoryBlobRepository implements BlobRepository {
     readonly filename: string;
     readonly mimeType: string;
   }) {
+    const contentResult = requirePresent(request.content, "content");
+
+    if (!contentResult.ok) {
+      return contentResult;
+    }
+
+    const conversationIdResult = requireNonEmptyString(
+      request.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const filenameResult = requireNonEmptyString(request.filename, "filename");
+
+    if (!filenameResult.ok) {
+      return filenameResult;
+    }
+
+    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
+
+    if (!mimeTypeResult.ok) {
+      return mimeTypeResult;
+    }
+
     this.uploads.push(request);
-    const url = `/conversations/${request.conversationId}/file-${this.uploads.length}-${request.filename}`;
+    const url = `/conversations/${conversationIdResult.value}/file-${this.uploads.length}-${filenameResult.value}`;
     this.blobs.set(url, request.content);
     return success(url);
   }
@@ -656,4 +767,42 @@ function mustCreateFile(
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
+}
+
+function validateCreateMessageRecord(
+  record: CreateMessageRecord,
+): Result<void, ValidationError> {
+  const conversationIdResult = requireNonEmptyString(
+    record.conversationId,
+    "conversationId",
+  );
+
+  if (!conversationIdResult.ok) {
+    return conversationIdResult;
+  }
+
+  const sequenceNumberResult = requirePositiveInteger(
+    record.sequenceNumber,
+    "sequenceNumber",
+  );
+
+  if (!sequenceNumberResult.ok) {
+    return sequenceNumberResult;
+  }
+
+  const textContentResult = requirePresent(record.textContent, "textContent");
+
+  if (!textContentResult.ok) {
+    return textContentResult;
+  }
+
+  for (const fileId of record.fileIds) {
+    const fileIdResult = requireNonEmptyString(fileId, "fileId");
+
+    if (!fileIdResult.ok) {
+      return fileIdResult;
+    }
+  }
+
+  return success(undefined);
 }

@@ -7,8 +7,13 @@ import { Conversation } from "../../domain/objects/conversation";
 import {
   NotFoundError,
   StoreError,
+  ValidationError,
 } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
+import {
+  requireNonEmptyString,
+  requirePositiveInteger,
+} from "../../domain/validation";
 import type { PostgresDatabase } from "./postgres-database";
 
 interface ConversationRow {
@@ -38,12 +43,18 @@ export class PostgresConversationRepository implements ConversationRepository {
 
   async getById(
     id: string,
-  ): Promise<Result<Conversation, NotFoundError | StoreError>> {
+  ): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
     try {
       const rows = await this.sql<ConversationRow[]>`
         select id, created_at, updated_at
         from thoth.conversations
-        where id = ${id}
+        where id = ${idResult.value}
       `;
 
       const row = rows[0];
@@ -60,14 +71,28 @@ export class PostgresConversationRepository implements ConversationRepository {
 
   async listPage(
     request: ConversationPageRequest,
-  ): Promise<Result<Conversation[], StoreError>> {
+  ): Promise<Result<Conversation[], ValidationError | StoreError>> {
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
+    const offset = (pageNumResult.value - 1) * pageSizeResult.value;
+
     try {
       const rows = await this.sql<ConversationRow[]>`
         select id, created_at, updated_at
         from thoth.conversations
         order by updated_at desc, id desc
-        limit ${request.limit}
-        offset ${request.offset}
+        limit ${pageSizeResult.value}
+        offset ${offset}
       `;
 
       const conversations: Conversation[] = [];
@@ -90,11 +115,17 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
   }
 
-  async deleteById(id: string): Promise<Result<void, StoreError>> {
+  async deleteById(id: string): Promise<Result<void, ValidationError | StoreError>> {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
     try {
       await this.sql`
         delete from thoth.conversations
-        where id = ${id}
+        where id = ${idResult.value}
       `;
 
       return success(undefined);

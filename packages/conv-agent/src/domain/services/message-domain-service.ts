@@ -5,18 +5,12 @@ import type {
 } from "../contracts/message-repository";
 import type { Message } from "../objects/message";
 import type {
-  ConstructionError,
   BlobStoreError,
   NotFoundError,
   StoreError,
   ValidationError,
 } from "../objects/errors";
 import type { Result } from "../objects/result";
-import {
-  requireNonEmptyString,
-  requirePositiveInteger,
-  requirePresent,
-} from "../validation";
 import type { FileDomainService } from "./file-domain-service";
 
 export interface CreateMessageInput {
@@ -40,39 +34,7 @@ export class MessageDomainService {
 
   async createMessage(
     request: CreateMessageInput,
-  ): Promise<Result<Message, ValidationError | ConstructionError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const sequenceNumberResult = requirePositiveInteger(
-      request.sequenceNumber,
-      "sequenceNumber",
-    );
-
-    if (!sequenceNumberResult.ok) {
-      return sequenceNumberResult;
-    }
-
-    const textContentResult = requirePresent(request.textContent, "textContent");
-
-    if (!textContentResult.ok) {
-      return textContentResult;
-    }
-
-    for (const fileId of request.fileIds) {
-      const fileIdResult = requireNonEmptyString(fileId, "fileId");
-
-      if (!fileIdResult.ok) {
-        return fileIdResult;
-      }
-    }
-
+  ): Promise<Result<Message, ValidationError | StoreError>> {
     return this.messageRepository.create(this.buildRecord(request));
   }
 
@@ -117,25 +79,25 @@ export class MessageDomainService {
 
   async listPageByConversation(
     request: MessagePageRequest,
-  ): Promise<Result<Message[], StoreError>> {
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
     return this.messageRepository.listPageByConversation(request);
   }
 
   async listByConversation(
     conversationId: string,
-  ): Promise<Result<Message[], StoreError>> {
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
     return this.messageRepository.listByConversation(conversationId);
   }
 
   async countByConversation(
     conversationId: string,
-  ): Promise<Result<number, StoreError>> {
+  ): Promise<Result<number, ValidationError | StoreError>> {
     return this.messageRepository.countByConversation(conversationId);
   }
 
   async createNextMessage(
     request: CreateNextMessageInput,
-  ): Promise<Result<Message, ValidationError | ConstructionError | StoreError>> {
+  ): Promise<Result<Message, ValidationError | StoreError>> {
     const countResult = await this.messageRepository.countByConversation(
       request.conversationId,
     );

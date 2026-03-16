@@ -4,7 +4,6 @@ import { type MessageDomainService } from "../domain/services/message-domain-ser
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type {
   BlobStoreError,
-  ConstructionError,
   NotFoundError,
   StoreError,
   ValidationError,
@@ -49,7 +48,6 @@ export class AppendMessageToConversationFlow {
       | NotFoundError
       | StoreError
       | BlobStoreError
-      | ConstructionError
     >
   > {
     const conversationResult = await this.conversationRepository.getById(

@@ -9,13 +9,11 @@ import type {
 import type { File as FileEntity } from "../objects/file";
 import type {
   BlobStoreError,
-  ConstructionError,
   NotFoundError,
   StoreError,
   ValidationError,
 } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { requireNonEmptyString, requirePresent } from "../validation";
 
 export interface UploadFileInput {
   readonly conversationId: string;
@@ -42,43 +40,13 @@ export class FileDomainService {
   async uploadFile(
     request: UploadFileInput,
   ): Promise<
-    Result<
-      FileEntity,
-      ValidationError | ConstructionError | BlobStoreError | StoreError
-    >
+    Result<FileEntity, ValidationError | BlobStoreError | StoreError>
   > {
-    const contentResult = requirePresent(request.content, "content");
-
-    if (!contentResult.ok) {
-      return contentResult;
-    }
-
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const filenameResult = requireNonEmptyString(request.filename, "filename");
-
-    if (!filenameResult.ok) {
-      return filenameResult;
-    }
-
-    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
-
-    if (!mimeTypeResult.ok) {
-      return mimeTypeResult;
-    }
-
     const uploadResult = await this.blobRepository.upload({
-      conversationId: conversationIdResult.value,
+      conversationId: request.conversationId,
       content: request.content,
-      filename: filenameResult.value,
-      mimeType: mimeTypeResult.value,
+      filename: request.filename,
+      mimeType: request.mimeType,
     });
 
     if (!uploadResult.ok) {
@@ -91,10 +59,7 @@ export class FileDomainService {
   async uploadFiles(
     request: UploadFilesInput,
   ): Promise<
-    Result<
-      ReadonlyArray<FileEntity>,
-      ValidationError | ConstructionError | BlobStoreError | StoreError
-    >
+    Result<ReadonlyArray<FileEntity>, ValidationError | BlobStoreError | StoreError>
   > {
     const files: FileEntity[] = [];
 

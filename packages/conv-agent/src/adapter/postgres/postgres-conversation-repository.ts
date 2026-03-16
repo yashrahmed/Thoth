@@ -32,7 +32,7 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return mapRow(rows[0], "persist");
     } catch (error) {
-      return failure(new StoreError("persist", getErrorMessage(error)));
+      return failure(new StoreError("Conversation", "persist", getErrorMessage(error)));
     }
   }
 
@@ -49,12 +49,12 @@ export class PostgresConversationRepository implements ConversationRepository {
       const row = rows[0];
 
       if (!row) {
-        return failure(new NotFoundError(id));
+        return failure(new NotFoundError("Conversation", id));
       }
 
       return mapRow(row, "read");
     } catch (error) {
-      return failure(new StoreError("read", getErrorMessage(error)));
+      return failure(new StoreError("Conversation", "read", getErrorMessage(error)));
     }
   }
 
@@ -84,7 +84,9 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return success(conversations);
     } catch (error) {
-      return failure(new StoreError("readPage", getErrorMessage(error)));
+      return failure(
+        new StoreError("Conversation", "readPage", getErrorMessage(error)),
+      );
     }
   }
 
@@ -97,7 +99,7 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return success(undefined);
     } catch (error) {
-      return failure(new StoreError("remove", getErrorMessage(error)));
+      return failure(new StoreError("Conversation", "remove", getErrorMessage(error)));
     }
   }
 }
@@ -107,7 +109,9 @@ function mapRow(
   operation: StoreError["operation"],
 ): Result<Conversation, StoreError> {
   if (!row) {
-    return failure(new StoreError(operation, "Conversation row was not returned."));
+    return failure(
+      new StoreError("Conversation", operation, "Conversation row was not returned."),
+    );
   }
 
   try {
@@ -120,10 +124,16 @@ function mapRow(
     );
   } catch (error) {
     if (error instanceof Error) {
-      return failure(new StoreError(operation, error.message));
+      return failure(new StoreError("Conversation", operation, error.message));
     }
 
-    return failure(new StoreError(operation, "Unexpected conversation mapping error."));
+    return failure(
+      new StoreError(
+        "Conversation",
+        operation,
+        "Unexpected conversation mapping error.",
+      ),
+    );
   }
 }
 

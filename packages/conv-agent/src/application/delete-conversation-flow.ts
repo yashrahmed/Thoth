@@ -1,5 +1,12 @@
 import type { ConversationRepository } from "../domain/contracts/conversation-repository";
-import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
+import { type FileDomainService } from "../domain/services/file-domain-service";
+import { type MessageDomainService } from "../domain/services/message-domain-service";
+import type {
+  BlobStoreError,
+  NotFoundError,
+  StoreError,
+  ValidationError,
+} from "../domain/objects/errors";
 import { type Result, success } from "../domain/objects/result";
 import { requireNonEmptyString } from "./validators";
 
@@ -8,11 +15,17 @@ export interface DeleteConversationCommand {
 }
 
 export class DeleteConversationFlow {
-  constructor(private readonly repository: ConversationRepository) {}
+  constructor(
+    private readonly repository: ConversationRepository,
+    private readonly messageDomainService: MessageDomainService,
+    private readonly fileDomainService: FileDomainService,
+  ) {}
 
   async execute(
     command: DeleteConversationCommand,
-  ): Promise<Result<void, NotFoundError | StoreError | ValidationError>> {
+  ): Promise<
+    Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>
+  > {
     const conversationIdResult = requireNonEmptyString(
       command.conversationId,
       "conversationId",
@@ -26,6 +39,25 @@ export class DeleteConversationFlow {
 
     if (!getResult.ok) {
       return getResult;
+    }
+
+    const messagesResult = await this.messageDomainService.listByConversation(
+      conversationIdResult.value,
+    );
+
+    if (!messagesResult.ok) {
+      return messagesResult;
+    }
+
+    for (const message of messagesResult.value) {
+      const deleteMessageResult = await this.messageDomainService.deleteMessageWithFiles(
+        message.id,
+        this.fileDomainService,
+      );
+
+      if (!deleteMessageResult.ok) {
+        return deleteMessageResult;
+      }
     }
 
     const deleteResult = await this.repository.deleteById(conversationIdResult.value);

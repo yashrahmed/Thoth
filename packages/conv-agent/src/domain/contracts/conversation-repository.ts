@@ -13,8 +13,12 @@ export interface ConversationPageRequest {
 }
 
 export interface ConversationRepository {
-  create(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>>;
+  create(
+    record: CreateConversationRecord,
+  ): Promise<Result<Conversation, StoreError>>;
   getById(id: string): Promise<Result<Conversation, NotFoundError | StoreError>>;
-  listPage(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>>;
+  listPage(
+    request: ConversationPageRequest,
+  ): Promise<Result<Conversation[], StoreError>>;
   deleteById(id: string): Promise<Result<void, StoreError>>;
 }

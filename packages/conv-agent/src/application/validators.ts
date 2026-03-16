@@ -1,28 +1,5 @@
-import { ValidationError } from "../domain/objects/errors";
-import { failure, type Result, success } from "../domain/objects/result";
-
-export function requireNonEmptyString(
-  value: string,
-  fieldName: string,
-): Result<string, ValidationError> {
-  if (value.trim().length === 0) {
-    return failure(
-      new ValidationError(fieldName, `${fieldName} must be a non-empty string.`),
-    );
-  }
-
-  return success(value);
-}
-
-export function requirePositiveInteger(
-  value: number,
-  fieldName: string,
-): Result<number, ValidationError> {
-  if (!Number.isInteger(value) || value <= 0) {
-    return failure(
-      new ValidationError(fieldName, `${fieldName} must be a positive integer.`),
-    );
-  }
-
-  return success(value);
-}
+export {
+  requireNonEmptyString,
+  requirePositiveInteger,
+  requirePresent,
+} from "../domain/validators";

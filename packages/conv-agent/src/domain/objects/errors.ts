@@ -1,3 +1,5 @@
+export type EntityType = "Conversation" | "Message" | "File";
+
 export class ValidationError {
   readonly kind = "ValidationError";
 
@@ -9,30 +11,46 @@ export class ValidationError {
 
 export class NotFoundError {
   readonly kind = "NotFoundError";
-  readonly entityType = "Conversation";
 
-  constructor(readonly id: string) {}
+  constructor(
+    readonly entityType: EntityType,
+    readonly id: string,
+  ) {}
 }
 
 export class StoreError {
   readonly kind = "StoreError";
-  readonly entityType = "Conversation";
 
   constructor(
+    readonly entityType: EntityType,
     readonly operation: "persist" | "read" | "remove" | "readPage",
+    readonly message: string,
+  ) {}
+}
+
+export class BlobStoreError {
+  readonly kind = "BlobStoreError";
+
+  constructor(
+    readonly operation: "upload" | "fetch" | "delete",
     readonly message: string,
   ) {}
 }
 
 export class ConstructionError {
   readonly kind = "ConstructionError";
-  readonly entityType = "Conversation";
 
-  constructor(readonly message: string) {}
+  constructor(
+    readonly entityType: EntityType,
+    readonly message: string,
+  ) {}
 }
 
-export type ConversationError =
+export type DomainError =
   | ValidationError
   | NotFoundError
   | StoreError
+  | BlobStoreError
   | ConstructionError;
+
+export type ConversationError = DomainError;

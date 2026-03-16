@@ -1,27 +1,37 @@
 import { describe, expect, test } from "bun:test";
+import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
+import type { BlobRepository } from "./domain/contracts/blob-repository";
 import type {
   CreateConversationRecord,
   ConversationPageRequest,
   ConversationRepository,
 } from "./domain/contracts/conversation-repository";
+import type {
+  CreateFileRecord,
+  FileRepository,
+} from "./domain/contracts/file-repository";
+import type {
+  CreateMessageRecord,
+  MessagePageRequest,
+  MessageRepository,
+} from "./domain/contracts/message-repository";
+import { Conversation } from "./domain/objects/conversation";
+import { File as StoredFile } from "./domain/objects/file";
+import { NotFoundError, type StoreError } from "./domain/objects/errors";
+import { Message } from "./domain/objects/message";
+import { failure, success, type Result } from "./domain/objects/result";
+import { FileDomainService } from "./domain/services/file-domain-service";
+import { MessageDomainService } from "./domain/services/message-domain-service";
+import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
 import { DeleteConversationFlow } from "./application/delete-conversation-flow";
 import { GetConversationFlow } from "./application/get-conversation-flow";
+import { GetMessagesOnConversationFlow } from "./application/get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "./application/list-conversations-flow";
-import { Conversation } from "./domain/objects/conversation";
-import { NotFoundError, type StoreError } from "./domain/objects/errors";
-import { failure, success, type Result } from "./domain/objects/result";
-import { createConvAgentFetchHandler } from "./setup";
 
-describe("createConvAgentFetchHandler", () => {
+describe("createConversationHttpHandler", () => {
   test("returns a local health response", async () => {
-    const repository = new InMemoryConversationRepository();
-    const handler = createConvAgentFetchHandler(
-      new CreateConversationFlow(repository, () => new Date("2026-03-16T12:00:00.000Z")),
-      new GetConversationFlow(repository),
-      new ListConversationsFlow(repository),
-      new DeleteConversationFlow(repository),
-    );
+    const handler = buildHandler();
 
     const response = await handler(new Request("http://localhost/health"));
 
@@ -33,13 +43,7 @@ describe("createConvAgentFetchHandler", () => {
   });
 
   test("creates a conversation", async () => {
-    const repository = new InMemoryConversationRepository();
-    const handler = createConvAgentFetchHandler(
-      new CreateConversationFlow(repository, () => new Date("2026-03-16T12:00:00.000Z")),
-      new GetConversationFlow(repository),
-      new ListConversationsFlow(repository),
-      new DeleteConversationFlow(repository),
-    );
+    const handler = buildHandler();
 
     const response = await handler(
       new Request("http://localhost/conversations", { method: "POST" }),
@@ -58,12 +62,7 @@ describe("createConvAgentFetchHandler", () => {
     repository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
     ]);
-    const handler = createConvAgentFetchHandler(
-      new CreateConversationFlow(repository, () => new Date("2026-03-16T12:00:00.000Z")),
-      new GetConversationFlow(repository),
-      new ListConversationsFlow(repository),
-      new DeleteConversationFlow(repository),
-    );
+    const handler = buildHandler({ conversationRepository: repository });
 
     const successResponse = await handler(
       new Request("http://localhost/conversations/conversation-1"),
@@ -82,7 +81,7 @@ describe("createConvAgentFetchHandler", () => {
 
     expect(missingResponse.status).toBe(404);
     expect(await missingResponse.json()).toEqual({
-      error: new NotFoundError("missing"),
+      error: new NotFoundError("Conversation", "missing"),
     });
   });
 
@@ -92,12 +91,7 @@ describe("createConvAgentFetchHandler", () => {
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
       mustCreateConversation("conversation-2", "2026-03-16T13:00:00.000Z"),
     ]);
-    const handler = createConvAgentFetchHandler(
-      new CreateConversationFlow(repository, () => new Date("2026-03-16T12:00:00.000Z")),
-      new GetConversationFlow(repository),
-      new ListConversationsFlow(repository),
-      new DeleteConversationFlow(repository),
-    );
+    const handler = buildHandler({ conversationRepository: repository });
 
     const response = await handler(
       new Request("http://localhost/conversations?pageNum=1&pageSize=2"),
@@ -128,17 +122,120 @@ describe("createConvAgentFetchHandler", () => {
     expect(invalidResponse.status).toBe(400);
   });
 
+  test("appends a message with multipart form data", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([
+      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
+    ]);
+    const handler = buildHandler({ conversationRepository });
+    const formData = new FormData();
+
+    formData.set("textContent", "hello");
+    formData.set(
+      "attachment",
+      new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }),
+    );
+
+    const response = await handler(
+      new Request("http://localhost/conversations/conversation-1/messages", {
+        method: "POST",
+        body: formData,
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      id: "message-1",
+      conversationId: "conversation-1",
+      sequenceNumber: 1,
+      textContent: "hello",
+      fileIds: ["file-1"],
+      createdAt: "2026-03-16T12:00:00.000Z",
+      updatedAt: "2026-03-16T12:00:00.000Z",
+    });
+  });
+
+  test("lists messages for a conversation", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([
+      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
+    ]);
+    const messageRepository = new InMemoryMessageRepository();
+    messageRepository.seed([
+      mustCreateMessage("message-1", "conversation-1", 1, "one", [], "2026-03-16T12:00:00.000Z"),
+      mustCreateMessage("message-2", "conversation-1", 2, "two", [], "2026-03-16T12:01:00.000Z"),
+    ]);
+    const handler = buildHandler({
+      conversationRepository,
+      messageRepository,
+    });
+
+    const response = await handler(
+      new Request(
+        "http://localhost/conversations/conversation-1/messages?pageNum=1&pageSize=2",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      items: [
+        {
+          id: "message-1",
+          conversationId: "conversation-1",
+          sequenceNumber: 1,
+          textContent: "one",
+          fileIds: [],
+          createdAt: "2026-03-16T12:00:00.000Z",
+          updatedAt: "2026-03-16T12:00:00.000Z",
+        },
+        {
+          id: "message-2",
+          conversationId: "conversation-1",
+          sequenceNumber: 2,
+          textContent: "two",
+          fileIds: [],
+          createdAt: "2026-03-16T12:01:00.000Z",
+          updatedAt: "2026-03-16T12:01:00.000Z",
+        },
+      ],
+      pageNum: 1,
+      pageSize: 2,
+    });
+  });
+
+  test("maps invalid message routes to 400 and missing conversations to 404", async () => {
+    const handler = buildHandler();
+
+    const invalidFormData = new FormData();
+    invalidFormData.set(
+      "attachment",
+      new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }),
+    );
+
+    const invalidResponse = await handler(
+      new Request("http://localhost/conversations/conversation-1/messages", {
+        method: "POST",
+        body: invalidFormData,
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+
+    const missingResponse = await handler(
+      new Request(
+        "http://localhost/conversations/missing/messages?pageNum=1&pageSize=1",
+      ),
+    );
+
+    expect(missingResponse.status).toBe(404);
+  });
+
   test("deletes a conversation", async () => {
     const repository = new InMemoryConversationRepository();
     repository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
     ]);
-    const handler = createConvAgentFetchHandler(
-      new CreateConversationFlow(repository, () => new Date("2026-03-16T12:00:00.000Z")),
-      new GetConversationFlow(repository),
-      new ListConversationsFlow(repository),
-      new DeleteConversationFlow(repository),
-    );
+    const handler = buildHandler({ conversationRepository: repository });
 
     const response = await handler(
       new Request("http://localhost/conversations/conversation-1", {
@@ -150,6 +247,43 @@ describe("createConvAgentFetchHandler", () => {
     expect(repository.deletedIds).toEqual(["conversation-1"]);
   });
 });
+
+function buildHandler(overrides?: {
+  readonly conversationRepository?: InMemoryConversationRepository;
+  readonly messageRepository?: InMemoryMessageRepository;
+  readonly fileRepository?: InMemoryFileRepository;
+  readonly blobRepository?: InMemoryBlobRepository;
+}) {
+  const conversationRepository =
+    overrides?.conversationRepository ?? new InMemoryConversationRepository();
+  const messageRepository =
+    overrides?.messageRepository ?? new InMemoryMessageRepository();
+  const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
+  const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
+  const now = () => new Date("2026-03-16T12:00:00.000Z");
+  const messageDomainService = new MessageDomainService(messageRepository, now);
+  const fileDomainService = new FileDomainService(fileRepository, blobRepository, now);
+
+  return createConversationHttpHandler(
+    new CreateConversationFlow(conversationRepository, now),
+    new GetConversationFlow(conversationRepository),
+    new ListConversationsFlow(conversationRepository),
+    new DeleteConversationFlow(
+      conversationRepository,
+      messageDomainService,
+      fileDomainService,
+    ),
+    new AppendMessageToConversationFlow(
+      conversationRepository,
+      messageDomainService,
+      fileDomainService,
+    ),
+    new GetMessagesOnConversationFlow(
+      conversationRepository,
+      messageDomainService,
+    ),
+  );
+}
 
 class InMemoryConversationRepository implements ConversationRepository {
   readonly deletedIds: string[] = [];
@@ -176,7 +310,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     const conversation = this.conversations.get(id);
 
     if (!conversation) {
-      return failure(new NotFoundError(id));
+      return failure(new NotFoundError("Conversation", id));
     }
 
     return success(conversation);
@@ -204,9 +338,167 @@ class InMemoryConversationRepository implements ConversationRepository {
   }
 }
 
+class InMemoryMessageRepository implements MessageRepository {
+  private readonly messages = new Map<string, Message>();
+
+  seed(messages: Message[]): void {
+    this.messages.clear();
+
+    for (const message of messages) {
+      this.messages.set(message.id, message);
+    }
+  }
+
+  async create(record: CreateMessageRecord) {
+    const message = mustCreateMessage(
+      `message-${this.messages.size + 1}`,
+      record.conversationId,
+      record.sequenceNumber,
+      record.textContent,
+      record.fileIds,
+      record.createdAt.toISOString(),
+    );
+    this.messages.set(message.id, message);
+    return success(message);
+  }
+
+  async getById(id: string) {
+    const message = this.messages.get(id);
+
+    if (!message) {
+      return failure(new NotFoundError("Message", id));
+    }
+
+    return success(message);
+  }
+
+  async listPageByConversation(request: MessagePageRequest) {
+    return success(
+      [...this.messages.values()]
+        .filter(
+          (message) =>
+            message.conversationId === request.conversationId &&
+            message.sequenceNumber >= request.fromSequence,
+        )
+        .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+        .slice(0, request.limit),
+    );
+  }
+
+  async listByConversation(conversationId: string) {
+    return success(
+      [...this.messages.values()].filter(
+        (message) => message.conversationId === conversationId,
+      ),
+    );
+  }
+
+  async countByConversation(conversationId: string) {
+    return success(
+      [...this.messages.values()].filter(
+        (message) => message.conversationId === conversationId,
+      ).length,
+    );
+  }
+
+  async deleteById(id: string) {
+    this.messages.delete(id);
+    return success(undefined);
+  }
+}
+
+class InMemoryFileRepository implements FileRepository {
+  private readonly files = new Map<string, StoredFile>();
+
+  async create(record: CreateFileRecord) {
+    const file = mustCreateFile(
+      `file-${this.files.size + 1}`,
+      record.canonicalUrl,
+      record.filename,
+      record.mimeType,
+      record.sizeInBytes,
+      record.createdAt.toISOString(),
+    );
+    this.files.set(file.id, file);
+    return success(file);
+  }
+
+  async getById(id: string) {
+    const file = this.files.get(id);
+
+    if (!file) {
+      return failure(new NotFoundError("File", id));
+    }
+
+    return success(file);
+  }
+
+  async deleteById(id: string) {
+    this.files.delete(id);
+    return success(undefined);
+  }
+}
+
+class InMemoryBlobRepository implements BlobRepository {
+  private readonly blobs = new Map<string, ArrayBuffer>();
+
+  async upload(request: {
+    readonly content: ArrayBuffer;
+    readonly filename: string;
+    readonly mimeType: string;
+  }) {
+    const url = `https://blob/file-${this.blobs.size + 1}`;
+    this.blobs.set(url, request.content);
+    return success(url);
+  }
+
+  async delete(canonicalUrl: string) {
+    this.blobs.delete(canonicalUrl);
+    return success(undefined);
+  }
+}
+
 function mustCreateConversation(id: string, isoTimestamp: string): Conversation {
   return new Conversation({
     id,
+    createdAt: new Date(isoTimestamp),
+    updatedAt: new Date(isoTimestamp),
+  });
+}
+
+function mustCreateMessage(
+  id: string,
+  conversationId: string,
+  sequenceNumber: number,
+  textContent: string,
+  fileIds: ReadonlyArray<string>,
+  isoTimestamp: string,
+): Message {
+  return new Message({
+    id,
+    conversationId,
+    sequenceNumber,
+    textContent,
+    fileIds,
+    createdAt: new Date(isoTimestamp),
+    updatedAt: new Date(isoTimestamp),
+  });
+}
+
+function mustCreateFile(
+  id: string,
+  canonicalUrl: string,
+  filename: string,
+  mimeType: string,
+  sizeInBytes: number,
+  isoTimestamp: string,
+): StoredFile {
+  return new StoredFile({
+    id,
+    canonicalUrl,
+    filename,
+    mimeType,
+    sizeInBytes,
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });

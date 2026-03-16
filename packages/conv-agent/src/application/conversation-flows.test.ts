@@ -1,16 +1,36 @@
 import { describe, expect, test } from "bun:test";
+import type { BlobRepository } from "../domain/contracts/blob-repository";
 import type {
   CreateConversationRecord,
   ConversationPageRequest,
   ConversationRepository,
 } from "../domain/contracts/conversation-repository";
+import type {
+  CreateFileRecord,
+  FileRepository,
+} from "../domain/contracts/file-repository";
+import type {
+  CreateMessageRecord,
+  MessagePageRequest,
+  MessageRepository,
+} from "../domain/contracts/message-repository";
+import { Conversation } from "../domain/objects/conversation";
+import { File } from "../domain/objects/file";
+import {
+  BlobStoreError,
+  NotFoundError,
+  StoreError,
+} from "../domain/objects/errors";
+import { Message } from "../domain/objects/message";
+import { failure, success, type Result } from "../domain/objects/result";
+import { FileDomainService } from "../domain/services/file-domain-service";
+import { MessageDomainService } from "../domain/services/message-domain-service";
+import { AppendMessageToConversationFlow } from "./append-message-to-conversation-flow";
 import { CreateConversationFlow } from "./create-conversation-flow";
 import { DeleteConversationFlow } from "./delete-conversation-flow";
 import { GetConversationFlow } from "./get-conversation-flow";
+import { GetMessagesOnConversationFlow } from "./get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "./list-conversations-flow";
-import { Conversation } from "../domain/objects/conversation";
-import { NotFoundError, StoreError } from "../domain/objects/errors";
-import { failure, success, type Result } from "../domain/objects/result";
 
 describe("conversation flows", () => {
   test("CreateConversation sets timestamps and persists once", async () => {
@@ -41,7 +61,7 @@ describe("conversation flows", () => {
 
     const result = await useCase.execute({ conversationId: "missing-id" });
 
-    expect(result).toEqual(failure(new NotFoundError("missing-id")));
+    expect(result).toEqual(failure(new NotFoundError("Conversation", "missing-id")));
   });
 
   test("ListConversations rejects invalid pagination and computes offset correctly", async () => {
@@ -74,14 +94,143 @@ describe("conversation flows", () => {
     ]);
   });
 
-  test("DeleteConversation validates id, checks existence, and deletes once", async () => {
-    const repository = new InMemoryConversationRepository();
-    repository.seed([
+  test("AppendMessageToConversation appends text-only messages", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
     ]);
-    const useCase = new DeleteConversationFlow(repository);
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    const fileDomainService = new FileDomainService(
+      fileRepository,
+      blobRepository,
+      () => new Date("2026-03-16T12:01:00.000Z"),
+    );
+    const messageDomainService = new MessageDomainService(
+      messageRepository,
+      () => new Date("2026-03-16T12:02:00.000Z"),
+    );
+    const useCase = new AppendMessageToConversationFlow(
+      conversationRepository,
+      messageDomainService,
+      fileDomainService,
+    );
 
-    const invalidResult = await useCase.execute({ conversationId: "   " });
+    const result = await useCase.execute({
+      conversationId: "conversation-1",
+      textContent: "hello",
+      attachments: [],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.sequenceNumber).toBe(1);
+    expect(result.value.textContent).toBe("hello");
+    expect(result.value.fileIds).toEqual([]);
+    expect(messageRepository.createdRecords[0]).toEqual({
+      conversationId: "conversation-1",
+      sequenceNumber: 1,
+      textContent: "hello",
+      fileIds: [],
+      createdAt: new Date("2026-03-16T12:02:00.000Z"),
+      updatedAt: new Date("2026-03-16T12:02:00.000Z"),
+    });
+  });
+
+  test("AppendMessageToConversation uploads attachments before creating the message", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([
+      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
+    ]);
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    const fileDomainService = new FileDomainService(
+      fileRepository,
+      blobRepository,
+      () => new Date("2026-03-16T12:01:00.000Z"),
+    );
+    const messageDomainService = new MessageDomainService(
+      messageRepository,
+      () => new Date("2026-03-16T12:02:00.000Z"),
+    );
+    const useCase = new AppendMessageToConversationFlow(
+      conversationRepository,
+      messageDomainService,
+      fileDomainService,
+    );
+    const attachmentContent = new TextEncoder().encode("hello world").buffer;
+
+    const result = await useCase.execute({
+      conversationId: "conversation-1",
+      textContent: "hello",
+      attachments: [
+        {
+          content: attachmentContent,
+          filename: "greeting.txt",
+          mimeType: "text/plain",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(blobRepository.uploads).toHaveLength(1);
+    expect(fileRepository.createdRecords[0]?.filename).toBe("greeting.txt");
+    expect(result.value.fileIds).toEqual(["file-1"]);
+    expect(result.value.sequenceNumber).toBe(1);
+  });
+
+  test("AppendMessageToConversation returns not found before writing when the conversation is missing", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    const useCase = new AppendMessageToConversationFlow(
+      conversationRepository,
+      new MessageDomainService(messageRepository),
+      new FileDomainService(fileRepository, blobRepository),
+    );
+
+    const result = await useCase.execute({
+      conversationId: "missing",
+      textContent: "hello",
+      attachments: [],
+    });
+
+    expect(result).toEqual(failure(new NotFoundError("Conversation", "missing")));
+    expect(messageRepository.createdRecords).toEqual([]);
+    expect(fileRepository.createdRecords).toEqual([]);
+  });
+
+  test("GetMessagesOnConversation validates pagination and computes the sequence window", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([
+      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
+    ]);
+    const messageRepository = new InMemoryMessageRepository();
+    messageRepository.seed([
+      mustCreateMessage("message-1", "conversation-1", 1, "one", [], "2026-03-16T12:00:00.000Z"),
+      mustCreateMessage("message-2", "conversation-1", 2, "two", [], "2026-03-16T12:01:00.000Z"),
+      mustCreateMessage("message-3", "conversation-1", 3, "three", [], "2026-03-16T12:02:00.000Z"),
+    ]);
+    const useCase = new GetMessagesOnConversationFlow(
+      conversationRepository,
+      new MessageDomainService(messageRepository),
+    );
+
+    const invalidResult = await useCase.execute({
+      conversationId: "conversation-1",
+      pageNum: 1,
+      pageSize: 0,
+    });
 
     expect(invalidResult.ok).toBe(false);
     if (invalidResult.ok) {
@@ -89,23 +238,101 @@ describe("conversation flows", () => {
     }
     expect(invalidResult.error.kind).toBe("ValidationError");
 
-    const validResult = await useCase.execute({ conversationId: "conversation-1" });
+    const validResult = await useCase.execute({
+      conversationId: "conversation-1",
+      pageNum: 2,
+      pageSize: 1,
+    });
 
-    expect(validResult).toEqual(success(undefined));
-    expect(repository.deletedIds).toEqual(["conversation-1"]);
+    expect(validResult.ok).toBe(true);
+    if (!validResult.ok) {
+      return;
+    }
+
+    expect(messageRepository.lastPageRequest).toEqual({
+      conversationId: "conversation-1",
+      fromSequence: 2,
+      limit: 1,
+    });
+    expect(validResult.value.map((message) => message.id)).toEqual(["message-2"]);
   });
 
-  test("DeleteConversation returns repository delete failures", async () => {
-    const repository = new InMemoryConversationRepository();
-    repository.seed([
+  test("DeleteConversation deletes files, then messages, then the conversation", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
     ]);
-    repository.deleteFailure = new StoreError("remove", "delete failed");
-    const useCase = new DeleteConversationFlow(repository);
+    const messageRepository = new InMemoryMessageRepository();
+    messageRepository.seed([
+      mustCreateMessage(
+        "message-1",
+        "conversation-1",
+        1,
+        "hello",
+        ["file-1", "file-2"],
+        "2026-03-16T12:00:00.000Z",
+      ),
+    ]);
+    const fileRepository = new InMemoryFileRepository();
+    fileRepository.seed([
+      mustCreateFile("file-1", "https://blob/file-1", "a.txt", "text/plain", 1),
+      mustCreateFile("file-2", "https://blob/file-2", "b.txt", "text/plain", 1),
+    ]);
+    const blobRepository = new InMemoryBlobRepository();
+    blobRepository.seed([
+      ["https://blob/file-1", new TextEncoder().encode("a").buffer],
+      ["https://blob/file-2", new TextEncoder().encode("b").buffer],
+    ]);
+    const useCase = new DeleteConversationFlow(
+      conversationRepository,
+      new MessageDomainService(messageRepository),
+      new FileDomainService(fileRepository, blobRepository),
+    );
 
     const result = await useCase.execute({ conversationId: "conversation-1" });
 
-    expect(result).toEqual(failure(new StoreError("remove", "delete failed")));
+    expect(result).toEqual(success(undefined));
+    expect(blobRepository.deletedUrls).toEqual([
+      "https://blob/file-1",
+      "https://blob/file-2",
+    ]);
+    expect(messageRepository.deletedIds).toEqual(["message-1"]);
+    expect(conversationRepository.deletedIds).toEqual(["conversation-1"]);
+  });
+
+  test("DeleteConversation short-circuits on blob deletion failure", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([
+      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
+    ]);
+    const messageRepository = new InMemoryMessageRepository();
+    messageRepository.seed([
+      mustCreateMessage(
+        "message-1",
+        "conversation-1",
+        1,
+        "hello",
+        ["file-1"],
+        "2026-03-16T12:00:00.000Z",
+      ),
+    ]);
+    const fileRepository = new InMemoryFileRepository();
+    fileRepository.seed([
+      mustCreateFile("file-1", "https://blob/file-1", "a.txt", "text/plain", 1),
+    ]);
+    const blobRepository = new InMemoryBlobRepository();
+    blobRepository.deleteFailure = new BlobStoreError("delete", "boom");
+    const useCase = new DeleteConversationFlow(
+      conversationRepository,
+      new MessageDomainService(messageRepository),
+      new FileDomainService(fileRepository, blobRepository),
+    );
+
+    const result = await useCase.execute({ conversationId: "conversation-1" });
+
+    expect(result).toEqual(failure(new BlobStoreError("delete", "boom")));
+    expect(messageRepository.deletedIds).toEqual([]);
+    expect(conversationRepository.deletedIds).toEqual([]);
   });
 });
 
@@ -114,7 +341,6 @@ class InMemoryConversationRepository implements ConversationRepository {
   createdRecord: CreateConversationRecord | null = null;
   readonly deletedIds: string[] = [];
   lastPageRequest: ConversationPageRequest | null = null;
-  deleteFailure: StoreError | null = null;
   private readonly conversations = new Map<string, Conversation>();
 
   seed(conversations: Conversation[]): void {
@@ -140,7 +366,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     const conversation = this.conversations.get(id);
 
     if (!conversation) {
-      return failure(new NotFoundError(id));
+      return failure(new NotFoundError("Conversation", id));
     }
 
     return success(conversation);
@@ -165,12 +391,174 @@ class InMemoryConversationRepository implements ConversationRepository {
   }
 
   async deleteById(id: string): Promise<Result<void, StoreError>> {
+    this.deletedIds.push(id);
+    this.conversations.delete(id);
+    return success(undefined);
+  }
+}
+
+class InMemoryMessageRepository implements MessageRepository {
+  readonly createdRecords: CreateMessageRecord[] = [];
+  readonly deletedIds: string[] = [];
+  lastPageRequest: MessagePageRequest | null = null;
+  deleteFailure: StoreError | null = null;
+  private readonly messages = new Map<string, Message>();
+
+  seed(messages: Message[]): void {
+    this.messages.clear();
+
+    for (const message of messages) {
+      this.messages.set(message.id, message);
+    }
+  }
+
+  async create(record: CreateMessageRecord): Promise<Result<Message, StoreError>> {
+    this.createdRecords.push(record);
+    const message = mustCreateMessage(
+      `message-${this.createdRecords.length}`,
+      record.conversationId,
+      record.sequenceNumber,
+      record.textContent,
+      record.fileIds,
+      record.createdAt.toISOString(),
+    );
+    this.messages.set(message.id, message);
+    return success(message);
+  }
+
+  async getById(id: string) {
+    const message = this.messages.get(id);
+
+    if (!message) {
+      return failure(new NotFoundError("Message", id));
+    }
+
+    return success(message);
+  }
+
+  async listPageByConversation(
+    request: MessagePageRequest,
+  ): Promise<Result<Message[], StoreError>> {
+    this.lastPageRequest = request;
+    return success(
+      [...this.messages.values()]
+        .filter(
+          (message) =>
+            message.conversationId === request.conversationId &&
+            message.sequenceNumber >= request.fromSequence,
+        )
+        .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+        .slice(0, request.limit),
+    );
+  }
+
+  async listByConversation(conversationId: string): Promise<Result<Message[], StoreError>> {
+    return success(
+      [...this.messages.values()]
+        .filter((message) => message.conversationId === conversationId)
+        .sort((left, right) => left.sequenceNumber - right.sequenceNumber),
+    );
+  }
+
+  async countByConversation(conversationId: string): Promise<Result<number, StoreError>> {
+    return success(
+      [...this.messages.values()].filter(
+        (message) => message.conversationId === conversationId,
+      ).length,
+    );
+  }
+
+  async deleteById(id: string): Promise<Result<void, StoreError>> {
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }
 
     this.deletedIds.push(id);
-    this.conversations.delete(id);
+    this.messages.delete(id);
+    return success(undefined);
+  }
+}
+
+class InMemoryFileRepository implements FileRepository {
+  readonly createdRecords: CreateFileRecord[] = [];
+  readonly deletedIds: string[] = [];
+  private readonly files = new Map<string, File>();
+
+  seed(files: File[]): void {
+    this.files.clear();
+
+    for (const file of files) {
+      this.files.set(file.id, file);
+    }
+  }
+
+  async create(record: CreateFileRecord): Promise<Result<File, StoreError>> {
+    this.createdRecords.push(record);
+    const file = mustCreateFile(
+      `file-${this.createdRecords.length}`,
+      record.canonicalUrl,
+      record.filename,
+      record.mimeType,
+      record.sizeInBytes,
+      record.createdAt.toISOString(),
+    );
+    this.files.set(file.id, file);
+    return success(file);
+  }
+
+  async getById(id: string) {
+    const file = this.files.get(id);
+
+    if (!file) {
+      return failure(new NotFoundError("File", id));
+    }
+
+    return success(file);
+  }
+
+  async deleteById(id: string): Promise<Result<void, StoreError>> {
+    this.deletedIds.push(id);
+    this.files.delete(id);
+    return success(undefined);
+  }
+}
+
+class InMemoryBlobRepository implements BlobRepository {
+  readonly uploads: Array<{
+    readonly filename: string;
+    readonly mimeType: string;
+    readonly content: ArrayBuffer;
+  }> = [];
+  readonly deletedUrls: string[] = [];
+  deleteFailure: BlobStoreError | null = null;
+  private readonly blobs = new Map<string, ArrayBuffer>();
+
+  seed(entries: ReadonlyArray<readonly [string, ArrayBuffer]>): void {
+    this.blobs.clear();
+
+    for (const [url, content] of entries) {
+      this.blobs.set(url, content);
+    }
+  }
+
+  async upload(request: {
+    readonly content: ArrayBuffer;
+    readonly filename: string;
+    readonly mimeType: string;
+  }) {
+    this.uploads.push(request);
+    const url = `https://blob/file-${this.uploads.length}`;
+    this.blobs.set(url, request.content);
+    return success(url);
+  }
+
+  async delete(canonicalUrl: string) {
+    if (this.deleteFailure) {
+      return failure(this.deleteFailure);
+    }
+
+    this.deletedUrls.push(canonicalUrl);
+    this.blobs.delete(canonicalUrl);
     return success(undefined);
   }
 }
@@ -178,6 +566,44 @@ class InMemoryConversationRepository implements ConversationRepository {
 function mustCreateConversation(id: string, isoTimestamp: string): Conversation {
   return new Conversation({
     id,
+    createdAt: new Date(isoTimestamp),
+    updatedAt: new Date(isoTimestamp),
+  });
+}
+
+function mustCreateMessage(
+  id: string,
+  conversationId: string,
+  sequenceNumber: number,
+  textContent: string,
+  fileIds: ReadonlyArray<string>,
+  isoTimestamp: string,
+): Message {
+  return new Message({
+    id,
+    conversationId,
+    sequenceNumber,
+    textContent,
+    fileIds,
+    createdAt: new Date(isoTimestamp),
+    updatedAt: new Date(isoTimestamp),
+  });
+}
+
+function mustCreateFile(
+  id: string,
+  canonicalUrl: string,
+  filename: string,
+  mimeType: string,
+  sizeInBytes: number,
+  isoTimestamp = "2026-03-16T12:00:00.000Z",
+): File {
+  return new File({
+    id,
+    canonicalUrl,
+    filename,
+    mimeType,
+    sizeInBytes,
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });

@@ -13,6 +13,7 @@
     "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
-    "@thoth/config": "workspace:*"
+    "@thoth/config": "workspace:*",
+    "postgres": "^3.4.7"
   }
 }

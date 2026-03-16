@@ -4,8 +4,9 @@ import type {
   BlobRepository,
   BlobUploadRequest,
 } from "../../domain/contracts/blob-repository";
-import { BlobStoreError } from "../../domain/objects/errors";
+import { BlobStoreError, ValidationError } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
+import { requireNonEmptyString } from "../../domain/validation";
 
 export interface R2BlobConfig {
   readonly endpoint: string;
@@ -56,8 +57,16 @@ export class R2BlobRepository implements BlobRepository {
     }
   }
 
-  async delete(canonicalUrl: string): Promise<Result<void, BlobStoreError>> {
-    const objectKey = this.getObjectKey(canonicalUrl);
+  async deleteFromBlobStore(
+    url: string,
+  ): Promise<Result<void, ValidationError | BlobStoreError>> {
+    const urlResult = requireNonEmptyString(url, "url");
+
+    if (!urlResult.ok) {
+      return urlResult;
+    }
+
+    const objectKey = this.getObjectKey(urlResult.value);
 
     try {
       const response = await this.signedFetch({

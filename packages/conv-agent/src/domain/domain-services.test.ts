@@ -86,7 +86,7 @@ describe("domain services", () => {
       return;
     }
 
-    const deleteResult = await service.deleteBlob(uploadResult.value);
+    const deleteResult = await service.deleteFromBlobStore(uploadResult.value);
 
     expect(deleteResult).toEqual(success(undefined));
     expect(repository.uploads).toHaveLength(1);
@@ -104,7 +104,7 @@ describe("domain services", () => {
       filename: "hello.txt",
       mimeType: "text/plain",
     });
-    const invalidDeleteResult = await service.deleteBlob("");
+    const invalidDeleteResult = await service.deleteFromBlobStore("");
 
     expect(invalidUploadResult.ok).toBe(false);
     expect(invalidDeleteResult.ok).toBe(false);
@@ -120,8 +120,8 @@ describe("domain services", () => {
     );
     expect(invalidDeleteResult.error).toEqual(
       new ValidationError(
-        "canonicalUrl",
-        "canonicalUrl must be a non-empty string.",
+        "url",
+        "url must be a non-empty string.",
       ),
     );
     expect(repository.uploads).toHaveLength(0);
@@ -239,7 +239,7 @@ describe("domain services", () => {
     );
     const content = new TextEncoder().encode("hello").buffer;
 
-    const createResult = await service.createFile({
+    const createResult = await service.persistToFileDBStore({
       canonicalUrl: "/conversations/conversation-1/file-2-b.txt",
       filename: "b.txt",
       mimeType: "text/plain",
@@ -247,7 +247,7 @@ describe("domain services", () => {
       createdAt: new Date("2026-03-16T12:00:00.000Z"),
       updatedAt: new Date("2026-03-16T12:00:00.000Z"),
     });
-    const getResult = await service.getFile("file-1");
+    const getResult = await service.readFromFileDBStore("file-1");
     const uploadResult = await service.uploadFile({
       conversationId: "conversation-1",
       content,
@@ -279,7 +279,7 @@ describe("domain services", () => {
       new BlobDomainService(new InMemoryBlobRepository()),
     );
 
-    const getResult = await service.getFile("");
+    const getResult = await service.readFromFileDBStore("");
     const deleteRecordResult = await service.deleteFileRecord("");
 
     expect(getResult.ok).toBe(false);
@@ -289,7 +289,7 @@ describe("domain services", () => {
     }
 
     expect(getResult.error).toEqual(
-      new ValidationError("fileId", "fileId must be a non-empty string."),
+      new ValidationError("id", "id must be a non-empty string."),
     );
     expect(deleteRecordResult.error).toEqual(
       new ValidationError("fileId", "fileId must be a non-empty string."),
@@ -311,7 +311,9 @@ class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
-  async create(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>> {
+  async persistToConversationDBStore(
+    record: CreateConversationRecord,
+  ): Promise<Result<Conversation, StoreError>> {
     this.createdRecord = record;
     const conversation = mustCreateConversation(
       `conversation-${this.conversations.size + 1}`,
@@ -386,7 +388,7 @@ class InMemoryMessageRepository implements MessageRepository {
     }
   }
 
-  async create(record: CreateMessageRecord) {
+  async persistToMessageDBStore(record: CreateMessageRecord) {
     const validationResult = validateCreateMessageRecord(record);
 
     if (!validationResult.ok) {
@@ -505,7 +507,7 @@ class InMemoryFileRepository implements FileRepository {
     }
   }
 
-  async create(record: CreateFileRecord) {
+  async persistToFileDBStore(record: CreateFileRecord) {
     const file = mustCreateFile(
       `file-${this.files.size + 1}`,
       record.canonicalUrl,
@@ -518,11 +520,17 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async getById(id: string) {
-    const file = this.files.get(id);
+  async readFromFileDBStore(id: string) {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    const file = this.files.get(idResult.value);
 
     if (!file) {
-      return failure(new NotFoundError("File", id));
+      return failure(new NotFoundError("File", idResult.value));
     }
 
     return success(file);
@@ -546,12 +554,18 @@ class InMemoryBlobRepository implements BlobRepository {
     );
   }
 
-  async delete(canonicalUrl: string) {
+  async deleteFromBlobStore(url: string) {
+    const urlResult = requireNonEmptyString(url, "url");
+
+    if (!urlResult.ok) {
+      return urlResult;
+    }
+
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }
 
-    this.deletedUrls.push(canonicalUrl);
+    this.deletedUrls.push(urlResult.value);
     return success(undefined);
   }
 }

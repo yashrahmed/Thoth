@@ -25,7 +25,7 @@ interface ConversationRow {
 export class PostgresConversationRepository implements ConversationRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async create(
+  async persistToConversationDBStore(
     record: CreateConversationRecord,
   ): Promise<Result<Conversation, StoreError>> {
     try {

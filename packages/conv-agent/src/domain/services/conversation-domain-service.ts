@@ -19,7 +19,7 @@ export class ConversationDomainService {
   async createConversation(): Promise<Result<Conversation, StoreError>> {
     const timestamp = this.now();
 
-    return this.conversationRepository.create({
+    return this.conversationRepository.persistToConversationDBStore({
       createdAt: timestamp,
       updatedAt: timestamp,
     });

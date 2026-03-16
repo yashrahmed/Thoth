@@ -30,7 +30,7 @@ interface CountRow {
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async create(record: CreateMessageRecord) {
+  async persistToMessageDBStore(record: CreateMessageRecord) {
     const validationResult = validateCreateRecord(record);
 
     if (!validationResult.ok) {

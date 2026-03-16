@@ -343,7 +343,9 @@ class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
-  async create(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>> {
+  async persistToConversationDBStore(
+    record: CreateConversationRecord,
+  ): Promise<Result<Conversation, StoreError>> {
     const conversation = mustCreateConversation(
       "conversation-created",
       record.createdAt.toISOString(),
@@ -421,7 +423,7 @@ class InMemoryMessageRepository implements MessageRepository {
     }
   }
 
-  async create(record: CreateMessageRecord) {
+  async persistToMessageDBStore(record: CreateMessageRecord) {
     const validationResult = validateCreateMessageRecord(record);
 
     if (!validationResult.ok) {
@@ -537,7 +539,7 @@ class InMemoryFileRepository implements FileRepository {
     }
   }
 
-  async create(record: CreateFileRecord) {
+  async persistToFileDBStore(record: CreateFileRecord) {
     const file = mustCreateFile(
       `file-${this.files.size + 1}`,
       record.canonicalUrl,
@@ -550,11 +552,17 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async getById(id: string) {
-    const file = this.files.get(id);
+  async readFromFileDBStore(id: string) {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    const file = this.files.get(idResult.value);
 
     if (!file) {
-      return failure(new NotFoundError("File", id));
+      return failure(new NotFoundError("File", idResult.value));
     }
 
     return success(file);
@@ -580,8 +588,14 @@ class InMemoryBlobRepository implements BlobRepository {
     return success(url);
   }
 
-  async delete(canonicalUrl: string) {
-    this.blobs.delete(canonicalUrl);
+  async deleteFromBlobStore(url: string) {
+    const urlResult = requireNonEmptyString(url, "url");
+
+    if (!urlResult.ok) {
+      return urlResult;
+    }
+
+    this.blobs.delete(urlResult.value);
     return success(undefined);
   }
 }

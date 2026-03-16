@@ -36,7 +36,9 @@ export class MessageDomainService {
   async createMessage(
     request: CreateMessageInput,
   ): Promise<Result<Message, ValidationError | StoreError>> {
-    return this.messageRepository.create(this.buildRecord(request));
+    return this.messageRepository.persistToMessageDBStore(
+      this.buildRecord(request),
+    );
   }
 
   async getMessage(

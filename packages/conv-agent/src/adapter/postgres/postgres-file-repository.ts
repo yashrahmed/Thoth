@@ -3,8 +3,9 @@ import type {
   FileRepository,
 } from "../../domain/contracts/file-repository";
 import { File } from "../../domain/objects/file";
-import { NotFoundError, StoreError } from "../../domain/objects/errors";
+import { NotFoundError, StoreError, ValidationError } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
+import { requireNonEmptyString } from "../../domain/validation";
 import type { PostgresDatabase } from "./postgres-database";
 
 interface FileRow {
@@ -20,7 +21,7 @@ interface FileRow {
 export class PostgresFileRepository implements FileRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async create(record: CreateFileRecord) {
+  async persistToFileDBStore(record: CreateFileRecord) {
     try {
       const rows = await this.sql<FileRow[]>`
         insert into thoth.files (
@@ -55,7 +56,15 @@ export class PostgresFileRepository implements FileRepository {
     }
   }
 
-  async getById(id: string) {
+  async readFromFileDBStore(
+    id: string,
+  ): Promise<Result<File, ValidationError | NotFoundError | StoreError>> {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
     try {
       const rows = await this.sql<FileRow[]>`
         select
@@ -67,13 +76,13 @@ export class PostgresFileRepository implements FileRepository {
           created_at,
           updated_at
         from thoth.files
-        where id = ${id}
+        where id = ${idResult.value}
       `;
 
       const row = rows[0];
 
       if (!row) {
-        return failure(new NotFoundError("File", id));
+        return failure(new NotFoundError("File", idResult.value));
       }
 
       return mapRow(row, "read");

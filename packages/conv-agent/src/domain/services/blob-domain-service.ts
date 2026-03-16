@@ -42,18 +42,9 @@ export class BlobDomainService {
     return this.blobRepository.upload(request);
   }
 
-  async deleteBlob(
-    canonicalUrl: string,
+  async deleteFromBlobStore(
+    url: string,
   ): Promise<Result<void, ValidationError | BlobStoreError>> {
-    const canonicalUrlResult = requireNonEmptyString(
-      canonicalUrl,
-      "canonicalUrl",
-    );
-
-    if (!canonicalUrlResult.ok) {
-      return canonicalUrlResult;
-    }
-
-    return this.blobRepository.delete(canonicalUrl);
+    return this.blobRepository.deleteFromBlobStore(url);
   }
 }

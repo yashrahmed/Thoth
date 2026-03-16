@@ -18,7 +18,9 @@ export interface MessagePageRequest {
 }
 
 export interface MessageRepository {
-  create(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>>;
+  persistToMessageDBStore(
+    record: CreateMessageRecord,
+  ): Promise<Result<Message, ValidationError | StoreError>>;
   getById(id: string): Promise<Result<Message, NotFoundError | StoreError>>;
   listPageByConversation(request: MessagePageRequest): Promise<Result<Message[], ValidationError | StoreError>>;
   listByConversation(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>>;

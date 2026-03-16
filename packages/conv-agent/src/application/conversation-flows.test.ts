@@ -430,7 +430,9 @@ class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
-  async create(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>> {
+  async persistToConversationDBStore(
+    record: CreateConversationRecord,
+  ): Promise<Result<Conversation, StoreError>> {
     this.createdRecord = record;
     const conversation = mustCreateConversation(
       `conversation-${this.createdIds.length + 1}`,
@@ -517,7 +519,7 @@ class InMemoryMessageRepository implements MessageRepository {
     }
   }
 
-  async create(
+  async persistToMessageDBStore(
     record: CreateMessageRecord,
   ): Promise<Result<Message, ValidationError | StoreError>> {
     const validationResult = validateCreateMessageRecord(record);
@@ -649,7 +651,9 @@ class InMemoryFileRepository implements FileRepository {
     }
   }
 
-  async create(record: CreateFileRecord): Promise<Result<File, StoreError>> {
+  async persistToFileDBStore(
+    record: CreateFileRecord,
+  ): Promise<Result<File, StoreError>> {
     this.createdRecords.push(record);
     const file = mustCreateFile(
       `file-${this.createdRecords.length}`,
@@ -663,11 +667,17 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async getById(id: string) {
-    const file = this.files.get(id);
+  async readFromFileDBStore(id: string) {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    const file = this.files.get(idResult.value);
 
     if (!file) {
-      return failure(new NotFoundError("File", id));
+      return failure(new NotFoundError("File", idResult.value));
     }
 
     return success(file);
@@ -711,13 +721,19 @@ class InMemoryBlobRepository implements BlobRepository {
     return success(url);
   }
 
-  async delete(canonicalUrl: string) {
+  async deleteFromBlobStore(url: string) {
+    const urlResult = requireNonEmptyString(url, "url");
+
+    if (!urlResult.ok) {
+      return urlResult;
+    }
+
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }
 
-    this.deletedUrls.push(canonicalUrl);
-    this.blobs.delete(canonicalUrl);
+    this.deletedUrls.push(urlResult.value);
+    this.blobs.delete(urlResult.value);
     return success(undefined);
   }
 }

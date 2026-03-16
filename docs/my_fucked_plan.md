@@ -167,12 +167,6 @@ type ConstructionError = {
 3. PersistToConversationDBStore(conversation) → conversation → if failure, return failure.
 4. Return succeed(conversation).
 
-### UpdateConversation (conversation: Conversation): Result<Conversation, NotFoundError | StoreError>
-
-1. ReadFromConversationDBStore(conversation.id) → if failure, return failure.
-2. PersistToConversationDBStore(conversation) → if failure, return failure.
-3. Return succeed(conversation).
-
 ### GetConversation (conversationId: string): Result<Conversation, NotFoundError | StoreError>
 
 1. ReadFromConversationDBStore(conversationId) → conversation → if failure, return failure.

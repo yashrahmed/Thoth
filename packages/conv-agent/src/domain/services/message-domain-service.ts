@@ -16,17 +16,17 @@ import {
   requireNonEmptyString,
   requirePositiveInteger,
   requirePresent,
-} from "../validators";
+} from "../validation";
 import type { FileDomainService } from "./file-domain-service";
 
-export interface CreateMessageRequest {
+export interface CreateMessageInput {
   readonly conversationId: string;
   readonly sequenceNumber: number;
   readonly textContent: string;
   readonly fileIds: ReadonlyArray<string>;
 }
 
-export interface CreateNextMessageRequest {
+export interface CreateNextMessageInput {
   readonly conversationId: string;
   readonly textContent: string;
   readonly fileIds: ReadonlyArray<string>;
@@ -39,7 +39,7 @@ export class MessageDomainService {
   ) {}
 
   async createMessage(
-    request: CreateMessageRequest,
+    request: CreateMessageInput,
   ): Promise<Result<Message, ValidationError | ConstructionError | StoreError>> {
     const conversationIdResult = requireNonEmptyString(
       request.conversationId,
@@ -134,7 +134,7 @@ export class MessageDomainService {
   }
 
   async createNextMessage(
-    request: CreateNextMessageRequest,
+    request: CreateNextMessageInput,
   ): Promise<Result<Message, ValidationError | ConstructionError | StoreError>> {
     const conversationIdResult = requireNonEmptyString(
       request.conversationId,
@@ -175,7 +175,7 @@ export class MessageDomainService {
     });
   }
 
-  private buildRecord(request: CreateMessageRequest): CreateMessageRecord {
+  private buildRecord(request: CreateMessageInput): CreateMessageRecord {
     const timestamp = this.now();
 
     return {

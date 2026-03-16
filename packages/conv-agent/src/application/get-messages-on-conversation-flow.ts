@@ -5,23 +5,23 @@ import type { NotFoundError, StoreError, ValidationError } from "../domain/objec
 import type { Result } from "../domain/objects/result";
 import { requireNonEmptyString, requirePositiveInteger } from "./validators";
 
-export interface GetMessagesOnConversationQuery {
+export interface GetMessagesQuery {
   readonly conversationId: string;
   readonly pageNum: number;
   readonly pageSize: number;
 }
 
-export interface GetMessagesOnConversationItem {
+export interface GetMessagesItem {
   readonly id: string;
   readonly conversationId: string;
   readonly sequenceNumber: number;
   readonly textContent: string;
-  readonly files: ReadonlyArray<GetMessagesOnConversationFile>;
+  readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
 
-export interface GetMessagesOnConversationFile {
+export interface GetMessagesFile {
   readonly id: string;
   readonly canonicalUrl: string;
   readonly filename: string;
@@ -39,9 +39,9 @@ export class GetMessagesOnConversationFlow {
   ) {}
 
   async execute(
-    query: GetMessagesOnConversationQuery,
+    query: GetMessagesQuery,
   ): Promise<
-    Result<GetMessagesOnConversationItem[], NotFoundError | StoreError | ValidationError>
+    Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>
   > {
     const conversationIdResult = requireNonEmptyString(
       query.conversationId,
@@ -82,7 +82,7 @@ export class GetMessagesOnConversationFlow {
       return result;
     }
 
-    const items: GetMessagesOnConversationItem[] = [];
+    const items: GetMessagesItem[] = [];
 
     for (const message of result.value) {
       const filesResult = await this.fileDomainService.getFiles({

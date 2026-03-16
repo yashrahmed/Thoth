@@ -15,20 +15,20 @@ import type {
   ValidationError,
 } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { requireNonEmptyString, requirePresent } from "../validators";
+import { requireNonEmptyString, requirePresent } from "../validation";
 
-export interface UploadFileRequest {
+export interface UploadFileInput {
   readonly conversationId: string;
   readonly content: FileContent;
   readonly filename: string;
   readonly mimeType: string;
 }
 
-export interface UploadFilesRequest {
-  readonly files: ReadonlyArray<UploadFileRequest>;
+export interface UploadFilesInput {
+  readonly files: ReadonlyArray<UploadFileInput>;
 }
 
-export interface GetFilesRequest {
+export interface GetFilesInput {
   readonly fileIds: ReadonlyArray<string>;
 }
 
@@ -40,7 +40,7 @@ export class FileDomainService {
   ) {}
 
   async uploadFile(
-    request: UploadFileRequest,
+    request: UploadFileInput,
   ): Promise<
     Result<
       FileEntity,
@@ -89,7 +89,7 @@ export class FileDomainService {
   }
 
   async uploadFiles(
-    request: UploadFilesRequest,
+    request: UploadFilesInput,
   ): Promise<
     Result<
       ReadonlyArray<FileEntity>,
@@ -135,7 +135,7 @@ export class FileDomainService {
   }
 
   async getFiles(
-    request: GetFilesRequest,
+    request: GetFilesInput,
   ): Promise<Result<ReadonlyArray<FileEntity>, NotFoundError | StoreError>> {
     const files: FileEntity[] = [];
 
@@ -156,7 +156,7 @@ export class FileDomainService {
   }
 
   private buildRecord(
-    request: UploadFileRequest,
+    request: UploadFileInput,
     canonicalUrl: string,
   ): CreateFileRecord {
     const timestamp = this.now();

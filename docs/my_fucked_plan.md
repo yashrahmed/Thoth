@@ -5,7 +5,6 @@ class Conversation {
   readonly id: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
-  readonly messageIds: ReadonlyArray<string>;
 }
 
 class Message {
@@ -121,6 +120,8 @@ type ConstructionError = {
 - PersistToMessageDBStore(message: Message): Result<void, StoreError> → Infra.UpsertMessageRow
 - ReadFromMessageDBStore(id: string): Result<Message, NotFoundError | StoreError> → Infra.SelectMessageRow
 - ReadPageFromMessageDBStore(conversationId: string, fromSequence: number, pageSize: number): Result<Message[], StoreError> → Infra.SelectMessagePage
+- ReadAllMessagesFromMessageDBStore(conversationId: string): Result<Message[], StoreError> → Infra.SelectAllMessagesByConversation
+- ReadMessageCountFromMessageDBStore(conversationId: string): Result<number, StoreError> → Infra.CountMessagesByConversation
 - RemoveFromMessageDBStore(id: string): Result<void, StoreError> → Infra.DeleteMessageRow
 
 - PersistToFileDBStore(file: File): Result<void, StoreError> → Infra.UpsertFileRow
@@ -170,6 +171,17 @@ type ConstructionError = {
 2. For each row in rows: MapFromRow(row) → message.
 3. Return succeed(messages).
 
+### Infra.SelectAllMessagesByConversation (conversationId: string): Result<Message[], StoreError>
+
+1. PostgresClient.query(SelectByFieldQuery("messages", "conversationId", conversationId)) → rows → if error, return StoreError.
+2. For each row in rows: MapFromRow(row) → message.
+3. Return succeed(messages).
+
+### Infra.CountMessagesByConversation (conversationId: string): Result<number, StoreError>
+
+1. PostgresClient.query(CountByFieldQuery("messages", "conversationId", conversationId)) → count → if error, return StoreError.
+2. Return succeed(count).
+
 ### Infra.DeleteMessageRow (id: string): Result<void, StoreError>
 
 1. PostgresClient.query(DeleteByIdQuery("messages", id)) → if error, return StoreError.
@@ -214,13 +226,13 @@ type ConstructionError = {
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. GetConversation(conversationId) → conversation → if failure, return failure.
-3. For each messageId: string in conversation.messageIds:
-   1. GetMessage(messageId) → message → if failure, return failure.
-   2. For each fileId: string in message.fileIds:
+3. ReadAllMessagesFromMessageDBStore(conversationId) → messages → if failure, return failure.
+4. For each message: Message in messages:
+   1. For each fileId: string in message.fileIds:
       1. DeleteFile(fileId) → if failure, return failure.
-   3. DeleteMessage(messageId) → if failure, return failure.
-4. RemoveFromConversationDBStore(conversationId) → if failure, return failure.
-5. Return succeed(void).
+   2. DeleteMessage(message.id) → if failure, return failure.
+5. RemoveFromConversationDBStore(conversationId) → if failure, return failure.
+6. Return succeed(void).
 
 ### AppendMessageToConversation (request: AppendMessageRequest): Result<Message, ValidationError | NotFoundError | StoreError | BlobStoreError | ConstructionError>
 
@@ -231,11 +243,11 @@ type ConstructionError = {
    2. RequireNonEmptyString(attachment.filename, "attachment.filename") → if failure, return failure.
    3. RequireNonEmptyString(attachment.mimeType, "attachment.mimeType") → if failure, return failure.
 4. GetConversation(request.conversationId) → conversation → if failure, return failure.
-5. Derive sequenceNumber from conversation.messageIds.length + 1.
-6. For each attachment: Attachment in request.attachments:
+5. ReadMessageCountFromMessageDBStore(request.conversationId) → messageCount → if failure, return failure.
+6. Derive sequenceNumber from messageCount + 1.
+7. For each attachment: Attachment in request.attachments:
    1. UploadFile(request: UploadFileRequest) → file → if failure, return failure.
-7. CreateMessage(request: CreateMessageRequest) → message → if failure, return failure.
-8. UpdateConversation(conversation: Conversation) → if failure, return failure.
+8. CreateMessage(request: CreateMessageRequest) → message → if failure, return failure.
 9. Return succeed(message).
 
 ### GetMessagesOnConversation (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | NotFoundError | StoreError>
@@ -252,7 +264,7 @@ type ConstructionError = {
 
 1. GenerateId() → id.
 2. Now() → timestamp.
-3. Construct Conversation(id, createdAt: timestamp, updatedAt: timestamp, messageIds: []) → conversation → if failure, return failure.
+3. Construct Conversation(id, createdAt: timestamp, updatedAt: timestamp) → conversation → if failure, return failure.
 4. PersistToConversationDBStore(conversation) → if failure, return failure.
 5. Return succeed(conversation).
 
@@ -326,12 +338,10 @@ type ConstructionError = {
   transforms it. The implementations of `UploadToBlobStore` and
   `FetchFromBlobStore` are responsible for checking and casting to the actual
   runtime representation (e.g. `Buffer`, `ReadableStream`).
-- `messageIds` on `Conversation` is redundant. Message ordering and pagination
-  can be derived entirely from `sequenceNumber` on `Message` combined with
-  `conversationId`. It is kept for now as a denormalized index so that
-  `DeleteConversation` and `AppendMessageToConversation` can resolve related
-  messages without querying the message store. This may be removed in a future
-  iteration once those actions query by `conversationId` directly.
+- Message ordering and pagination are derived from `sequenceNumber` on `Message`
+  combined with `conversationId`. `DeleteConversation` and
+  `AppendMessageToConversation` query the message store by `conversationId`
+  directly.
 
 ## Description
 

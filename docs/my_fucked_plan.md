@@ -161,6 +161,16 @@ type ConstructionError = {
 8. UpdateConversation(conversation: Conversation) → if failure, return failure.
 9. Return succeed(message).
 
+### GetMessagesOnConversation (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | NotFoundError | StoreError>
+
+1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
+2. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
+3. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
+4. GetConversation(conversationId) → conversation → if failure, return failure.
+5. Compute fromSequence = (pageNum - 1) * pageSize + 1.
+6. ReadPageFromMessageDBStore(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
+7. Return succeed(messages).
+
 ### CreateConversation (): Result<Conversation, ConstructionError | StoreError>
 
 1. GenerateId() → id.
@@ -179,16 +189,6 @@ type ConstructionError = {
 
 1. ReadFromConversationDBStore(conversationId) → conversation → if failure, return failure.
 2. Return succeed(conversation).
-
-### GetMessagesOnConversation (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | NotFoundError | StoreError>
-
-1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
-2. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
-3. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
-4. GetConversation(conversationId) → conversation → if failure, return failure.
-5. Compute fromSequence = (pageNum - 1) * pageSize + 1.
-6. ReadPageFromMessageDBStore(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
-7. Return succeed(messages).
 
 ### CreateMessage (request: CreateMessageRequest): Result<Message, ValidationError | ConstructionError | StoreError>
 

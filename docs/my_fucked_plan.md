@@ -113,113 +113,6 @@ type ConstructionError = {
 - RequirePositiveInteger(value: number, fieldName: string): Result<number, ValidationError>
 - RequirePresent(value: unknown, fieldName: string): Result<void, ValidationError>
 
-- PersistToConversationDBStore(conversation: Conversation): Result<void, StoreError> → Infra.UpsertConversationRow
-- ReadFromConversationDBStore(id: string): Result<Conversation, NotFoundError | StoreError> → Infra.SelectConversationRow
-- RemoveFromConversationDBStore(id: string): Result<void, StoreError> → Infra.DeleteConversationRow
-
-- PersistToMessageDBStore(message: Message): Result<void, StoreError> → Infra.UpsertMessageRow
-- ReadFromMessageDBStore(id: string): Result<Message, NotFoundError | StoreError> → Infra.SelectMessageRow
-- ReadPageFromMessageDBStore(conversationId: string, fromSequence: number, pageSize: number): Result<Message[], StoreError> → Infra.SelectMessagePage
-- ReadAllMessagesFromMessageDBStore(conversationId: string): Result<Message[], StoreError> → Infra.SelectAllMessagesByConversation
-- ReadMessageCountFromMessageDBStore(conversationId: string): Result<number, StoreError> → Infra.CountMessagesByConversation
-- RemoveFromMessageDBStore(id: string): Result<void, StoreError> → Infra.DeleteMessageRow
-
-- PersistToFileDBStore(file: File): Result<void, StoreError> → Infra.UpsertFileRow
-- ReadFromFileDBStore(id: string): Result<File, NotFoundError | StoreError> → Infra.SelectFileRow
-- RemoveFromFileDBStore(id: string): Result<void, StoreError> → Infra.DeleteFileRow
-
-- UploadToBlobStore(content: FileContent): Result<string, BlobStoreError> → Infra.PutBlob
-- FetchFromBlobStore(url: string): Result<FileContent, BlobStoreError> → Infra.GetBlob
-- DeleteFromBlobStore(url: string): Result<void, BlobStoreError> → Infra.RemoveBlob
-
-## Infra Actions
-
-### Infra.UpsertConversationRow (conversation: Conversation): Result<void, StoreError>
-
-1. MapToRow(conversation) → row.
-2. PostgresClient.query(UpsertQuery("conversations", row)) → if error, return StoreError.
-3. Return succeed(void).
-
-### Infra.SelectConversationRow (id: string): Result<Conversation, NotFoundError | StoreError>
-
-1. PostgresClient.query(SelectByIdQuery("conversations", id)) → row → if error, return StoreError.
-2. If row is null → return NotFoundError("Conversation", id).
-3. MapFromRow(row) → conversation.
-4. Return succeed(conversation).
-
-### Infra.DeleteConversationRow (id: string): Result<void, StoreError>
-
-1. PostgresClient.query(DeleteByIdQuery("conversations", id)) → if error, return StoreError.
-2. Return succeed(void).
-
-### Infra.UpsertMessageRow (message: Message): Result<void, StoreError>
-
-1. MapToRow(message) → row.
-2. PostgresClient.query(UpsertQuery("messages", row)) → if error, return StoreError.
-3. Return succeed(void).
-
-### Infra.SelectMessageRow (id: string): Result<Message, NotFoundError | StoreError>
-
-1. PostgresClient.query(SelectByIdQuery("messages", id)) → row → if error, return StoreError.
-2. If row is null → return NotFoundError("Message", id).
-3. MapFromRow(row) → message.
-4. Return succeed(message).
-
-### Infra.SelectMessagePage (conversationId: string, fromSequence: number, pageSize: number): Result<Message[], StoreError>
-
-1. PostgresClient.query(SelectPageQuery("messages", { conversationId, fromSequence, pageSize })) → rows → if error, return StoreError.
-2. For each row in rows: MapFromRow(row) → message.
-3. Return succeed(messages).
-
-### Infra.SelectAllMessagesByConversation (conversationId: string): Result<Message[], StoreError>
-
-1. PostgresClient.query(SelectByFieldQuery("messages", "conversationId", conversationId)) → rows → if error, return StoreError.
-2. For each row in rows: MapFromRow(row) → message.
-3. Return succeed(messages).
-
-### Infra.CountMessagesByConversation (conversationId: string): Result<number, StoreError>
-
-1. PostgresClient.query(CountByFieldQuery("messages", "conversationId", conversationId)) → count → if error, return StoreError.
-2. Return succeed(count).
-
-### Infra.DeleteMessageRow (id: string): Result<void, StoreError>
-
-1. PostgresClient.query(DeleteByIdQuery("messages", id)) → if error, return StoreError.
-2. Return succeed(void).
-
-### Infra.UpsertFileRow (file: File): Result<void, StoreError>
-
-1. MapToRow(file) → row.
-2. PostgresClient.query(UpsertQuery("files", row)) → if error, return StoreError.
-3. Return succeed(void).
-
-### Infra.SelectFileRow (id: string): Result<File, NotFoundError | StoreError>
-
-1. PostgresClient.query(SelectByIdQuery("files", id)) → row → if error, return StoreError.
-2. If row is null → return NotFoundError("File", id).
-3. MapFromRow(row) → file.
-4. Return succeed(file).
-
-### Infra.DeleteFileRow (id: string): Result<void, StoreError>
-
-1. PostgresClient.query(DeleteByIdQuery("files", id)) → if error, return StoreError.
-2. Return succeed(void).
-
-### Infra.PutBlob (content: FileContent): Result<string, BlobStoreError>
-
-1. R2Client.upload(content) → url → if error, return BlobStoreError.
-2. Return succeed(url).
-
-### Infra.GetBlob (url: string): Result<FileContent, BlobStoreError>
-
-1. R2Client.fetch(url) → content → if error, return BlobStoreError.
-2. Return succeed(content).
-
-### Infra.RemoveBlob (url: string): Result<void, BlobStoreError>
-
-1. R2Client.delete(url) → if error, return BlobStoreError.
-2. Return succeed(void).
-
 ## Actions
 
 ### DeleteConversation (conversationId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
@@ -326,6 +219,154 @@ type ConstructionError = {
 2. DeleteFromBlobStore(file.canonicalUrl) → if failure, return failure.
 3. RemoveFromFileDBStore(fileId) → if failure, return failure.
 4. Return succeed(void).
+
+### PersistToConversationDBStore (conversation: Conversation): Result<void, StoreError>
+
+1. Infra.UpsertConversationRow(conversation) → if failure, return failure.
+
+### ReadFromConversationDBStore (id: string): Result<Conversation, NotFoundError | StoreError>
+
+1. Infra.SelectConversationRow(id) → conversation → if failure, return failure.
+
+### RemoveFromConversationDBStore (id: string): Result<void, StoreError>
+
+1. Infra.DeleteConversationRow(id) → if failure, return failure.
+
+### PersistToMessageDBStore (message: Message): Result<void, StoreError>
+
+1. Infra.UpsertMessageRow(message) → if failure, return failure.
+
+### ReadFromMessageDBStore (id: string): Result<Message, NotFoundError | StoreError>
+
+1. Infra.SelectMessageRow(id) → message → if failure, return failure.
+
+### ReadPageFromMessageDBStore (conversationId: string, fromSequence: number, pageSize: number): Result<Message[], StoreError>
+
+1. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
+
+### ReadAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], StoreError>
+
+1. Infra.SelectAllMessagesByConversation(conversationId) → messages → if failure, return failure.
+
+### ReadMessageCountFromMessageDBStore (conversationId: string): Result<number, StoreError>
+
+1. Infra.CountMessagesByConversation(conversationId) → count → if failure, return failure.
+
+### RemoveFromMessageDBStore (id: string): Result<void, StoreError>
+
+1. Infra.DeleteMessageRow(id) → if failure, return failure.
+
+### PersistToFileDBStore (file: File): Result<void, StoreError>
+
+1. Infra.UpsertFileRow(file) → if failure, return failure.
+
+### ReadFromFileDBStore (id: string): Result<File, NotFoundError | StoreError>
+
+1. Infra.SelectFileRow(id) → file → if failure, return failure.
+
+### RemoveFromFileDBStore (id: string): Result<void, StoreError>
+
+1. Infra.DeleteFileRow(id) → if failure, return failure.
+
+### UploadToBlobStore (content: FileContent): Result<string, BlobStoreError>
+
+1. Infra.PutBlob(content) → url → if failure, return failure.
+
+### FetchFromBlobStore (url: string): Result<FileContent, BlobStoreError>
+
+1. Infra.GetBlob(url) → content → if failure, return failure.
+
+### DeleteFromBlobStore (url: string): Result<void, BlobStoreError>
+
+1. Infra.RemoveBlob(url) → if failure, return failure.
+
+## Infra Actions
+
+### Infra.UpsertConversationRow (conversation: Conversation): Result<void, StoreError>
+
+1. MapToRow(conversation) → row.
+2. PostgresClient.query(UpsertQuery("conversations", row)) → if error, return StoreError.
+3. Return succeed(void).
+
+### Infra.SelectConversationRow (id: string): Result<Conversation, NotFoundError | StoreError>
+
+1. PostgresClient.query(SelectByIdQuery("conversations", id)) → row → if error, return StoreError.
+2. If row is null → return NotFoundError("Conversation", id).
+3. MapFromRow(row) → conversation.
+4. Return succeed(conversation).
+
+### Infra.DeleteConversationRow (id: string): Result<void, StoreError>
+
+1. PostgresClient.query(DeleteByIdQuery("conversations", id)) → if error, return StoreError.
+2. Return succeed(void).
+
+### Infra.UpsertMessageRow (message: Message): Result<void, StoreError>
+
+1. MapToRow(message) → row.
+2. PostgresClient.query(UpsertQuery("messages", row)) → if error, return StoreError.
+3. Return succeed(void).
+
+### Infra.SelectMessageRow (id: string): Result<Message, NotFoundError | StoreError>
+
+1. PostgresClient.query(SelectByIdQuery("messages", id)) → row → if error, return StoreError.
+2. If row is null → return NotFoundError("Message", id).
+3. MapFromRow(row) → message.
+4. Return succeed(message).
+
+### Infra.SelectMessagePage (conversationId: string, fromSequence: number, pageSize: number): Result<Message[], StoreError>
+
+1. PostgresClient.query(SelectPageQuery("messages", { conversationId, fromSequence, pageSize })) → rows → if error, return StoreError.
+2. For each row in rows: MapFromRow(row) → message.
+3. Return succeed(messages).
+
+### Infra.SelectAllMessagesByConversation (conversationId: string): Result<Message[], StoreError>
+
+1. PostgresClient.query(SelectByFieldQuery("messages", "conversationId", conversationId)) → rows → if error, return StoreError.
+2. For each row in rows: MapFromRow(row) → message.
+3. Return succeed(messages).
+
+### Infra.CountMessagesByConversation (conversationId: string): Result<number, StoreError>
+
+1. PostgresClient.query(CountByFieldQuery("messages", "conversationId", conversationId)) → count → if error, return StoreError.
+2. Return succeed(count).
+
+### Infra.DeleteMessageRow (id: string): Result<void, StoreError>
+
+1. PostgresClient.query(DeleteByIdQuery("messages", id)) → if error, return StoreError.
+2. Return succeed(void).
+
+### Infra.UpsertFileRow (file: File): Result<void, StoreError>
+
+1. MapToRow(file) → row.
+2. PostgresClient.query(UpsertQuery("files", row)) → if error, return StoreError.
+3. Return succeed(void).
+
+### Infra.SelectFileRow (id: string): Result<File, NotFoundError | StoreError>
+
+1. PostgresClient.query(SelectByIdQuery("files", id)) → row → if error, return StoreError.
+2. If row is null → return NotFoundError("File", id).
+3. MapFromRow(row) → file.
+4. Return succeed(file).
+
+### Infra.DeleteFileRow (id: string): Result<void, StoreError>
+
+1. PostgresClient.query(DeleteByIdQuery("files", id)) → if error, return StoreError.
+2. Return succeed(void).
+
+### Infra.PutBlob (content: FileContent): Result<string, BlobStoreError>
+
+1. R2Client.upload(content) → url → if error, return BlobStoreError.
+2. Return succeed(url).
+
+### Infra.GetBlob (url: string): Result<FileContent, BlobStoreError>
+
+1. R2Client.fetch(url) → content → if error, return BlobStoreError.
+2. Return succeed(content).
+
+### Infra.RemoveBlob (url: string): Result<void, BlobStoreError>
+
+1. R2Client.delete(url) → if error, return BlobStoreError.
+2. Return succeed(void).
 
 ## Notes
 

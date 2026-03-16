@@ -8,7 +8,6 @@ import type {
   ValidationError,
 } from "../domain/objects/errors";
 import { type Result, success } from "../domain/objects/result";
-import { requireNonEmptyString } from "./validators";
 
 export interface DeleteConversationCommand {
   readonly conversationId: string;
@@ -26,23 +25,14 @@ export class DeleteConversationFlow {
   ): Promise<
     Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>
   > {
-    const conversationIdResult = requireNonEmptyString(
-      command.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const getResult = await this.repository.getById(conversationIdResult.value);
+    const getResult = await this.repository.getById(command.conversationId);
 
     if (!getResult.ok) {
       return getResult;
     }
 
     const messagesResult = await this.messageDomainService.listByConversation(
-      conversationIdResult.value,
+      command.conversationId,
     );
 
     if (!messagesResult.ok) {
@@ -60,7 +50,7 @@ export class DeleteConversationFlow {
       }
     }
 
-    const deleteResult = await this.repository.deleteById(conversationIdResult.value);
+    const deleteResult = await this.repository.deleteById(command.conversationId);
 
     if (!deleteResult.ok) {
       return deleteResult;

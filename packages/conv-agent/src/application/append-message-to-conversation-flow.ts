@@ -10,7 +10,6 @@ import type {
   ValidationError,
 } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
-import { requireNonEmptyString, requirePresent } from "./validators";
 
 export interface Attachment {
   readonly content: FileContent;
@@ -53,23 +52,8 @@ export class AppendMessageToConversationFlow {
       | ConstructionError
     >
   > {
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const textContentResult = requirePresent(request.textContent, "textContent");
-
-    if (!textContentResult.ok) {
-      return textContentResult;
-    }
-
     const conversationResult = await this.conversationRepository.getById(
-      conversationIdResult.value,
+      request.conversationId,
     );
 
     if (!conversationResult.ok) {
@@ -78,7 +62,7 @@ export class AppendMessageToConversationFlow {
 
     const uploadFilesResult = await this.fileDomainService.uploadFiles({
       files: request.attachments.map((attachment) => ({
-        conversationId: conversationIdResult.value,
+        conversationId: request.conversationId,
         content: attachment.content,
         filename: attachment.filename,
         mimeType: attachment.mimeType,
@@ -90,7 +74,7 @@ export class AppendMessageToConversationFlow {
     }
 
     const result = await this.messageDomainService.createNextMessage({
-      conversationId: conversationIdResult.value,
+      conversationId: request.conversationId,
       textContent: request.textContent,
       fileIds: uploadFilesResult.value.map((file) => file.id),
     });

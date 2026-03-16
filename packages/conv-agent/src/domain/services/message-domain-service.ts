@@ -136,31 +136,8 @@ export class MessageDomainService {
   async createNextMessage(
     request: CreateNextMessageInput,
   ): Promise<Result<Message, ValidationError | ConstructionError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const textContentResult = requirePresent(request.textContent, "textContent");
-
-    if (!textContentResult.ok) {
-      return textContentResult;
-    }
-
-    for (const fileId of request.fileIds) {
-      const fileIdResult = requireNonEmptyString(fileId, "fileId");
-
-      if (!fileIdResult.ok) {
-        return fileIdResult;
-      }
-    }
-
     const countResult = await this.messageRepository.countByConversation(
-      conversationIdResult.value,
+      request.conversationId,
     );
 
     if (!countResult.ok) {
@@ -168,7 +145,7 @@ export class MessageDomainService {
     }
 
     return this.createMessage({
-      conversationId: conversationIdResult.value,
+      conversationId: request.conversationId,
       sequenceNumber: countResult.value + 1,
       textContent: request.textContent,
       fileIds: request.fileIds,

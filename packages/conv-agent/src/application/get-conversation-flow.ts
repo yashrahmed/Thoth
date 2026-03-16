@@ -1,7 +1,6 @@
 import type { ConversationRepository } from "../domain/contracts/conversation-repository";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
-import { requireNonEmptyString } from "./validators";
 
 export interface GetConversationQuery {
   readonly conversationId: string;
@@ -21,16 +20,7 @@ export class GetConversationFlow {
   ): Promise<
     Result<GetConversationResult, NotFoundError | StoreError | ValidationError>
   > {
-    const conversationIdResult = requireNonEmptyString(
-      query.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const result = await this.repository.getById(conversationIdResult.value);
+    const result = await this.repository.getById(query.conversationId);
 
     if (!result.ok) {
       return result;

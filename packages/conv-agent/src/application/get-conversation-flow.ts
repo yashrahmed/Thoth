@@ -1,6 +1,6 @@
-import type { ConversationRepository } from "../domain/contracts/conversation-repository";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
+import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 
 export interface GetConversationQuery {
   readonly conversationId: string;
@@ -13,14 +13,16 @@ export interface GetConversationResult {
 }
 
 export class GetConversationFlow {
-  constructor(private readonly repository: ConversationRepository) {}
+  constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
   async execute(
     query: GetConversationQuery,
   ): Promise<
     Result<GetConversationResult, NotFoundError | StoreError | ValidationError>
   > {
-    const result = await this.repository.getById(query.conversationId);
+    const result = await this.conversationDomainService.getConversation(
+      query.conversationId,
+    );
 
     if (!result.ok) {
       return result;

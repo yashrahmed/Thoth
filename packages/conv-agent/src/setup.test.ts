@@ -20,6 +20,8 @@ import { File as StoredFile } from "./domain/objects/file";
 import { NotFoundError, ValidationError, type StoreError } from "./domain/objects/errors";
 import { Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
+import { BlobDomainService } from "./domain/services/blob-domain-service";
+import { ConversationDomainService } from "./domain/services/conversation-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 import {
@@ -295,25 +297,34 @@ function buildHandler(overrides?: {
   const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
   const now = () => new Date("2026-03-16T12:00:00.000Z");
+  const conversationDomainService = new ConversationDomainService(
+    conversationRepository,
+    now,
+  );
+  const blobDomainService = new BlobDomainService(blobRepository);
   const messageDomainService = new MessageDomainService(messageRepository, now);
-  const fileDomainService = new FileDomainService(fileRepository, blobRepository, now);
+  const fileDomainService = new FileDomainService(
+    fileRepository,
+    blobDomainService,
+    now,
+  );
 
   return createConversationHttpHandler(
-    new CreateConversationFlow(conversationRepository, now),
-    new GetConversationFlow(conversationRepository),
-    new ListConversationsFlow(conversationRepository),
+    new CreateConversationFlow(conversationDomainService),
+    new GetConversationFlow(conversationDomainService),
+    new ListConversationsFlow(conversationDomainService),
     new DeleteConversationFlow(
-      conversationRepository,
+      conversationDomainService,
       messageDomainService,
       fileDomainService,
     ),
     new AppendMessageToConversationFlow(
-      conversationRepository,
+      conversationDomainService,
       messageDomainService,
       fileDomainService,
     ),
     new GetMessagesOnConversationFlow(
-      conversationRepository,
+      conversationDomainService,
       messageDomainService,
       fileDomainService,
     ),
@@ -564,34 +575,7 @@ class InMemoryBlobRepository implements BlobRepository {
     readonly filename: string;
     readonly mimeType: string;
   }) {
-    const contentResult = requirePresent(request.content, "content");
-
-    if (!contentResult.ok) {
-      return contentResult;
-    }
-
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const filenameResult = requireNonEmptyString(request.filename, "filename");
-
-    if (!filenameResult.ok) {
-      return filenameResult;
-    }
-
-    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
-
-    if (!mimeTypeResult.ok) {
-      return mimeTypeResult;
-    }
-
-    const url = `/conversations/${conversationIdResult.value}/file-${this.blobs.size + 1}-${filenameResult.value}`;
+    const url = `/conversations/${request.conversationId}/file-${this.blobs.size + 1}-${request.filename}`;
     this.blobs.set(url, request.content);
     return success(url);
   }

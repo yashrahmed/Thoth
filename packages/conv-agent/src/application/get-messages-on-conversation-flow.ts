@@ -1,6 +1,6 @@
-import type { ConversationRepository } from "../domain/contracts/conversation-repository";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
+import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 
@@ -32,7 +32,7 @@ export interface GetMessagesFile {
 
 export class GetMessagesOnConversationFlow {
   constructor(
-    private readonly conversationRepository: ConversationRepository,
+    private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
   ) {}
@@ -42,7 +42,7 @@ export class GetMessagesOnConversationFlow {
   ): Promise<
     Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>
   > {
-    const conversationResult = await this.conversationRepository.getById(
+    const conversationResult = await this.conversationDomainService.getConversation(
       query.conversationId,
     );
 
@@ -50,7 +50,7 @@ export class GetMessagesOnConversationFlow {
       return conversationResult;
     }
 
-    const result = await this.messageDomainService.listPageByConversation({
+    const result = await this.messageDomainService.listMessagesPage({
       conversationId: query.conversationId,
       pageNum: query.pageNum,
       pageSize: query.pageSize,

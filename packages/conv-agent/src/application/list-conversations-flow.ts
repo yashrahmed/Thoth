@@ -1,6 +1,6 @@
-import type { ConversationRepository } from "../domain/contracts/conversation-repository";
 import type { StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
+import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 
 export interface ListConversationsQuery {
   readonly pageNum: number;
@@ -14,12 +14,12 @@ export interface ListConversationsItem {
 }
 
 export class ListConversationsFlow {
-  constructor(private readonly repository: ConversationRepository) {}
+  constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
   async execute(
     query: ListConversationsQuery,
   ): Promise<Result<ListConversationsItem[], StoreError | ValidationError>> {
-    const result = await this.repository.listPage({
+    const result = await this.conversationDomainService.listConversationsPage({
       pageNum: query.pageNum,
       pageSize: query.pageSize,
     });

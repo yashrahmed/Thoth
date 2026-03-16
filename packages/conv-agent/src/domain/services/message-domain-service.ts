@@ -12,6 +12,7 @@ import type {
 } from "../objects/errors";
 import type { Result } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
+import { requireNonEmptyString } from "../validation";
 
 export interface CreateMessageInput {
   readonly conversationId: string;
@@ -40,27 +41,45 @@ export class MessageDomainService {
 
   async getMessage(
     messageId: string,
-  ): Promise<Result<Message, NotFoundError | StoreError>> {
+  ): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
+    const messageIdResult = requireNonEmptyString(messageId, "messageId");
+
+    if (!messageIdResult.ok) {
+      return messageIdResult;
+    }
+
     return this.messageRepository.getById(messageId);
   }
 
-  async deleteMessage(
+  async removeMessageRecord(
     messageId: string,
-  ): Promise<Result<void, NotFoundError | StoreError>> {
-    const messageResult = await this.messageRepository.getById(messageId);
+  ): Promise<Result<void, ValidationError | StoreError>> {
+    const messageIdResult = requireNonEmptyString(messageId, "messageId");
 
-    if (!messageResult.ok) {
-      return messageResult;
+    if (!messageIdResult.ok) {
+      return messageIdResult;
     }
 
     return this.messageRepository.deleteById(messageId);
   }
 
+  async deleteMessage(
+    messageId: string,
+  ): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
+    const messageResult = await this.getMessage(messageId);
+
+    if (!messageResult.ok) {
+      return messageResult;
+    }
+
+    return this.removeMessageRecord(messageId);
+  }
+
   async deleteMessageWithFiles(
     messageId: string,
     fileDomainService: FileDomainService,
-  ): Promise<Result<void, NotFoundError | StoreError | BlobStoreError>> {
-    const messageResult = await this.messageRepository.getById(messageId);
+  ): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
+    const messageResult = await this.getMessage(messageId);
 
     if (!messageResult.ok) {
       return messageResult;
@@ -74,10 +93,16 @@ export class MessageDomainService {
       }
     }
 
-    return this.messageRepository.deleteById(messageId);
+    return this.removeMessageRecord(messageId);
   }
 
   async listPageByConversation(
+    request: MessagePageRequest,
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
+    return this.listMessagesPage(request);
+  }
+
+  async listMessagesPage(
     request: MessagePageRequest,
   ): Promise<Result<Message[], ValidationError | StoreError>> {
     return this.messageRepository.listPageByConversation(request);
@@ -86,10 +111,22 @@ export class MessageDomainService {
   async listByConversation(
     conversationId: string,
   ): Promise<Result<Message[], ValidationError | StoreError>> {
+    return this.listMessagesByConversation(conversationId);
+  }
+
+  async listMessagesByConversation(
+    conversationId: string,
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
     return this.messageRepository.listByConversation(conversationId);
   }
 
   async countByConversation(
+    conversationId: string,
+  ): Promise<Result<number, ValidationError | StoreError>> {
+    return this.countMessagesByConversation(conversationId);
+  }
+
+  async countMessagesByConversation(
     conversationId: string,
   ): Promise<Result<number, ValidationError | StoreError>> {
     return this.messageRepository.countByConversation(conversationId);
@@ -98,7 +135,7 @@ export class MessageDomainService {
   async createNextMessage(
     request: CreateNextMessageInput,
   ): Promise<Result<Message, ValidationError | StoreError>> {
-    const countResult = await this.messageRepository.countByConversation(
+    const countResult = await this.countMessagesByConversation(
       request.conversationId,
     );
 

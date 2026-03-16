@@ -1,6 +1,6 @@
-import type { ConversationRepository } from "../domain/contracts/conversation-repository";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
+import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type {
   BlobStoreError,
   NotFoundError,
@@ -15,7 +15,7 @@ export interface DeleteConversationCommand {
 
 export class DeleteConversationFlow {
   constructor(
-    private readonly repository: ConversationRepository,
+    private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
   ) {}
@@ -25,13 +25,15 @@ export class DeleteConversationFlow {
   ): Promise<
     Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>
   > {
-    const getResult = await this.repository.getById(command.conversationId);
+    const getResult = await this.conversationDomainService.getConversation(
+      command.conversationId,
+    );
 
     if (!getResult.ok) {
       return getResult;
     }
 
-    const messagesResult = await this.messageDomainService.listByConversation(
+    const messagesResult = await this.messageDomainService.listMessagesByConversation(
       command.conversationId,
     );
 
@@ -50,7 +52,9 @@ export class DeleteConversationFlow {
       }
     }
 
-    const deleteResult = await this.repository.deleteById(command.conversationId);
+    const deleteResult = await this.conversationDomainService.deleteConversation(
+      command.conversationId,
+    );
 
     if (!deleteResult.ok) {
       return deleteResult;

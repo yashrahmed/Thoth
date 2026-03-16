@@ -20,14 +20,8 @@ export interface MessagePageRequest {
 export interface MessageRepository {
   create(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>>;
   getById(id: string): Promise<Result<Message, NotFoundError | StoreError>>;
-  listPageByConversation(
-    request: MessagePageRequest,
-  ): Promise<Result<Message[], ValidationError | StoreError>>;
-  listByConversation(
-    conversationId: string,
-  ): Promise<Result<Message[], ValidationError | StoreError>>;
-  countByConversation(
-    conversationId: string,
-  ): Promise<Result<number, ValidationError | StoreError>>;
+  listPageByConversation(request: MessagePageRequest): Promise<Result<Message[], ValidationError | StoreError>>;
+  listByConversation(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>>;
+  countByConversation(conversationId: string): Promise<Result<number, ValidationError | StoreError>>;
   deleteById(id: string): Promise<Result<void, StoreError>>;
 }

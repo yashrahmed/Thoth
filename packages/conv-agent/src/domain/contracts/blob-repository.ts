@@ -1,4 +1,4 @@
-import type { BlobStoreError, ValidationError } from "../objects/errors";
+import type { BlobStoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 
 export type FileContent = ArrayBuffer;
@@ -11,8 +11,6 @@ export interface BlobUploadRequest {
 }
 
 export interface BlobRepository {
-  upload(
-    request: BlobUploadRequest,
-  ): Promise<Result<string, ValidationError | BlobStoreError>>;
+  upload(request: BlobUploadRequest): Promise<Result<string, BlobStoreError>>;
   delete(canonicalUrl: string): Promise<Result<void, BlobStoreError>>;
 }

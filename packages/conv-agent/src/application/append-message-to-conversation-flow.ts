@@ -1,7 +1,7 @@
 import type { FileContent } from "../domain/contracts/blob-repository";
-import type { ConversationRepository } from "../domain/contracts/conversation-repository";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
+import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type {
   BlobStoreError,
   NotFoundError,
@@ -34,7 +34,7 @@ export interface AppendMessageResult {
 
 export class AppendMessageToConversationFlow {
   constructor(
-    private readonly conversationRepository: ConversationRepository,
+    private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
   ) {}
@@ -50,7 +50,7 @@ export class AppendMessageToConversationFlow {
       | BlobStoreError
     >
   > {
-    const conversationResult = await this.conversationRepository.getById(
+    const conversationResult = await this.conversationDomainService.getConversation(
       request.conversationId,
     );
 

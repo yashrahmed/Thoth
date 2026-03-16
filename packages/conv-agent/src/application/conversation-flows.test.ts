@@ -24,6 +24,8 @@ import {
 } from "../domain/objects/errors";
 import { Message } from "../domain/objects/message";
 import { failure, success, type Result } from "../domain/objects/result";
+import { BlobDomainService } from "../domain/services/blob-domain-service";
+import { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import { FileDomainService } from "../domain/services/file-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
 import {
@@ -42,7 +44,9 @@ describe("conversation flows", () => {
   test("CreateConversation sets timestamps and persists once", async () => {
     const repository = new InMemoryConversationRepository();
     const now = new Date("2026-03-16T12:00:00.000Z");
-    const useCase = new CreateConversationFlow(repository, () => now);
+    const useCase = new CreateConversationFlow(
+      new ConversationDomainService(repository, () => now),
+    );
 
     const result = await useCase.execute();
 
@@ -63,7 +67,7 @@ describe("conversation flows", () => {
 
   test("GetConversation returns NotFound for unknown ids", async () => {
     const repository = new InMemoryConversationRepository();
-    const useCase = new GetConversationFlow(repository);
+    const useCase = new GetConversationFlow(new ConversationDomainService(repository));
 
     const result = await useCase.execute({ conversationId: "missing-id" });
 
@@ -77,7 +81,9 @@ describe("conversation flows", () => {
       mustCreateConversation("conversation-2", "2026-03-16T12:00:00.000Z"),
       mustCreateConversation("conversation-3", "2026-03-16T13:00:00.000Z"),
     ]);
-    const useCase = new ListConversationsFlow(repository);
+    const useCase = new ListConversationsFlow(
+      new ConversationDomainService(repository),
+    );
 
     const invalidResult = await useCase.execute({ pageNum: 0, pageSize: 2 });
 
@@ -108,9 +114,13 @@ describe("conversation flows", () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
+    const conversationDomainService = new ConversationDomainService(
+      conversationRepository,
+    );
+    const blobDomainService = new BlobDomainService(blobRepository);
     const fileDomainService = new FileDomainService(
       fileRepository,
-      blobRepository,
+      blobDomainService,
       () => new Date("2026-03-16T12:01:00.000Z"),
     );
     const messageDomainService = new MessageDomainService(
@@ -118,7 +128,7 @@ describe("conversation flows", () => {
       () => new Date("2026-03-16T12:02:00.000Z"),
     );
     const useCase = new AppendMessageToConversationFlow(
-      conversationRepository,
+      conversationDomainService,
       messageDomainService,
       fileDomainService,
     );
@@ -155,9 +165,13 @@ describe("conversation flows", () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
+    const conversationDomainService = new ConversationDomainService(
+      conversationRepository,
+    );
+    const blobDomainService = new BlobDomainService(blobRepository);
     const fileDomainService = new FileDomainService(
       fileRepository,
-      blobRepository,
+      blobDomainService,
       () => new Date("2026-03-16T12:01:00.000Z"),
     );
     const messageDomainService = new MessageDomainService(
@@ -165,7 +179,7 @@ describe("conversation flows", () => {
       () => new Date("2026-03-16T12:02:00.000Z"),
     );
     const useCase = new AppendMessageToConversationFlow(
-      conversationRepository,
+      conversationDomainService,
       messageDomainService,
       fileDomainService,
     );
@@ -200,9 +214,12 @@ describe("conversation flows", () => {
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
     const useCase = new AppendMessageToConversationFlow(
-      conversationRepository,
+      new ConversationDomainService(conversationRepository),
       new MessageDomainService(messageRepository),
-      new FileDomainService(fileRepository, blobRepository),
+      new FileDomainService(
+        fileRepository,
+        new BlobDomainService(blobRepository),
+      ),
     );
 
     const result = await useCase.execute({
@@ -245,9 +262,12 @@ describe("conversation flows", () => {
       ),
     ]);
     const useCase = new GetMessagesOnConversationFlow(
-      conversationRepository,
+      new ConversationDomainService(conversationRepository),
       new MessageDomainService(messageRepository),
-      new FileDomainService(fileRepository, new InMemoryBlobRepository()),
+      new FileDomainService(
+        fileRepository,
+        new BlobDomainService(new InMemoryBlobRepository()),
+      ),
     );
 
     const invalidResult = await useCase.execute({
@@ -331,9 +351,12 @@ describe("conversation flows", () => {
       ["/conversations/conversation-1/file-2-b.txt", new TextEncoder().encode("b").buffer],
     ]);
     const useCase = new DeleteConversationFlow(
-      conversationRepository,
+      new ConversationDomainService(conversationRepository),
       new MessageDomainService(messageRepository),
-      new FileDomainService(fileRepository, blobRepository),
+      new FileDomainService(
+        fileRepository,
+        new BlobDomainService(blobRepository),
+      ),
     );
 
     const result = await useCase.execute({ conversationId: "conversation-1" });
@@ -376,9 +399,12 @@ describe("conversation flows", () => {
     const blobRepository = new InMemoryBlobRepository();
     blobRepository.deleteFailure = new BlobStoreError("delete", "boom");
     const useCase = new DeleteConversationFlow(
-      conversationRepository,
+      new ConversationDomainService(conversationRepository),
       new MessageDomainService(messageRepository),
-      new FileDomainService(fileRepository, blobRepository),
+      new FileDomainService(
+        fileRepository,
+        new BlobDomainService(blobRepository),
+      ),
     );
 
     const result = await useCase.execute({ conversationId: "conversation-1" });
@@ -679,35 +705,8 @@ class InMemoryBlobRepository implements BlobRepository {
     readonly filename: string;
     readonly mimeType: string;
   }) {
-    const contentResult = requirePresent(request.content, "content");
-
-    if (!contentResult.ok) {
-      return contentResult;
-    }
-
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const filenameResult = requireNonEmptyString(request.filename, "filename");
-
-    if (!filenameResult.ok) {
-      return filenameResult;
-    }
-
-    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
-
-    if (!mimeTypeResult.ok) {
-      return mimeTypeResult;
-    }
-
     this.uploads.push(request);
-    const url = `/conversations/${conversationIdResult.value}/file-${this.uploads.length}-${filenameResult.value}`;
+    const url = `/conversations/${request.conversationId}/file-${this.uploads.length}-${request.filename}`;
     this.blobs.set(url, request.content);
     return success(url);
   }

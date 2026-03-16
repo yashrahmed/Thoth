@@ -1,5 +1,4 @@
 import type {
-  BlobRepository,
   FileContent,
 } from "../contracts/blob-repository";
 import type {
@@ -14,6 +13,8 @@ import type {
   ValidationError,
 } from "../objects/errors";
 import type { Result } from "../objects/result";
+import type { BlobDomainService } from "./blob-domain-service";
+import { requireNonEmptyString } from "../validation";
 
 export interface UploadFileInput {
   readonly conversationId: string;
@@ -33,16 +34,46 @@ export interface GetFilesInput {
 export class FileDomainService {
   constructor(
     private readonly fileRepository: FileRepository,
-    private readonly blobRepository: BlobRepository,
+    private readonly blobDomainService: BlobDomainService,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  async createFile(
+    record: CreateFileRecord,
+  ): Promise<Result<FileEntity, StoreError>> {
+    return this.fileRepository.create(record);
+  }
+
+  async getFile(
+    fileId: string,
+  ): Promise<Result<FileEntity, ValidationError | NotFoundError | StoreError>> {
+    const fileIdResult = requireNonEmptyString(fileId, "fileId");
+
+    if (!fileIdResult.ok) {
+      return fileIdResult;
+    }
+
+    return this.fileRepository.getById(fileId);
+  }
+
+  async deleteFileRecord(
+    fileId: string,
+  ): Promise<Result<void, ValidationError | StoreError>> {
+    const fileIdResult = requireNonEmptyString(fileId, "fileId");
+
+    if (!fileIdResult.ok) {
+      return fileIdResult;
+    }
+
+    return this.fileRepository.deleteById(fileId);
+  }
 
   async uploadFile(
     request: UploadFileInput,
   ): Promise<
     Result<FileEntity, ValidationError | BlobStoreError | StoreError>
   > {
-    const uploadResult = await this.blobRepository.upload({
+    const uploadResult = await this.blobDomainService.uploadBlob({
       conversationId: request.conversationId,
       content: request.content,
       filename: request.filename,
@@ -53,7 +84,7 @@ export class FileDomainService {
       return uploadResult;
     }
 
-    return this.fileRepository.create(this.buildRecord(request, uploadResult.value));
+    return this.createFile(this.buildRecord(request, uploadResult.value));
   }
 
   async uploadFiles(
@@ -81,14 +112,14 @@ export class FileDomainService {
 
   async deleteFile(
     fileId: string,
-  ): Promise<Result<void, NotFoundError | StoreError | BlobStoreError>> {
-    const fileResult = await this.fileRepository.getById(fileId);
+  ): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
+    const fileResult = await this.getFile(fileId);
 
     if (!fileResult.ok) {
       return fileResult;
     }
 
-    const deleteBlobResult = await this.blobRepository.delete(
+    const deleteBlobResult = await this.blobDomainService.deleteBlob(
       fileResult.value.canonicalUrl,
     );
 
@@ -96,16 +127,16 @@ export class FileDomainService {
       return deleteBlobResult;
     }
 
-    return this.fileRepository.deleteById(fileId);
+    return this.deleteFileRecord(fileId);
   }
 
   async getFiles(
     request: GetFilesInput,
-  ): Promise<Result<ReadonlyArray<FileEntity>, NotFoundError | StoreError>> {
+  ): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | NotFoundError | StoreError>> {
     const files: FileEntity[] = [];
 
     for (const fileId of request.fileIds) {
-      const fileResult = await this.fileRepository.getById(fileId);
+      const fileResult = await this.getFile(fileId);
 
       if (!fileResult.ok) {
         return fileResult;

@@ -4,12 +4,8 @@ import type {
   BlobRepository,
   BlobUploadRequest,
 } from "../../domain/contracts/blob-repository";
-import { BlobStoreError, ValidationError } from "../../domain/objects/errors";
+import { BlobStoreError } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
-import {
-  requireNonEmptyString,
-  requirePresent,
-} from "../../domain/validation";
 
 export interface R2BlobConfig {
   readonly endpoint: string;
@@ -33,37 +29,10 @@ export class R2BlobRepository implements BlobRepository {
 
   async upload(
     request: BlobUploadRequest,
-  ): Promise<Result<string, ValidationError | BlobStoreError>> {
-    const contentResult = requirePresent(request.content, "content");
-
-    if (!contentResult.ok) {
-      return contentResult;
-    }
-
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const filenameResult = requireNonEmptyString(request.filename, "filename");
-
-    if (!filenameResult.ok) {
-      return filenameResult;
-    }
-
-    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
-
-    if (!mimeTypeResult.ok) {
-      return mimeTypeResult;
-    }
-
+  ): Promise<Result<string, BlobStoreError>> {
     const canonicalPath = this.getCanonicalPath(
-      conversationIdResult.value,
-      filenameResult.value,
+      request.conversationId,
+      request.filename,
     );
     const objectKey = this.getObjectKey(canonicalPath);
 
@@ -72,7 +41,7 @@ export class R2BlobRepository implements BlobRepository {
         method: "PUT",
         objectKey,
         body: request.content,
-        contentType: mimeTypeResult.value,
+        contentType: request.mimeType,
       });
 
       if (!response.ok) {

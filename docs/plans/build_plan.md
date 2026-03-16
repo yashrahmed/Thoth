@@ -31,7 +31,6 @@ class File {
 ## Types
 
 ```ts
-type SortDirection = "asc" | "desc";
 type FileContent = { readonly _brand: "FileContent" };
 type Attachment = {
   content: FileContent;
@@ -114,7 +113,7 @@ type ConstructionError = {
 
 ## Actions
 
-### DeleteConversation (conversationId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
+### App.DeleteConversation (conversationId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. GetConversation(conversationId) → conversation → if failure, return failure.
@@ -126,7 +125,7 @@ type ConstructionError = {
 5. RemoveFromConversationDBStore(conversationId) → if failure, return failure.
 6. Return succeed(void).
 
-### AppendMessageToConversation (request: AppendMessageRequest): Result<Message, ValidationError | NotFoundError | StoreError | BlobStoreError | ConstructionError>
+### App.AppendMessageToConversation (request: AppendMessageRequest): Result<Message, ValidationError | NotFoundError | StoreError | BlobStoreError | ConstructionError>
 
 1. RequireNonEmptyString(request.conversationId, "conversationId") → if failure, return failure.
 2. RequirePresent(request.textContent, "textContent") → if failure, return failure.
@@ -142,7 +141,7 @@ type ConstructionError = {
 8. CreateMessage(request: CreateMessageRequest) → message → if failure, return failure.
 9. Return succeed(message).
 
-### GetMessagesOnConversation (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | NotFoundError | StoreError>
+### App.GetMessagesOnConversation (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
@@ -152,7 +151,7 @@ type ConstructionError = {
 6. ReadPageFromMessageDBStore(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
 7. Return succeed(messages).
 
-### ListConversations (pageNum: number, pageSize: number): Result<Conversation[], ValidationError | StoreError>
+### App.ListConversations (pageNum: number, pageSize: number): Result<Conversation[], ValidationError | StoreError>
 
 1. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
 2. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
@@ -160,14 +159,14 @@ type ConstructionError = {
 4. ReadPageFromConversationDBStore(offset, pageSize) → conversations → if failure, return failure.
 5. Return succeed(conversations).
 
-### CreateConversation (): Result<Conversation, ConstructionError | StoreError>
+### App.CreateConversation (): Result<Conversation, ConstructionError | StoreError>
 
 1. Now() → timestamp.
 2. Construct Conversation(createdAt: timestamp, updatedAt: timestamp) → conversation → if failure, return failure.
 3. PersistToConversationDBStore(conversation) → conversation → if failure, return failure.
 4. Return succeed(conversation).
 
-### GetConversation (conversationId: string): Result<Conversation, NotFoundError | StoreError>
+### App.GetConversation (conversationId: string): Result<Conversation, NotFoundError | StoreError>
 
 1. ReadFromConversationDBStore(conversationId) → conversation → if failure, return failure.
 2. Return succeed(conversation).
@@ -182,11 +181,6 @@ type ConstructionError = {
 5. Construct Message(request.conversationId, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds) → message → if failure, return failure.
 6. PersistToMessageDBStore(message) → message → if failure, return failure.
 7. Return succeed(message).
-
-### GetMessage (messageId: string): Result<Message, NotFoundError | StoreError>
-
-1. ReadFromMessageDBStore(messageId) → message → if failure, return failure.
-2. Return succeed(message).
 
 ### DeleteMessage (messageId: string): Result<void, NotFoundError | StoreError>
 
@@ -204,12 +198,6 @@ type ConstructionError = {
 6. Construct File(canonicalUrl, request.filename, request.mimeType, sizeInBytes, createdAt: timestamp, updatedAt: timestamp) → file → if failure, return failure.
 7. PersistToFileDBStore(file) → file → if failure, return failure.
 8. Return succeed(file).
-
-### GetFile (fileId: string): Result<FileContent, NotFoundError | StoreError | BlobStoreError>
-
-1. ReadFromFileDBStore(fileId) → file → if failure, return failure.
-2. FetchFromBlobStore(file.canonicalUrl) → content → if failure, return failure.
-3. Return succeed(content).
 
 ### DeleteFile (fileId: string): Result<void, NotFoundError | StoreError | BlobStoreError>
 
@@ -273,10 +261,6 @@ type ConstructionError = {
 ### UploadToBlobStore (content: FileContent): Result<string, BlobStoreError>
 
 1. Infra.PutBlob(content) → url → if failure, return failure.
-
-### FetchFromBlobStore (url: string): Result<FileContent, BlobStoreError>
-
-1. Infra.GetBlob(url) → content → if failure, return failure.
 
 ### DeleteFromBlobStore (url: string): Result<void, BlobStoreError>
 
@@ -369,11 +353,6 @@ type ConstructionError = {
 1. R2Client.upload(content) → url → if error, return BlobStoreError.
 2. Return succeed(url).
 
-### Infra.GetBlob (url: string): Result<FileContent, BlobStoreError>
-
-1. R2Client.fetch(url) → content → if error, return BlobStoreError.
-2. Return succeed(content).
-
 ### Infra.RemoveBlob (url: string): Result<void, BlobStoreError>
 
 1. R2Client.delete(url) → if error, return BlobStoreError.
@@ -389,9 +368,9 @@ type ConstructionError = {
 - `NotFoundError` is separate from `StoreError` so callers can map to different
   HTTP status codes (404 vs 500).
 - `FileContent` is opaque in the domain layer — the domain never inspects or
-  transforms it. The implementations of `UploadToBlobStore` and
-  `FetchFromBlobStore` are responsible for checking and casting to the actual
-  runtime representation (e.g. `Buffer`, `ReadableStream`).
+  transforms it. The implementation of `UploadToBlobStore` is responsible for
+  checking and casting to the actual runtime representation (e.g. `Buffer`,
+  `ReadableStream`).
 - Message ordering and pagination are derived from `sequenceNumber` on `Message`
   combined with `conversationId`. `DeleteConversation` and
   `AppendMessageToConversation` query the message store by `conversationId`

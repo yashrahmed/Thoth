@@ -152,6 +152,14 @@ type ConstructionError = {
 6. ReadPageFromMessageDBStore(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
 7. Return succeed(messages).
 
+### ListConversations (pageNum: number, pageSize: number): Result<Conversation[], ValidationError | StoreError>
+
+1. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
+2. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
+3. Compute offset = (pageNum - 1) * pageSize.
+4. ReadPageFromConversationDBStore(offset, pageSize) → conversations → if failure, return failure.
+5. Return succeed(conversations).
+
 ### CreateConversation (): Result<Conversation, ConstructionError | StoreError>
 
 1. Now() → timestamp.
@@ -224,6 +232,10 @@ type ConstructionError = {
 
 1. Infra.SelectConversationRow(id) → conversation → if failure, return failure.
 
+### ReadPageFromConversationDBStore (offset: number, pageSize: number): Result<Conversation[], StoreError>
+
+1. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
+
 ### RemoveFromConversationDBStore (id: string): Result<void, StoreError>
 
 1. Infra.DeleteConversationRow(id) → if failure, return failure.
@@ -291,6 +303,12 @@ type ConstructionError = {
 2. If row is null → return NotFoundError("Conversation", id).
 3. MapFromRow(row) → conversation.
 4. Return succeed(conversation).
+
+### Infra.SelectConversationPage (offset: number, pageSize: number): Result<Conversation[], StoreError>
+
+1. PostgresClient.query(SelectPageQuery("conversations", { offset, pageSize })) → rows → if error, return StoreError.
+2. For each row in rows: MapFromRow(row) → conversation.
+3. Return succeed(conversations).
 
 ### Infra.DeleteConversationRow (id: string): Result<void, StoreError>
 

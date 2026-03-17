@@ -1,4 +1,3 @@
-import type { FileContent } from "../domain/contracts/blob-repository";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
@@ -11,7 +10,7 @@ import type {
 import type { Result } from "../domain/objects/result";
 
 export interface Attachment {
-  readonly content: FileContent;
+  readonly content: ArrayBuffer;
   readonly filename: string;
   readonly mimeType: string;
 }

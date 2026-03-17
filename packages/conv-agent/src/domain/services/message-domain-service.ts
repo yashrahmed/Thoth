@@ -12,7 +12,11 @@ import type {
 } from "../objects/errors";
 import type { Result } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
-import { requireNonEmptyString } from "../validation";
+import {
+  requireNonEmptyString,
+  requirePositiveInteger,
+  requirePresent,
+} from "../validation";
 
 export interface CreateMessageInput {
   readonly conversationId: string;
@@ -36,52 +40,154 @@ export class MessageDomainService {
   async createMessage(
     request: CreateMessageInput,
   ): Promise<Result<Message, ValidationError | StoreError>> {
-    return this.messageRepository.persistToMessageDBStore(
+    return this.persistToMessageDBStore(
       this.buildRecord(request),
     );
   }
 
-  async getMessage(
-    messageId: string,
+  async persistToMessageDBStore(
+    record: CreateMessageRecord,
+  ): Promise<Result<Message, ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(
+      record.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const sequenceNumberResult = requirePositiveInteger(
+      record.sequenceNumber,
+      "sequenceNumber",
+    );
+
+    if (!sequenceNumberResult.ok) {
+      return sequenceNumberResult;
+    }
+
+    const textContentResult = requirePresent(record.textContent, "textContent");
+
+    if (!textContentResult.ok) {
+      return textContentResult;
+    }
+
+    for (const fileId of record.fileIds) {
+      const fileIdResult = requireNonEmptyString(fileId, "fileId");
+
+      if (!fileIdResult.ok) {
+        return fileIdResult;
+      }
+    }
+
+    return this.messageRepository.persistToMessageDBStore(record);
+  }
+
+  async readFromMessageDBStore(
+    id: string,
   ): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
-    const messageIdResult = requireNonEmptyString(messageId, "messageId");
+    const idResult = requireNonEmptyString(id, "id");
 
-    if (!messageIdResult.ok) {
-      return messageIdResult;
+    if (!idResult.ok) {
+      return idResult;
     }
 
-    return this.messageRepository.getById(messageId);
+    return this.messageRepository.readFromMessageDBStore(idResult.value);
   }
 
-  async removeMessageRecord(
-    messageId: string,
+  async readPageFromMessageDBStore(
+    request: MessagePageRequest,
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(
+      request.conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
+    return this.messageRepository.readPageFromMessageDBStore({
+      conversationId: conversationIdResult.value,
+      pageNum: pageNumResult.value,
+      pageSize: pageSizeResult.value,
+    });
+  }
+
+  async readAllMessagesFromMessageDBStore(
+    conversationId: string,
+  ): Promise<Result<Message[], ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    return this.messageRepository.readAllMessagesFromMessageDBStore(
+      conversationIdResult.value,
+    );
+  }
+
+  async readMessageCountFromMessageDBStore(
+    conversationId: string,
+  ): Promise<Result<number, ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    return this.messageRepository.readMessageCountFromMessageDBStore(
+      conversationIdResult.value,
+    );
+  }
+
+  async removeFromMessageDBStore(
+    id: string,
   ): Promise<Result<void, ValidationError | StoreError>> {
-    const messageIdResult = requireNonEmptyString(messageId, "messageId");
+    const idResult = requireNonEmptyString(id, "id");
 
-    if (!messageIdResult.ok) {
-      return messageIdResult;
+    if (!idResult.ok) {
+      return idResult;
     }
 
-    return this.messageRepository.deleteById(messageId);
+    return this.messageRepository.removeFromMessageDBStore(idResult.value);
   }
-
   async deleteMessage(
     messageId: string,
   ): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
-    const messageResult = await this.getMessage(messageId);
+    const messageResult = await this.readFromMessageDBStore(messageId);
 
     if (!messageResult.ok) {
       return messageResult;
     }
 
-    return this.removeMessageRecord(messageId);
+    return this.removeFromMessageDBStore(messageId);
   }
 
   async deleteMessageWithFiles(
     messageId: string,
     fileDomainService: FileDomainService,
   ): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
-    const messageResult = await this.getMessage(messageId);
+    const messageResult = await this.readFromMessageDBStore(messageId);
 
     if (!messageResult.ok) {
       return messageResult;
@@ -95,49 +201,12 @@ export class MessageDomainService {
       }
     }
 
-    return this.removeMessageRecord(messageId);
+    return this.removeFromMessageDBStore(messageId);
   }
-
-  async listPageByConversation(
-    request: MessagePageRequest,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    return this.listMessagesPage(request);
-  }
-
-  async listMessagesPage(
-    request: MessagePageRequest,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    return this.messageRepository.listPageByConversation(request);
-  }
-
-  async listByConversation(
-    conversationId: string,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    return this.listMessagesByConversation(conversationId);
-  }
-
-  async listMessagesByConversation(
-    conversationId: string,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    return this.messageRepository.listByConversation(conversationId);
-  }
-
-  async countByConversation(
-    conversationId: string,
-  ): Promise<Result<number, ValidationError | StoreError>> {
-    return this.countMessagesByConversation(conversationId);
-  }
-
-  async countMessagesByConversation(
-    conversationId: string,
-  ): Promise<Result<number, ValidationError | StoreError>> {
-    return this.messageRepository.countByConversation(conversationId);
-  }
-
   async createNextMessage(
     request: CreateNextMessageInput,
   ): Promise<Result<Message, ValidationError | StoreError>> {
-    const countResult = await this.countMessagesByConversation(
+    const countResult = await this.readMessageCountFromMessageDBStore(
       request.conversationId,
     );
 

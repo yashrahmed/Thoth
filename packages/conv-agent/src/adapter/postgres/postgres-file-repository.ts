@@ -3,9 +3,8 @@ import type {
   FileRepository,
 } from "../../domain/contracts/file-repository";
 import { File } from "../../domain/objects/file";
-import { NotFoundError, StoreError, ValidationError } from "../../domain/objects/errors";
+import { NotFoundError, StoreError } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
-import { requireNonEmptyString } from "../../domain/validation";
 import type { PostgresDatabase } from "./postgres-database";
 
 interface FileRow {
@@ -58,13 +57,7 @@ export class PostgresFileRepository implements FileRepository {
 
   async readFromFileDBStore(
     id: string,
-  ): Promise<Result<File, ValidationError | NotFoundError | StoreError>> {
-    const idResult = requireNonEmptyString(id, "id");
-
-    if (!idResult.ok) {
-      return idResult;
-    }
-
+  ): Promise<Result<File, NotFoundError | StoreError>> {
     try {
       const rows = await this.sql<FileRow[]>`
         select
@@ -76,13 +69,13 @@ export class PostgresFileRepository implements FileRepository {
           created_at,
           updated_at
         from thoth.files
-        where id = ${idResult.value}
+        where id = ${id}
       `;
 
       const row = rows[0];
 
       if (!row) {
-        return failure(new NotFoundError("File", idResult.value));
+        return failure(new NotFoundError("File", id));
       }
 
       return mapRow(row, "read");
@@ -91,7 +84,9 @@ export class PostgresFileRepository implements FileRepository {
     }
   }
 
-  async deleteById(id: string) {
+  async removeFromFileDBStore(
+    id: string,
+  ): Promise<Result<void, StoreError>> {
     try {
       await this.sql`
         delete from thoth.files

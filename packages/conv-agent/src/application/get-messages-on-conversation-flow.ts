@@ -42,7 +42,7 @@ export class GetMessagesOnConversationFlow {
   ): Promise<
     Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>
   > {
-    const conversationResult = await this.conversationDomainService.getConversation(
+    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(
       query.conversationId,
     );
 
@@ -50,7 +50,7 @@ export class GetMessagesOnConversationFlow {
       return conversationResult;
     }
 
-    const result = await this.messageDomainService.listMessagesPage({
+    const result = await this.messageDomainService.readPageFromMessageDBStore({
       conversationId: query.conversationId,
       pageNum: query.pageNum,
       pageSize: query.pageSize,

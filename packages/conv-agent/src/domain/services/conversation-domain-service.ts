@@ -9,6 +9,10 @@ import type {
   ValidationError,
 } from "../objects/errors";
 import type { Result } from "../objects/result";
+import {
+  requireNonEmptyString,
+  requirePositiveInteger,
+} from "../validation";
 
 export class ConversationDomainService {
   constructor(
@@ -19,27 +23,60 @@ export class ConversationDomainService {
   async createConversation(): Promise<Result<Conversation, StoreError>> {
     const timestamp = this.now();
 
-    return this.conversationRepository.persistToConversationDBStore({
+    return this.persistToConversationDBStore({
       createdAt: timestamp,
       updatedAt: timestamp,
     });
   }
 
-  async getConversation(
-    conversationId: string,
-  ): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
-    return this.conversationRepository.getById(conversationId);
+  async persistToConversationDBStore(
+    record: { readonly createdAt: Date; readonly updatedAt: Date },
+  ): Promise<Result<Conversation, StoreError>> {
+    return this.conversationRepository.persistToConversationDBStore(record);
   }
 
-  async listConversationsPage(
+  async readFromConversationDBStore(
+    id: string,
+  ): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    return this.conversationRepository.readFromConversationDBStore(idResult.value);
+  }
+
+  async readPageFromConversationDBStore(
     request: ConversationPageRequest,
   ): Promise<Result<Conversation[], ValidationError | StoreError>> {
-    return this.conversationRepository.listPage(request);
+    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
+    return this.conversationRepository.readPageFromConversationDBStore({
+      pageNum: pageNumResult.value,
+      pageSize: pageSizeResult.value,
+    });
   }
 
-  async deleteConversation(
-    conversationId: string,
+  async removeFromConversationDBStore(
+    id: string,
   ): Promise<Result<void, ValidationError | StoreError>> {
-    return this.conversationRepository.deleteById(conversationId);
+    const idResult = requireNonEmptyString(id, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    return this.conversationRepository.removeFromConversationDBStore(idResult.value);
   }
 }

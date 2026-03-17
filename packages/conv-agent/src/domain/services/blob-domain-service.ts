@@ -9,7 +9,7 @@ import { requireNonEmptyString, requirePresent } from "../validation";
 export class BlobDomainService {
   constructor(private readonly blobRepository: BlobRepository) {}
 
-  async uploadBlob(
+  async uploadToBlobStore(
     request: BlobUploadRequest,
   ): Promise<Result<string, ValidationError | BlobStoreError>> {
     const contentResult = requirePresent(request.content, "content");
@@ -39,12 +39,21 @@ export class BlobDomainService {
       return mimeTypeResult;
     }
 
-    return this.blobRepository.upload(request);
+    return this.blobRepository.uploadToBlobStore(request);
   }
 
   async deleteFromBlobStore(
     url: string,
   ): Promise<Result<void, ValidationError | BlobStoreError>> {
+    const canonicalUrlResult = requireNonEmptyString(
+      url,
+      "canonicalUrl",
+    );
+
+    if (!canonicalUrlResult.ok) {
+      return canonicalUrlResult;
+    }
+
     return this.blobRepository.deleteFromBlobStore(url);
   }
 }

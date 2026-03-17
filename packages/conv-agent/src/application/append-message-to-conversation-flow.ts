@@ -50,7 +50,7 @@ export class AppendMessageToConversationFlow {
       | BlobStoreError
     >
   > {
-    const conversationResult = await this.conversationDomainService.getConversation(
+    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(
       request.conversationId,
     );
 

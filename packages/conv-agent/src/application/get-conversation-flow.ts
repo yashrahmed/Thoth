@@ -20,7 +20,7 @@ export class GetConversationFlow {
   ): Promise<
     Result<GetConversationResult, NotFoundError | StoreError | ValidationError>
   > {
-    const result = await this.conversationDomainService.getConversation(
+    const result = await this.conversationDomainService.readFromConversationDBStore(
       query.conversationId,
     );
 

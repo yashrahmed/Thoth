@@ -31,11 +31,6 @@ import { BlobDomainService } from "./services/blob-domain-service";
 import { ConversationDomainService } from "./services/conversation-domain-service";
 import { FileDomainService } from "./services/file-domain-service";
 import { MessageDomainService } from "./services/message-domain-service";
-import {
-  requireNonEmptyString,
-  requirePositiveInteger,
-  requirePresent,
-} from "./validation";
 
 describe("domain services", () => {
   test("ConversationDomainService creates, reads, pages, and deletes conversations", async () => {
@@ -50,12 +45,12 @@ describe("domain services", () => {
     );
 
     const createResult = await service.createConversation();
-    const getResult = await service.getConversation("conversation-2");
-    const listResult = await service.listConversationsPage({
+    const getResult = await service.readFromConversationDBStore("conversation-2");
+    const listResult = await service.readPageFromConversationDBStore({
       pageNum: 1,
       pageSize: 2,
     });
-    const deleteResult = await service.deleteConversation("conversation-1");
+    const deleteResult = await service.removeFromConversationDBStore("conversation-1");
 
     expect(createResult.ok).toBe(true);
     expect(getResult.ok).toBe(true);
@@ -74,7 +69,7 @@ describe("domain services", () => {
     const service = new BlobDomainService(repository);
     const content = new TextEncoder().encode("hello").buffer;
 
-    const uploadResult = await service.uploadBlob({
+    const uploadResult = await service.uploadToBlobStore({
       conversationId: "conversation-1",
       content,
       filename: "hello.txt",
@@ -98,7 +93,7 @@ describe("domain services", () => {
     const service = new BlobDomainService(repository);
     const content = new TextEncoder().encode("hello").buffer;
 
-    const invalidUploadResult = await service.uploadBlob({
+    const invalidUploadResult = await service.uploadToBlobStore({
       conversationId: "",
       content,
       filename: "hello.txt",
@@ -120,8 +115,8 @@ describe("domain services", () => {
     );
     expect(invalidDeleteResult.error).toEqual(
       new ValidationError(
-        "url",
-        "url must be a non-empty string.",
+        "canonicalUrl",
+        "canonicalUrl must be a non-empty string.",
       ),
     );
     expect(repository.uploads).toHaveLength(0);
@@ -159,15 +154,15 @@ describe("domain services", () => {
       textContent: "three",
       fileIds: ["file-1"],
     });
-    const getResult = await service.getMessage("message-1");
-    const removeRecordResult = await service.removeMessageRecord("message-2");
-    const pageResult = await service.listMessagesPage({
+    const getResult = await service.readFromMessageDBStore("message-1");
+    const removeRecordResult = await service.removeFromMessageDBStore("message-2");
+    const pageResult = await service.readPageFromMessageDBStore({
       conversationId: "conversation-1",
       pageNum: 2,
       pageSize: 1,
     });
-    const listResult = await service.listMessagesByConversation("conversation-1");
-    const countResult = await service.countMessagesByConversation("conversation-1");
+    const listResult = await service.readAllMessagesFromMessageDBStore("conversation-1");
+    const countResult = await service.readMessageCountFromMessageDBStore("conversation-1");
     const deleteResult = await service.deleteMessage("message-1");
 
     expect(createResult.ok).toBe(true);
@@ -196,8 +191,8 @@ describe("domain services", () => {
   test("MessageDomainService validates message ids for direct read/remove actions", async () => {
     const service = new MessageDomainService(new InMemoryMessageRepository());
 
-    const getResult = await service.getMessage("");
-    const removeResult = await service.removeMessageRecord("");
+    const getResult = await service.readFromMessageDBStore("");
+    const removeResult = await service.removeFromMessageDBStore("");
 
     expect(getResult.ok).toBe(false);
     expect(removeResult.ok).toBe(false);
@@ -207,14 +202,14 @@ describe("domain services", () => {
 
     expect(getResult.error).toEqual(
       new ValidationError(
-        "messageId",
-        "messageId must be a non-empty string.",
+        "id",
+        "id must be a non-empty string.",
       ),
     );
     expect(removeResult.error).toEqual(
       new ValidationError(
-        "messageId",
-        "messageId must be a non-empty string.",
+        "id",
+        "id must be a non-empty string.",
       ),
     );
   });
@@ -262,7 +257,7 @@ describe("domain services", () => {
       return;
     }
 
-    const deleteRecordResult = await service.deleteFileRecord(createResult.ok ? createResult.value.id : "");
+    const deleteRecordResult = await service.removeFromFileDBStore(createResult.ok ? createResult.value.id : "");
     const deleteFileResult = await service.deleteFile(uploadResult.value.id);
 
     expect(deleteRecordResult.ok).toBe(true);
@@ -280,7 +275,7 @@ describe("domain services", () => {
     );
 
     const getResult = await service.readFromFileDBStore("");
-    const deleteRecordResult = await service.deleteFileRecord("");
+    const deleteRecordResult = await service.removeFromFileDBStore("");
 
     expect(getResult.ok).toBe(false);
     expect(deleteRecordResult.ok).toBe(false);
@@ -292,7 +287,7 @@ describe("domain services", () => {
       new ValidationError("id", "id must be a non-empty string."),
     );
     expect(deleteRecordResult.error).toEqual(
-      new ValidationError("fileId", "fileId must be a non-empty string."),
+      new ValidationError("id", "id must be a non-empty string."),
     );
   });
 });
@@ -323,53 +318,29 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async getById(id: string) {
-    const idResult = requireNonEmptyString(id, "id");
-
-    if (!idResult.ok) {
-      return idResult;
-    }
-
-    const conversation = this.conversations.get(idResult.value);
+  async readFromConversationDBStore(id: string) {
+    const conversation = this.conversations.get(id);
 
     if (!conversation) {
-      return failure(new NotFoundError("Conversation", idResult.value));
+      return failure(new NotFoundError("Conversation", id));
     }
 
     return success(conversation);
   }
 
-  async listPage(request: ConversationPageRequest) {
-    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
-
-    if (!pageNumResult.ok) {
-      return pageNumResult;
-    }
-
-    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
-
-    if (!pageSizeResult.ok) {
-      return pageSizeResult;
-    }
-
+  async readPageFromConversationDBStore(request: ConversationPageRequest) {
     this.lastPageRequest = request;
-    const offset = (pageNumResult.value - 1) * pageSizeResult.value;
+    const offset = (request.pageNum - 1) * request.pageSize;
     const items = [...this.conversations.values()].sort(
       (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
     );
 
-    return success(items.slice(offset, offset + pageSizeResult.value));
+    return success(items.slice(offset, offset + request.pageSize));
   }
 
-  async deleteById(id: string) {
-    const idResult = requireNonEmptyString(id, "id");
-
-    if (!idResult.ok) {
-      return idResult;
-    }
-
-    this.deletedIds.push(idResult.value);
-    this.conversations.delete(idResult.value);
+  async removeFromConversationDBStore(id: string) {
+    this.deletedIds.push(id);
+    this.conversations.delete(id);
     return success(undefined);
   }
 }
@@ -389,12 +360,6 @@ class InMemoryMessageRepository implements MessageRepository {
   }
 
   async persistToMessageDBStore(record: CreateMessageRecord) {
-    const validationResult = validateCreateMessageRecord(record);
-
-    if (!validationResult.ok) {
-      return validationResult;
-    }
-
     this.createdRecords.push(record);
     const message = mustCreateMessage(
       `message-${this.messages.size + 1}`,
@@ -408,7 +373,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async getById(id: string) {
+  async readFromMessageDBStore(id: string) {
     const message = this.messages.get(id);
 
     if (!message) {
@@ -418,78 +383,39 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async listPageByConversation(request: MessagePageRequest) {
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
-
-    if (!pageNumResult.ok) {
-      return pageNumResult;
-    }
-
-    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
-
-    if (!pageSizeResult.ok) {
-      return pageSizeResult;
-    }
-
+  async readPageFromMessageDBStore(request: MessagePageRequest) {
     this.lastPageRequest = request;
-    const fromSequence = (pageNumResult.value - 1) * pageSizeResult.value + 1;
+    const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
 
     return success(
       [...this.messages.values()]
         .filter(
           (message) =>
-            message.conversationId === conversationIdResult.value &&
+            message.conversationId === request.conversationId &&
             message.sequenceNumber >= fromSequence,
         )
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
-        .slice(0, pageSizeResult.value),
+        .slice(0, request.pageSize),
     );
   }
 
-  async listByConversation(conversationId: string) {
-    const conversationIdResult = requireNonEmptyString(
-      conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
+  async readAllMessagesFromMessageDBStore(conversationId: string) {
     return success(
       [...this.messages.values()]
-        .filter((message) => message.conversationId === conversationIdResult.value)
+        .filter((message) => message.conversationId === conversationId)
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber),
     );
   }
 
-  async countByConversation(conversationId: string) {
-    const conversationIdResult = requireNonEmptyString(
-      conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
+  async readMessageCountFromMessageDBStore(conversationId: string) {
     return success(
       [...this.messages.values()].filter(
-        (message) => message.conversationId === conversationIdResult.value,
+        (message) => message.conversationId === conversationId,
       ).length,
     );
   }
 
-  async deleteById(id: string) {
+  async removeFromMessageDBStore(id: string) {
     this.deletedIds.push(id);
     this.messages.delete(id);
     return success(undefined);
@@ -521,22 +447,16 @@ class InMemoryFileRepository implements FileRepository {
   }
 
   async readFromFileDBStore(id: string) {
-    const idResult = requireNonEmptyString(id, "id");
-
-    if (!idResult.ok) {
-      return idResult;
-    }
-
-    const file = this.files.get(idResult.value);
+    const file = this.files.get(id);
 
     if (!file) {
-      return failure(new NotFoundError("File", idResult.value));
+      return failure(new NotFoundError("File", id));
     }
 
     return success(file);
   }
 
-  async deleteById(id: string) {
+  async removeFromFileDBStore(id: string) {
     this.files.delete(id);
     return success(undefined);
   }
@@ -547,7 +467,7 @@ class InMemoryBlobRepository implements BlobRepository {
   readonly deletedUrls: string[] = [];
   deleteFailure: BlobStoreError | null = null;
 
-  async upload(request: BlobUploadRequest) {
+  async uploadToBlobStore(request: BlobUploadRequest) {
     this.uploads.push(request);
     return success(
       `/conversations/${request.conversationId}/file-${this.uploads.length}-${request.filename}`,
@@ -555,17 +475,11 @@ class InMemoryBlobRepository implements BlobRepository {
   }
 
   async deleteFromBlobStore(url: string) {
-    const urlResult = requireNonEmptyString(url, "url");
-
-    if (!urlResult.ok) {
-      return urlResult;
-    }
-
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }
 
-    this.deletedUrls.push(urlResult.value);
+    this.deletedUrls.push(url);
     return success(undefined);
   }
 }
@@ -614,42 +528,4 @@ function mustCreateFile(
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
-}
-
-function validateCreateMessageRecord(
-  record: CreateMessageRecord,
-): Result<void, ValidationError> {
-  const conversationIdResult = requireNonEmptyString(
-    record.conversationId,
-    "conversationId",
-  );
-
-  if (!conversationIdResult.ok) {
-    return conversationIdResult;
-  }
-
-  const sequenceNumberResult = requirePositiveInteger(
-    record.sequenceNumber,
-    "sequenceNumber",
-  );
-
-  if (!sequenceNumberResult.ok) {
-    return sequenceNumberResult;
-  }
-
-  const textContentResult = requirePresent(record.textContent, "textContent");
-
-  if (!textContentResult.ok) {
-    return textContentResult;
-  }
-
-  for (const fileId of record.fileIds) {
-    const fileIdResult = requireNonEmptyString(fileId, "fileId");
-
-    if (!fileIdResult.ok) {
-      return fileIdResult;
-    }
-  }
-
-  return success(undefined);
 }

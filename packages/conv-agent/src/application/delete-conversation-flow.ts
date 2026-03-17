@@ -25,7 +25,7 @@ export class DeleteConversationFlow {
   ): Promise<
     Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>
   > {
-    const getResult = await this.conversationDomainService.getConversation(
+    const getResult = await this.conversationDomainService.readFromConversationDBStore(
       command.conversationId,
     );
 
@@ -33,7 +33,7 @@ export class DeleteConversationFlow {
       return getResult;
     }
 
-    const messagesResult = await this.messageDomainService.listMessagesByConversation(
+    const messagesResult = await this.messageDomainService.readAllMessagesFromMessageDBStore(
       command.conversationId,
     );
 
@@ -52,7 +52,7 @@ export class DeleteConversationFlow {
       }
     }
 
-    const deleteResult = await this.conversationDomainService.deleteConversation(
+    const deleteResult = await this.conversationDomainService.removeFromConversationDBStore(
       command.conversationId,
     );
 

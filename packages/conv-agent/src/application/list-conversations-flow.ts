@@ -19,7 +19,7 @@ export class ListConversationsFlow {
   async execute(
     query: ListConversationsQuery,
   ): Promise<Result<ListConversationsItem[], StoreError | ValidationError>> {
-    const result = await this.conversationDomainService.listConversationsPage({
+    const result = await this.conversationDomainService.readPageFromConversationDBStore({
       pageNum: query.pageNum,
       pageSize: query.pageSize,
     });

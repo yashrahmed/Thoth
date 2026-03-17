@@ -47,19 +47,25 @@ export class FileDomainService {
   async readFromFileDBStore(
     fileId: string,
   ): Promise<Result<FileEntity, ValidationError | NotFoundError | StoreError>> {
-    return this.fileRepository.readFromFileDBStore(fileId);
-  }
+    const idResult = requireNonEmptyString(fileId, "id");
 
-  async deleteFileRecord(
-    fileId: string,
-  ): Promise<Result<void, ValidationError | StoreError>> {
-    const fileIdResult = requireNonEmptyString(fileId, "fileId");
-
-    if (!fileIdResult.ok) {
-      return fileIdResult;
+    if (!idResult.ok) {
+      return idResult;
     }
 
-    return this.fileRepository.deleteById(fileId);
+    return this.fileRepository.readFromFileDBStore(idResult.value);
+  }
+
+  async removeFromFileDBStore(
+    fileId: string,
+  ): Promise<Result<void, ValidationError | StoreError>> {
+    const idResult = requireNonEmptyString(fileId, "id");
+
+    if (!idResult.ok) {
+      return idResult;
+    }
+
+    return this.fileRepository.removeFromFileDBStore(idResult.value);
   }
 
   async uploadFile(
@@ -67,7 +73,7 @@ export class FileDomainService {
   ): Promise<
     Result<FileEntity, ValidationError | BlobStoreError | StoreError>
   > {
-    const uploadResult = await this.blobDomainService.uploadBlob({
+    const uploadResult = await this.blobDomainService.uploadToBlobStore({
       conversationId: request.conversationId,
       content: request.content,
       filename: request.filename,
@@ -121,7 +127,7 @@ export class FileDomainService {
       return deleteBlobResult;
     }
 
-    return this.deleteFileRecord(fileId);
+    return this.removeFromFileDBStore(fileId);
   }
 
   async getFiles(

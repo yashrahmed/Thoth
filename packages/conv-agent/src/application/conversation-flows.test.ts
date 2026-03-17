@@ -20,7 +20,6 @@ import {
   BlobStoreError,
   NotFoundError,
   StoreError,
-  ValidationError,
 } from "../domain/objects/errors";
 import { Message } from "../domain/objects/message";
 import { failure, success, type Result } from "../domain/objects/result";
@@ -28,11 +27,6 @@ import { BlobDomainService } from "../domain/services/blob-domain-service";
 import { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import { FileDomainService } from "../domain/services/file-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
-import {
-  requireNonEmptyString,
-  requirePositiveInteger,
-  requirePresent,
-} from "../domain/validation";
 import { AppendMessageToConversationFlow } from "./append-message-to-conversation-flow";
 import { CreateConversationFlow } from "./create-conversation-flow";
 import { DeleteConversationFlow } from "./delete-conversation-flow";
@@ -443,37 +437,19 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async getById(id: string) {
-    const idResult = requireNonEmptyString(id, "id");
-
-    if (!idResult.ok) {
-      return idResult;
-    }
-
-    const conversation = this.conversations.get(idResult.value);
+  async readFromConversationDBStore(id: string) {
+    const conversation = this.conversations.get(id);
 
     if (!conversation) {
-      return failure(new NotFoundError("Conversation", idResult.value));
+      return failure(new NotFoundError("Conversation", id));
     }
 
     return success(conversation);
   }
 
-  async listPage(
+  async readPageFromConversationDBStore(
     request: ConversationPageRequest,
-  ): Promise<Result<Conversation[], ValidationError | StoreError>> {
-    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
-
-    if (!pageNumResult.ok) {
-      return pageNumResult;
-    }
-
-    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
-
-    if (!pageSizeResult.ok) {
-      return pageSizeResult;
-    }
-
+  ): Promise<Result<Conversation[], StoreError>> {
     this.lastPageRequest = request;
     const items = [...this.conversations.values()].sort((left, right) => {
       const updatedAtDelta =
@@ -486,20 +462,16 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    const offset = (pageNumResult.value - 1) * pageSizeResult.value;
+    const offset = (request.pageNum - 1) * request.pageSize;
 
-    return success(items.slice(offset, offset + pageSizeResult.value));
+    return success(items.slice(offset, offset + request.pageSize));
   }
 
-  async deleteById(id: string): Promise<Result<void, ValidationError | StoreError>> {
-    const idResult = requireNonEmptyString(id, "id");
-
-    if (!idResult.ok) {
-      return idResult;
-    }
-
-    this.deletedIds.push(idResult.value);
-    this.conversations.delete(idResult.value);
+  async removeFromConversationDBStore(
+    id: string,
+  ): Promise<Result<void, StoreError>> {
+    this.deletedIds.push(id);
+    this.conversations.delete(id);
     return success(undefined);
   }
 }
@@ -521,13 +493,7 @@ class InMemoryMessageRepository implements MessageRepository {
 
   async persistToMessageDBStore(
     record: CreateMessageRecord,
-  ): Promise<Result<Message, ValidationError | StoreError>> {
-    const validationResult = validateCreateMessageRecord(record);
-
-    if (!validationResult.ok) {
-      return validationResult;
-    }
-
+  ): Promise<Result<Message, StoreError>> {
     this.createdRecords.push(record);
     const message = mustCreateMessage(
       `message-${this.createdRecords.length}`,
@@ -541,7 +507,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async getById(id: string) {
+  async readFromMessageDBStore(id: string) {
     const message = this.messages.get(id);
 
     if (!message) {
@@ -551,83 +517,44 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async listPageByConversation(
+  async readPageFromMessageDBStore(
     request: MessagePageRequest,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
-
-    if (!pageNumResult.ok) {
-      return pageNumResult;
-    }
-
-    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
-
-    if (!pageSizeResult.ok) {
-      return pageSizeResult;
-    }
-
+  ): Promise<Result<Message[], StoreError>> {
     this.lastPageRequest = request;
-    const fromSequence = (pageNumResult.value - 1) * pageSizeResult.value + 1;
+    const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
     return success(
       [...this.messages.values()]
         .filter(
           (message) =>
-            message.conversationId === conversationIdResult.value &&
+            message.conversationId === request.conversationId &&
             message.sequenceNumber >= fromSequence,
         )
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
-        .slice(0, pageSizeResult.value),
+        .slice(0, request.pageSize),
     );
   }
 
-  async listByConversation(
+  async readAllMessagesFromMessageDBStore(
     conversationId: string,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
+  ): Promise<Result<Message[], StoreError>> {
     return success(
       [...this.messages.values()]
-        .filter((message) => message.conversationId === conversationIdResult.value)
+        .filter((message) => message.conversationId === conversationId)
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber),
     );
   }
 
-  async countByConversation(
+  async readMessageCountFromMessageDBStore(
     conversationId: string,
-  ): Promise<Result<number, ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      conversationId,
-      "conversationId",
-    );
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
+  ): Promise<Result<number, StoreError>> {
     return success(
       [...this.messages.values()].filter(
-        (message) => message.conversationId === conversationIdResult.value,
+        (message) => message.conversationId === conversationId,
       ).length,
     );
   }
 
-  async deleteById(id: string): Promise<Result<void, StoreError>> {
+  async removeFromMessageDBStore(id: string): Promise<Result<void, StoreError>> {
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }
@@ -668,22 +595,18 @@ class InMemoryFileRepository implements FileRepository {
   }
 
   async readFromFileDBStore(id: string) {
-    const idResult = requireNonEmptyString(id, "id");
-
-    if (!idResult.ok) {
-      return idResult;
-    }
-
-    const file = this.files.get(idResult.value);
+    const file = this.files.get(id);
 
     if (!file) {
-      return failure(new NotFoundError("File", idResult.value));
+      return failure(new NotFoundError("File", id));
     }
 
     return success(file);
   }
 
-  async deleteById(id: string): Promise<Result<void, StoreError>> {
+  async removeFromFileDBStore(
+    id: string,
+  ): Promise<Result<void, StoreError>> {
     this.deletedIds.push(id);
     this.files.delete(id);
     return success(undefined);
@@ -709,7 +632,7 @@ class InMemoryBlobRepository implements BlobRepository {
     }
   }
 
-  async upload(request: {
+  async uploadToBlobStore(request: {
     readonly conversationId: string;
     readonly content: ArrayBuffer;
     readonly filename: string;
@@ -722,18 +645,12 @@ class InMemoryBlobRepository implements BlobRepository {
   }
 
   async deleteFromBlobStore(url: string) {
-    const urlResult = requireNonEmptyString(url, "url");
-
-    if (!urlResult.ok) {
-      return urlResult;
-    }
-
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }
 
-    this.deletedUrls.push(urlResult.value);
-    this.blobs.delete(urlResult.value);
+    this.deletedUrls.push(url);
+    this.blobs.delete(url);
     return success(undefined);
   }
 }
@@ -782,42 +699,4 @@ function mustCreateFile(
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
-}
-
-function validateCreateMessageRecord(
-  record: CreateMessageRecord,
-): Result<void, ValidationError> {
-  const conversationIdResult = requireNonEmptyString(
-    record.conversationId,
-    "conversationId",
-  );
-
-  if (!conversationIdResult.ok) {
-    return conversationIdResult;
-  }
-
-  const sequenceNumberResult = requirePositiveInteger(
-    record.sequenceNumber,
-    "sequenceNumber",
-  );
-
-  if (!sequenceNumberResult.ok) {
-    return sequenceNumberResult;
-  }
-
-  const textContentResult = requirePresent(record.textContent, "textContent");
-
-  if (!textContentResult.ok) {
-    return textContentResult;
-  }
-
-  for (const fileId of record.fileIds) {
-    const fileIdResult = requireNonEmptyString(fileId, "fileId");
-
-    if (!fileIdResult.ok) {
-      return fileIdResult;
-    }
-  }
-
-  return success(undefined);
 }

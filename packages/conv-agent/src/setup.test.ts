@@ -338,7 +338,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
-  async persistToConversationDBStore(
+  async upsertConversationRow(
     record: CreateConversationRecord,
   ): Promise<Result<Conversation, StoreError>> {
     const conversation = mustCreateConversation(
@@ -349,7 +349,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async readFromConversationDBStore(conversationId: string) {
+  async selectConversationRow(conversationId: string) {
     const conversation = this.conversations.get(conversationId);
 
     if (!conversation) {
@@ -359,7 +359,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async readPageFromConversationDBStore(request: ConversationOffsetPageRequest) {
+  async selectConversationPage(request: ConversationOffsetPageRequest) {
     const items = [...this.conversations.values()].sort((left, right) => {
       const updatedAtDelta =
         right.updatedAt.getTime() - left.updatedAt.getTime();
@@ -376,7 +376,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     );
   }
 
-  async removeFromConversationDBStore(conversationId: string) {
+  async deleteConversationRow(conversationId: string) {
     this.deletedIds.push(conversationId);
     this.conversations.delete(conversationId);
     return success(undefined);
@@ -394,7 +394,7 @@ class InMemoryMessageRepository implements MessageRepository {
     }
   }
 
-  async persistToMessageDBStore(record: CreateMessageRecord) {
+  async upsertMessageRow(record: CreateMessageRecord) {
     const message = mustCreateMessage(
       `message-${this.messages.size + 1}`,
       record.conversationId,
@@ -407,7 +407,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async readFromMessageDBStore(messageId: string) {
+  async selectMessageRow(messageId: string) {
     const message = this.messages.get(messageId);
 
     if (!message) {
@@ -417,7 +417,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async readPageFromMessageDBStore(request: MessageSequencePageRequest) {
+  async selectMessagePage(request: MessageSequencePageRequest) {
     return success(
       [...this.messages.values()]
         .filter(
@@ -430,7 +430,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async readAllMessagesFromMessageDBStore(conversationId: string) {
+  async selectAllMessagesByConversation(conversationId: string) {
     return success(
       [...this.messages.values()].filter(
         (message) => message.conversationId === conversationId,
@@ -438,7 +438,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async readMessageCountFromMessageDBStore(conversationId: string) {
+  async countMessagesByConversation(conversationId: string) {
     return success(
       [...this.messages.values()].filter(
         (message) => message.conversationId === conversationId,
@@ -446,7 +446,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async removeFromMessageDBStore(messageId: string) {
+  async deleteMessageRow(messageId: string) {
     this.messages.delete(messageId);
     return success(undefined);
   }
@@ -463,7 +463,7 @@ class InMemoryFileRepository implements FileRepository {
     }
   }
 
-  async persistToFileDBStore(record: CreateFileRecord) {
+  async upsertFileRow(record: CreateFileRecord) {
     const file = mustCreateFile(
       `file-${this.files.size + 1}`,
       record.canonicalUrl,
@@ -476,7 +476,7 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async readFromFileDBStore(id: string) {
+  async selectFileRow(id: string) {
     const file = this.files.get(id);
 
     if (!file) {
@@ -486,7 +486,7 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async removeFromFileDBStore(id: string) {
+  async deleteFileRow(id: string) {
     this.files.delete(id);
     return success(undefined);
   }
@@ -495,7 +495,7 @@ class InMemoryFileRepository implements FileRepository {
 class InMemoryBlobRepository implements BlobRepository {
   private readonly blobs = new Map<string, ArrayBuffer>();
 
-  async uploadToBlobStore(request: {
+  async putBlob(request: {
     readonly conversationId: string;
     readonly content: ArrayBuffer;
     readonly filename: string;
@@ -506,7 +506,7 @@ class InMemoryBlobRepository implements BlobRepository {
     return success(url);
   }
 
-  async deleteFromBlobStore(url: string) {
+  async removeBlob(url: string) {
     this.blobs.delete(url);
     return success(undefined);
   }

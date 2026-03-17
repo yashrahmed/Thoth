@@ -41,7 +41,7 @@ export class FileDomainService {
   async persistToFileDBStore(
     record: CreateFileRecord,
   ): Promise<Result<FileEntity, StoreError>> {
-    return this.fileRepository.persistToFileDBStore(record);
+    return this.fileRepository.upsertFileRow(record);
   }
 
   async readFromFileDBStore(
@@ -53,7 +53,7 @@ export class FileDomainService {
       return idResult;
     }
 
-    return this.fileRepository.readFromFileDBStore(idResult.value);
+    return this.fileRepository.selectFileRow(idResult.value);
   }
 
   async removeFromFileDBStore(
@@ -65,7 +65,7 @@ export class FileDomainService {
       return idResult;
     }
 
-    return this.fileRepository.removeFromFileDBStore(idResult.value);
+    return this.fileRepository.deleteFileRow(idResult.value);
   }
 
   async uploadFile(

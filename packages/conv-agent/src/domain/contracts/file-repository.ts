@@ -12,13 +12,13 @@ export interface CreateFileRecord {
 }
 
 export interface FileRepository {
-  persistToFileDBStore(
+  upsertFileRow(
     record: CreateFileRecord,
   ): Promise<Result<File, StoreError>>;
-  readFromFileDBStore(
+  selectFileRow(
     id: string,
   ): Promise<Result<File, NotFoundError | StoreError>>;
-  removeFromFileDBStore(
+  deleteFileRow(
     id: string,
   ): Promise<Result<void, StoreError>>;
 }

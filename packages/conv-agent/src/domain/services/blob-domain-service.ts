@@ -39,7 +39,7 @@ export class BlobDomainService {
       return mimeTypeResult;
     }
 
-    return this.blobRepository.uploadToBlobStore(request);
+    return this.blobRepository.putBlob(request);
   }
 
   async deleteFromBlobStore(
@@ -54,6 +54,6 @@ export class BlobDomainService {
       return canonicalUrlResult;
     }
 
-    return this.blobRepository.deleteFromBlobStore(url);
+    return this.blobRepository.removeBlob(url);
   }
 }

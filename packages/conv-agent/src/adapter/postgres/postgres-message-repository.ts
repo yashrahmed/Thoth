@@ -25,7 +25,7 @@ interface CountRow {
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async persistToMessageDBStore(record: CreateMessageRecord) {
+  async upsertMessageRow(record: CreateMessageRecord) {
     try {
       const rows = await this.sql<MessageRow[]>`
         insert into thoth.messages (
@@ -87,7 +87,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async readFromMessageDBStore(messageId: string) {
+  async selectMessageRow(messageId: string) {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
@@ -122,7 +122,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async readPageFromMessageDBStore(request: MessageSequencePageRequest) {
+  async selectMessagePage(request: MessageSequencePageRequest) {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
@@ -155,7 +155,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async readAllMessagesFromMessageDBStore(conversationId: string) {
+  async selectAllMessagesByConversation(conversationId: string) {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
@@ -185,7 +185,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async readMessageCountFromMessageDBStore(conversationId: string) {
+  async countMessagesByConversation(conversationId: string) {
     try {
       const rows = await this.sql<CountRow[]>`
         select count(*)::int as count
@@ -207,7 +207,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async removeFromMessageDBStore(messageId: string) {
+  async deleteMessageRow(messageId: string) {
     try {
       await this.sql`
         delete from thoth.message_files

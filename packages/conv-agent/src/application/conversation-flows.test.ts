@@ -424,7 +424,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
-  async persistToConversationDBStore(
+  async upsertConversationRow(
     record: CreateConversationRecord,
   ): Promise<Result<Conversation, StoreError>> {
     this.createdRecord = record;
@@ -437,7 +437,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async readFromConversationDBStore(conversationId: string) {
+  async selectConversationRow(conversationId: string) {
     const conversation = this.conversations.get(conversationId);
 
     if (!conversation) {
@@ -447,7 +447,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async readPageFromConversationDBStore(
+  async selectConversationPage(
     request: ConversationOffsetPageRequest,
   ): Promise<Result<Conversation[], StoreError>> {
     this.lastPageRequest = request;
@@ -467,7 +467,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     );
   }
 
-  async removeFromConversationDBStore(
+  async deleteConversationRow(
     conversationId: string,
   ): Promise<Result<void, StoreError>> {
     this.deletedIds.push(conversationId);
@@ -491,7 +491,7 @@ class InMemoryMessageRepository implements MessageRepository {
     }
   }
 
-  async persistToMessageDBStore(
+  async upsertMessageRow(
     record: CreateMessageRecord,
   ): Promise<Result<Message, StoreError>> {
     this.createdRecords.push(record);
@@ -507,7 +507,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async readFromMessageDBStore(messageId: string) {
+  async selectMessageRow(messageId: string) {
     const message = this.messages.get(messageId);
 
     if (!message) {
@@ -517,7 +517,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async readPageFromMessageDBStore(
+  async selectMessagePage(
     request: MessageSequencePageRequest,
   ): Promise<Result<Message[], StoreError>> {
     this.lastPageRequest = request;
@@ -533,7 +533,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async readAllMessagesFromMessageDBStore(
+  async selectAllMessagesByConversation(
     conversationId: string,
   ): Promise<Result<Message[], StoreError>> {
     return success(
@@ -543,7 +543,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async readMessageCountFromMessageDBStore(
+  async countMessagesByConversation(
     conversationId: string,
   ): Promise<Result<number, StoreError>> {
     return success(
@@ -553,7 +553,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async removeFromMessageDBStore(
+  async deleteMessageRow(
     messageId: string,
   ): Promise<Result<void, StoreError>> {
     if (this.deleteFailure) {
@@ -579,7 +579,7 @@ class InMemoryFileRepository implements FileRepository {
     }
   }
 
-  async persistToFileDBStore(
+  async upsertFileRow(
     record: CreateFileRecord,
   ): Promise<Result<File, StoreError>> {
     this.createdRecords.push(record);
@@ -595,7 +595,7 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async readFromFileDBStore(id: string) {
+  async selectFileRow(id: string) {
     const file = this.files.get(id);
 
     if (!file) {
@@ -605,7 +605,7 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async removeFromFileDBStore(
+  async deleteFileRow(
     id: string,
   ): Promise<Result<void, StoreError>> {
     this.deletedIds.push(id);
@@ -633,7 +633,7 @@ class InMemoryBlobRepository implements BlobRepository {
     }
   }
 
-  async uploadToBlobStore(request: {
+  async putBlob(request: {
     readonly conversationId: string;
     readonly content: ArrayBuffer;
     readonly filename: string;
@@ -645,7 +645,7 @@ class InMemoryBlobRepository implements BlobRepository {
     return success(url);
   }
 
-  async deleteFromBlobStore(url: string) {
+  async removeBlob(url: string) {
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }

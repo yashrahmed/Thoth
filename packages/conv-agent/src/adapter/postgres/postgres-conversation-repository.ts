@@ -20,7 +20,7 @@ interface ConversationRow {
 export class PostgresConversationRepository implements ConversationRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async persistToConversationDBStore(
+  async upsertConversationRow(
     record: CreateConversationRecord,
   ): Promise<Result<Conversation, StoreError>> {
     try {
@@ -36,7 +36,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
   }
 
-  async readFromConversationDBStore(
+  async selectConversationRow(
     conversationId: string,
   ): Promise<Result<Conversation, NotFoundError | StoreError>> {
     try {
@@ -58,7 +58,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
   }
 
-  async readPageFromConversationDBStore(
+  async selectConversationPage(
     request: ConversationOffsetPageRequest,
   ): Promise<Result<Conversation[], StoreError>> {
     try {
@@ -90,7 +90,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
   }
 
-  async removeFromConversationDBStore(
+  async deleteConversationRow(
     conversationId: string,
   ): Promise<Result<void, StoreError>> {
     try {

@@ -20,7 +20,7 @@ interface FileRow {
 export class PostgresFileRepository implements FileRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async persistToFileDBStore(record: CreateFileRecord) {
+  async upsertFileRow(record: CreateFileRecord) {
     try {
       const rows = await this.sql<FileRow[]>`
         insert into thoth.files (
@@ -55,7 +55,7 @@ export class PostgresFileRepository implements FileRepository {
     }
   }
 
-  async readFromFileDBStore(
+  async selectFileRow(
     id: string,
   ): Promise<Result<File, NotFoundError | StoreError>> {
     try {
@@ -84,7 +84,7 @@ export class PostgresFileRepository implements FileRepository {
     }
   }
 
-  async removeFromFileDBStore(
+  async deleteFileRow(
     id: string,
   ): Promise<Result<void, StoreError>> {
     try {

@@ -27,7 +27,7 @@ export class R2BlobRepository implements BlobRepository {
     private readonly credentials: R2BlobCredentials,
   ) {}
 
-  async uploadToBlobStore(
+  async putBlob(
     request: BlobUploadRequest,
   ): Promise<Result<string, BlobStoreError>> {
     const canonicalPath = this.getCanonicalPath(
@@ -56,7 +56,7 @@ export class R2BlobRepository implements BlobRepository {
     }
   }
 
-  async deleteFromBlobStore(
+  async removeBlob(
     url: string,
   ): Promise<Result<void, BlobStoreError>> {
     const objectKey = this.getObjectKey(url);

@@ -81,7 +81,7 @@ export class MessageDomainService {
       }
     }
 
-    return this.messageRepository.persistToMessageDBStore(record);
+    return this.messageRepository.upsertMessageRow(record);
   }
 
   async readFromMessageDBStore(
@@ -96,7 +96,7 @@ export class MessageDomainService {
       return messageIdResult;
     }
 
-    return this.messageRepository.readFromMessageDBStore(messageIdResult.value);
+    return this.messageRepository.selectMessageRow(messageIdResult.value);
   }
 
   async readPageFromMessageDBStore(
@@ -129,7 +129,7 @@ export class MessageDomainService {
       pageSize: pageSizeResult.value,
     };
 
-    return this.messageRepository.readPageFromMessageDBStore(pageRequest);
+    return this.messageRepository.selectMessagePage(pageRequest);
   }
 
   async readAllMessagesFromMessageDBStore(
@@ -144,7 +144,7 @@ export class MessageDomainService {
       return conversationIdResult;
     }
 
-    return this.messageRepository.readAllMessagesFromMessageDBStore(
+    return this.messageRepository.selectAllMessagesByConversation(
       conversationIdResult.value,
     );
   }
@@ -161,7 +161,7 @@ export class MessageDomainService {
       return conversationIdResult;
     }
 
-    return this.messageRepository.readMessageCountFromMessageDBStore(
+    return this.messageRepository.countMessagesByConversation(
       conversationIdResult.value,
     );
   }
@@ -178,7 +178,7 @@ export class MessageDomainService {
       return messageIdResult;
     }
 
-    return this.messageRepository.removeFromMessageDBStore(messageIdResult.value);
+    return this.messageRepository.deleteMessageRow(messageIdResult.value);
   }
   async deleteMessage(
     messageId: string,

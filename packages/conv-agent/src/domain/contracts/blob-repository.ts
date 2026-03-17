@@ -11,10 +11,10 @@ export interface BlobUploadRequest {
 }
 
 export interface BlobRepository {
-  uploadToBlobStore(
+  putBlob(
     request: BlobUploadRequest,
   ): Promise<Result<string, BlobStoreError>>;
-  deleteFromBlobStore(
+  removeBlob(
     url: string,
   ): Promise<Result<void, BlobStoreError>>;
 }

@@ -33,7 +33,7 @@ export class ConversationDomainService {
   async persistToConversationDBStore(
     record: { readonly createdAt: Date; readonly updatedAt: Date },
   ): Promise<Result<Conversation, StoreError>> {
-    return this.conversationRepository.persistToConversationDBStore(record);
+    return this.conversationRepository.upsertConversationRow(record);
   }
 
   async readFromConversationDBStore(
@@ -48,7 +48,7 @@ export class ConversationDomainService {
       return conversationIdResult;
     }
 
-    return this.conversationRepository.readFromConversationDBStore(
+    return this.conversationRepository.selectConversationRow(
       conversationIdResult.value,
     );
   }
@@ -73,7 +73,7 @@ export class ConversationDomainService {
       pageSize: pageSizeResult.value,
     };
 
-    return this.conversationRepository.readPageFromConversationDBStore(pageRequest);
+    return this.conversationRepository.selectConversationPage(pageRequest);
   }
 
   async removeFromConversationDBStore(
@@ -88,7 +88,7 @@ export class ConversationDomainService {
       return conversationIdResult;
     }
 
-    return this.conversationRepository.removeFromConversationDBStore(
+    return this.conversationRepository.deleteConversationRow(
       conversationIdResult.value,
     );
   }

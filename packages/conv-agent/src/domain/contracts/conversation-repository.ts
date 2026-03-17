@@ -12,17 +12,22 @@ export interface ConversationPageRequest {
   readonly pageSize: number;
 }
 
+export interface ConversationOffsetPageRequest {
+  readonly offset: number;
+  readonly pageSize: number;
+}
+
 export interface ConversationRepository {
   persistToConversationDBStore(
     record: CreateConversationRecord,
   ): Promise<Result<Conversation, StoreError>>;
   readFromConversationDBStore(
-    id: string,
+    conversationId: string,
   ): Promise<Result<Conversation, NotFoundError | StoreError>>;
   readPageFromConversationDBStore(
-    request: ConversationPageRequest,
+    request: ConversationOffsetPageRequest,
   ): Promise<Result<Conversation[], StoreError>>;
   removeFromConversationDBStore(
-    id: string,
+    conversationId: string,
   ): Promise<Result<void, StoreError>>;
 }

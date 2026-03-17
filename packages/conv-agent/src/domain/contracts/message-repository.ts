@@ -17,15 +17,21 @@ export interface MessagePageRequest {
   readonly pageSize: number;
 }
 
+export interface MessageSequencePageRequest {
+  readonly conversationId: string;
+  readonly fromSequence: number;
+  readonly pageSize: number;
+}
+
 export interface MessageRepository {
   persistToMessageDBStore(
     record: CreateMessageRecord,
   ): Promise<Result<Message, StoreError>>;
   readFromMessageDBStore(
-    id: string,
+    messageId: string,
   ): Promise<Result<Message, NotFoundError | StoreError>>;
   readPageFromMessageDBStore(
-    request: MessagePageRequest,
+    request: MessageSequencePageRequest,
   ): Promise<Result<Message[], StoreError>>;
   readAllMessagesFromMessageDBStore(
     conversationId: string,
@@ -33,5 +39,5 @@ export interface MessageRepository {
   readMessageCountFromMessageDBStore(
     conversationId: string,
   ): Promise<Result<number, StoreError>>;
-  removeFromMessageDBStore(id: string): Promise<Result<void, StoreError>>;
+  removeFromMessageDBStore(messageId: string): Promise<Result<void, StoreError>>;
 }

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { BlobRepository } from "../domain/contracts/blob-repository";
 import type {
+  ConversationOffsetPageRequest,
   CreateConversationRecord,
-  ConversationPageRequest,
   ConversationRepository,
 } from "../domain/contracts/conversation-repository";
 import type {
@@ -11,8 +11,8 @@ import type {
 } from "../domain/contracts/file-repository";
 import type {
   CreateMessageRecord,
-  MessagePageRequest,
   MessageRepository,
+  MessageSequencePageRequest,
 } from "../domain/contracts/message-repository";
 import { Conversation } from "../domain/objects/conversation";
 import { File } from "../domain/objects/file";
@@ -94,7 +94,7 @@ describe("conversation flows", () => {
       return;
     }
 
-    expect(repository.lastPageRequest).toEqual({ pageNum: 2, pageSize: 1 });
+    expect(repository.lastPageRequest).toEqual({ offset: 1, pageSize: 1 });
     expect(validResult.value.map((conversation) => conversation.id)).toEqual([
       "conversation-2",
     ]);
@@ -289,7 +289,7 @@ describe("conversation flows", () => {
 
     expect(messageRepository.lastPageRequest).toEqual({
       conversationId: "conversation-1",
-      pageNum: 1,
+      fromSequence: 1,
       pageSize: 1,
     });
     expect(validResult.value.map((message) => message.id)).toEqual(["message-1"]);
@@ -413,7 +413,7 @@ class InMemoryConversationRepository implements ConversationRepository {
   readonly createdIds: string[] = [];
   createdRecord: CreateConversationRecord | null = null;
   readonly deletedIds: string[] = [];
-  lastPageRequest: ConversationPageRequest | null = null;
+  lastPageRequest: ConversationOffsetPageRequest | null = null;
   private readonly conversations = new Map<string, Conversation>();
 
   seed(conversations: Conversation[]): void {
@@ -437,18 +437,18 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async readFromConversationDBStore(id: string) {
-    const conversation = this.conversations.get(id);
+  async readFromConversationDBStore(conversationId: string) {
+    const conversation = this.conversations.get(conversationId);
 
     if (!conversation) {
-      return failure(new NotFoundError("Conversation", id));
+      return failure(new NotFoundError("Conversation", conversationId));
     }
 
     return success(conversation);
   }
 
   async readPageFromConversationDBStore(
-    request: ConversationPageRequest,
+    request: ConversationOffsetPageRequest,
   ): Promise<Result<Conversation[], StoreError>> {
     this.lastPageRequest = request;
     const items = [...this.conversations.values()].sort((left, right) => {
@@ -462,16 +462,16 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    const offset = (request.pageNum - 1) * request.pageSize;
-
-    return success(items.slice(offset, offset + request.pageSize));
+    return success(
+      items.slice(request.offset, request.offset + request.pageSize),
+    );
   }
 
   async removeFromConversationDBStore(
-    id: string,
+    conversationId: string,
   ): Promise<Result<void, StoreError>> {
-    this.deletedIds.push(id);
-    this.conversations.delete(id);
+    this.deletedIds.push(conversationId);
+    this.conversations.delete(conversationId);
     return success(undefined);
   }
 }
@@ -479,7 +479,7 @@ class InMemoryConversationRepository implements ConversationRepository {
 class InMemoryMessageRepository implements MessageRepository {
   readonly createdRecords: CreateMessageRecord[] = [];
   readonly deletedIds: string[] = [];
-  lastPageRequest: MessagePageRequest | null = null;
+  lastPageRequest: MessageSequencePageRequest | null = null;
   deleteFailure: StoreError | null = null;
   private readonly messages = new Map<string, Message>();
 
@@ -507,27 +507,26 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async readFromMessageDBStore(id: string) {
-    const message = this.messages.get(id);
+  async readFromMessageDBStore(messageId: string) {
+    const message = this.messages.get(messageId);
 
     if (!message) {
-      return failure(new NotFoundError("Message", id));
+      return failure(new NotFoundError("Message", messageId));
     }
 
     return success(message);
   }
 
   async readPageFromMessageDBStore(
-    request: MessagePageRequest,
+    request: MessageSequencePageRequest,
   ): Promise<Result<Message[], StoreError>> {
     this.lastPageRequest = request;
-    const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
     return success(
       [...this.messages.values()]
         .filter(
           (message) =>
             message.conversationId === request.conversationId &&
-            message.sequenceNumber >= fromSequence,
+            message.sequenceNumber >= request.fromSequence,
         )
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
         .slice(0, request.pageSize),
@@ -554,13 +553,15 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async removeFromMessageDBStore(id: string): Promise<Result<void, StoreError>> {
+  async removeFromMessageDBStore(
+    messageId: string,
+  ): Promise<Result<void, StoreError>> {
     if (this.deleteFailure) {
       return failure(this.deleteFailure);
     }
 
-    this.deletedIds.push(id);
-    this.messages.delete(id);
+    this.deletedIds.push(messageId);
+    this.messages.delete(messageId);
     return success(undefined);
   }
 }

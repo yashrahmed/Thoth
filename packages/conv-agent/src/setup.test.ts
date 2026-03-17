@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
 import type {
+  ConversationOffsetPageRequest,
   CreateConversationRecord,
-  ConversationPageRequest,
   ConversationRepository,
 } from "./domain/contracts/conversation-repository";
 import type {
@@ -12,8 +12,8 @@ import type {
 } from "./domain/contracts/file-repository";
 import type {
   CreateMessageRecord,
-  MessagePageRequest,
   MessageRepository,
+  MessageSequencePageRequest,
 } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
 import { File as StoredFile } from "./domain/objects/file";
@@ -349,17 +349,17 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async readFromConversationDBStore(id: string) {
-    const conversation = this.conversations.get(id);
+  async readFromConversationDBStore(conversationId: string) {
+    const conversation = this.conversations.get(conversationId);
 
     if (!conversation) {
-      return failure(new NotFoundError("Conversation", id));
+      return failure(new NotFoundError("Conversation", conversationId));
     }
 
     return success(conversation);
   }
 
-  async readPageFromConversationDBStore(request: ConversationPageRequest) {
+  async readPageFromConversationDBStore(request: ConversationOffsetPageRequest) {
     const items = [...this.conversations.values()].sort((left, right) => {
       const updatedAtDelta =
         right.updatedAt.getTime() - left.updatedAt.getTime();
@@ -371,14 +371,14 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    const offset = (request.pageNum - 1) * request.pageSize;
-
-    return success(items.slice(offset, offset + request.pageSize));
+    return success(
+      items.slice(request.offset, request.offset + request.pageSize),
+    );
   }
 
-  async removeFromConversationDBStore(id: string) {
-    this.deletedIds.push(id);
-    this.conversations.delete(id);
+  async removeFromConversationDBStore(conversationId: string) {
+    this.deletedIds.push(conversationId);
+    this.conversations.delete(conversationId);
     return success(undefined);
   }
 }
@@ -407,25 +407,23 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async readFromMessageDBStore(id: string) {
-    const message = this.messages.get(id);
+  async readFromMessageDBStore(messageId: string) {
+    const message = this.messages.get(messageId);
 
     if (!message) {
-      return failure(new NotFoundError("Message", id));
+      return failure(new NotFoundError("Message", messageId));
     }
 
     return success(message);
   }
 
-  async readPageFromMessageDBStore(request: MessagePageRequest) {
-    const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
-
+  async readPageFromMessageDBStore(request: MessageSequencePageRequest) {
     return success(
       [...this.messages.values()]
         .filter(
           (message) =>
             message.conversationId === request.conversationId &&
-            message.sequenceNumber >= fromSequence,
+            message.sequenceNumber >= request.fromSequence,
         )
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
         .slice(0, request.pageSize),
@@ -448,8 +446,8 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async removeFromMessageDBStore(id: string) {
-    this.messages.delete(id);
+  async removeFromMessageDBStore(messageId: string) {
+    this.messages.delete(messageId);
     return success(undefined);
   }
 }

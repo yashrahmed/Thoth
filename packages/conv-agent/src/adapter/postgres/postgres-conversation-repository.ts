@@ -1,6 +1,6 @@
 import type {
   CreateConversationRecord,
-  ConversationPageRequest,
+  ConversationOffsetPageRequest,
   ConversationRepository,
 } from "../../domain/contracts/conversation-repository";
 import { Conversation } from "../../domain/objects/conversation";
@@ -37,19 +37,19 @@ export class PostgresConversationRepository implements ConversationRepository {
   }
 
   async readFromConversationDBStore(
-    id: string,
+    conversationId: string,
   ): Promise<Result<Conversation, NotFoundError | StoreError>> {
     try {
       const rows = await this.sql<ConversationRow[]>`
         select id, created_at, updated_at
         from thoth.conversations
-        where id = ${id}
+        where id = ${conversationId}
       `;
 
       const row = rows[0];
 
       if (!row) {
-        return failure(new NotFoundError("Conversation", id));
+        return failure(new NotFoundError("Conversation", conversationId));
       }
 
       return mapRow(row, "read");
@@ -59,17 +59,15 @@ export class PostgresConversationRepository implements ConversationRepository {
   }
 
   async readPageFromConversationDBStore(
-    request: ConversationPageRequest,
+    request: ConversationOffsetPageRequest,
   ): Promise<Result<Conversation[], StoreError>> {
-    const offset = (request.pageNum - 1) * request.pageSize;
-
     try {
       const rows = await this.sql<ConversationRow[]>`
         select id, created_at, updated_at
         from thoth.conversations
         order by updated_at desc, id desc
         limit ${request.pageSize}
-        offset ${offset}
+        offset ${request.offset}
       `;
 
       const conversations: Conversation[] = [];
@@ -93,12 +91,12 @@ export class PostgresConversationRepository implements ConversationRepository {
   }
 
   async removeFromConversationDBStore(
-    id: string,
+    conversationId: string,
   ): Promise<Result<void, StoreError>> {
     try {
       await this.sql`
         delete from thoth.conversations
-        where id = ${id}
+        where id = ${conversationId}
       `;
 
       return success(undefined);

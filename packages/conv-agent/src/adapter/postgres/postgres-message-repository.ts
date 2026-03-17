@@ -1,7 +1,7 @@
 import type {
   CreateMessageRecord,
-  MessagePageRequest,
   MessageRepository,
+  MessageSequencePageRequest,
 } from "../../domain/contracts/message-repository";
 import { Message } from "../../domain/objects/message";
 import { NotFoundError, StoreError } from "../../domain/objects/errors";
@@ -87,7 +87,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async readFromMessageDBStore(id: string) {
+  async readFromMessageDBStore(messageId: string) {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
@@ -107,13 +107,13 @@ export class PostgresMessageRepository implements MessageRepository {
             array[]::text[]
           ) as file_ids
         from thoth.messages m
-        where m.id = ${id}
+        where m.id = ${messageId}
       `;
 
       const row = rows[0];
 
       if (!row) {
-        return failure(new NotFoundError("Message", id));
+        return failure(new NotFoundError("Message", messageId));
       }
 
       return mapRow(row, "read");
@@ -122,9 +122,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async readPageFromMessageDBStore(request: MessagePageRequest) {
-    const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
-
+  async readPageFromMessageDBStore(request: MessageSequencePageRequest) {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
@@ -146,7 +144,7 @@ export class PostgresMessageRepository implements MessageRepository {
         from thoth.messages m
         where
           m.conversation_id = ${request.conversationId}
-          and m.sequence_number >= ${fromSequence}
+          and m.sequence_number >= ${request.fromSequence}
         order by m.sequence_number asc
         limit ${request.pageSize}
       `;
@@ -209,16 +207,16 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async removeFromMessageDBStore(id: string) {
+  async removeFromMessageDBStore(messageId: string) {
     try {
       await this.sql`
         delete from thoth.message_files
-        where message_id = ${id}
+        where message_id = ${messageId}
       `;
 
       await this.sql`
         delete from thoth.messages
-        where id = ${id}
+        where id = ${messageId}
       `;
 
       return success(undefined);

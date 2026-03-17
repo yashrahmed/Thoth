@@ -1,5 +1,6 @@
 import type {
   ConversationPageRequest,
+  ConversationOffsetPageRequest,
   ConversationRepository,
 } from "../contracts/conversation-repository";
 import type { Conversation } from "../objects/conversation";
@@ -36,15 +37,20 @@ export class ConversationDomainService {
   }
 
   async readFromConversationDBStore(
-    id: string,
+    conversationId: string,
   ): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
-    const idResult = requireNonEmptyString(id, "id");
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
 
-    if (!idResult.ok) {
-      return idResult;
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
     }
 
-    return this.conversationRepository.readFromConversationDBStore(idResult.value);
+    return this.conversationRepository.readFromConversationDBStore(
+      conversationIdResult.value,
+    );
   }
 
   async readPageFromConversationDBStore(
@@ -62,21 +68,28 @@ export class ConversationDomainService {
       return pageSizeResult;
     }
 
-    return this.conversationRepository.readPageFromConversationDBStore({
-      pageNum: pageNumResult.value,
+    const pageRequest: ConversationOffsetPageRequest = {
+      offset: (pageNumResult.value - 1) * pageSizeResult.value,
       pageSize: pageSizeResult.value,
-    });
+    };
+
+    return this.conversationRepository.readPageFromConversationDBStore(pageRequest);
   }
 
   async removeFromConversationDBStore(
-    id: string,
+    conversationId: string,
   ): Promise<Result<void, ValidationError | StoreError>> {
-    const idResult = requireNonEmptyString(id, "id");
+    const conversationIdResult = requireNonEmptyString(
+      conversationId,
+      "conversationId",
+    );
 
-    if (!idResult.ok) {
-      return idResult;
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
     }
 
-    return this.conversationRepository.removeFromConversationDBStore(idResult.value);
+    return this.conversationRepository.removeFromConversationDBStore(
+      conversationIdResult.value,
+    );
   }
 }

@@ -2,6 +2,7 @@ import type {
   CreateMessageRecord,
   MessageRepository,
   MessagePageRequest,
+  MessageSequencePageRequest,
 } from "../contracts/message-repository";
 import type { Message } from "../objects/message";
 import type {
@@ -84,15 +85,18 @@ export class MessageDomainService {
   }
 
   async readFromMessageDBStore(
-    id: string,
+    messageId: string,
   ): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
-    const idResult = requireNonEmptyString(id, "id");
+    const messageIdResult = requireNonEmptyString(
+      messageId,
+      "messageId",
+    );
 
-    if (!idResult.ok) {
-      return idResult;
+    if (!messageIdResult.ok) {
+      return messageIdResult;
     }
 
-    return this.messageRepository.readFromMessageDBStore(idResult.value);
+    return this.messageRepository.readFromMessageDBStore(messageIdResult.value);
   }
 
   async readPageFromMessageDBStore(
@@ -119,11 +123,13 @@ export class MessageDomainService {
       return pageSizeResult;
     }
 
-    return this.messageRepository.readPageFromMessageDBStore({
+    const pageRequest: MessageSequencePageRequest = {
       conversationId: conversationIdResult.value,
-      pageNum: pageNumResult.value,
+      fromSequence: (pageNumResult.value - 1) * pageSizeResult.value + 1,
       pageSize: pageSizeResult.value,
-    });
+    };
+
+    return this.messageRepository.readPageFromMessageDBStore(pageRequest);
   }
 
   async readAllMessagesFromMessageDBStore(
@@ -161,15 +167,18 @@ export class MessageDomainService {
   }
 
   async removeFromMessageDBStore(
-    id: string,
+    messageId: string,
   ): Promise<Result<void, ValidationError | StoreError>> {
-    const idResult = requireNonEmptyString(id, "id");
+    const messageIdResult = requireNonEmptyString(
+      messageId,
+      "messageId",
+    );
 
-    if (!idResult.ok) {
-      return idResult;
+    if (!messageIdResult.ok) {
+      return messageIdResult;
     }
 
-    return this.messageRepository.removeFromMessageDBStore(idResult.value);
+    return this.messageRepository.removeFromMessageDBStore(messageIdResult.value);
   }
   async deleteMessage(
     messageId: string,

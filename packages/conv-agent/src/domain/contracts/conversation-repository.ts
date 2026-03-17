@@ -18,16 +18,8 @@ export interface ConversationOffsetPageRequest {
 }
 
 export interface ConversationRepository {
-  upsertConversationRow(
-    record: CreateConversationRecord,
-  ): Promise<Result<Conversation, StoreError>>;
-  selectConversationRow(
-    conversationId: string,
-  ): Promise<Result<Conversation, NotFoundError | StoreError>>;
-  selectConversationPage(
-    request: ConversationOffsetPageRequest,
-  ): Promise<Result<Conversation[], StoreError>>;
-  deleteConversationRow(
-    conversationId: string,
-  ): Promise<Result<void, StoreError>>;
+  upsertConversationRow(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>>;
+  selectConversationRow(conversationId: string): Promise<Result<Conversation, NotFoundError | StoreError>>;
+  selectConversationPage(request: ConversationOffsetPageRequest): Promise<Result<Conversation[], StoreError>>;
+  deleteConversationRow(conversationId: string): Promise<Result<void, StoreError>>;
 }

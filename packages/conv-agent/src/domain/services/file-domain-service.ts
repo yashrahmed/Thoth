@@ -1,6 +1,4 @@
-import type {
-  FileContent,
-} from "../contracts/blob-repository";
+import type { FileContent } from "../objects/file-content";
 import type {
   CreateFileRecord,
   FileRepository,

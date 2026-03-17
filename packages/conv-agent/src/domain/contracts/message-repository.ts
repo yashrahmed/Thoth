@@ -24,20 +24,10 @@ export interface MessageSequencePageRequest {
 }
 
 export interface MessageRepository {
-  upsertMessageRow(
-    record: CreateMessageRecord,
-  ): Promise<Result<Message, StoreError>>;
-  selectMessageRow(
-    messageId: string,
-  ): Promise<Result<Message, NotFoundError | StoreError>>;
-  selectMessagePage(
-    request: MessageSequencePageRequest,
-  ): Promise<Result<Message[], StoreError>>;
-  selectAllMessagesByConversation(
-    conversationId: string,
-  ): Promise<Result<Message[], StoreError>>;
-  countMessagesByConversation(
-    conversationId: string,
-  ): Promise<Result<number, StoreError>>;
+  upsertMessageRow(record: CreateMessageRecord): Promise<Result<Message, StoreError>>;
+  selectMessageRow(messageId: string): Promise<Result<Message, NotFoundError | StoreError>>;
+  selectMessagePage(request: MessageSequencePageRequest): Promise<Result<Message[], StoreError>>;
+  selectAllMessagesByConversation(conversationId: string): Promise<Result<Message[], StoreError>>;
+  countMessagesByConversation(conversationId: string): Promise<Result<number, StoreError>>;
   deleteMessageRow(messageId: string): Promise<Result<void, StoreError>>;
 }

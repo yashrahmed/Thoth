@@ -1,7 +1,6 @@
+import type { FileContent } from "../objects/file-content";
 import type { BlobStoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
-
-export type FileContent = ArrayBuffer;
 
 export interface BlobUploadRequest {
   readonly conversationId: string;
@@ -11,10 +10,6 @@ export interface BlobUploadRequest {
 }
 
 export interface BlobRepository {
-  putBlob(
-    request: BlobUploadRequest,
-  ): Promise<Result<string, BlobStoreError>>;
-  removeBlob(
-    url: string,
-  ): Promise<Result<void, BlobStoreError>>;
+  putBlob(request: BlobUploadRequest): Promise<Result<string, BlobStoreError>>;
+  removeBlob(url: string): Promise<Result<void, BlobStoreError>>;
 }

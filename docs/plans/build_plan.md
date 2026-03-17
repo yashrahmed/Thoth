@@ -30,30 +30,143 @@ class File {
 
 ## Types
 
+### Flow Input/Output Types
+
 ```ts
-type FileContent = { readonly _brand: "FileContent" };
-type Attachment = {
-  content: FileContent;
-  filename: string;
-  mimeType: string;
+type DeleteConversationCommand = {
+  readonly conversationId: string;
 };
 
 type AppendMessageRequest = {
-  conversationId: string;
-  textContent: string;
-  attachments: Attachment[];
+  readonly conversationId: string;
+  readonly textContent: string;
+  readonly attachments: ReadonlyArray<Attachment>;
 };
 
-type CreateMessageRequest = {
-  conversationId: string;
-  textContent: string;
-  fileIds: string[];
+type Attachment = {
+  readonly content: FileContent;
+  readonly filename: string;
+  readonly mimeType: string;
 };
 
-type UploadFileRequest = {
-  content: FileContent;
-  filename: string;
-  mimeType: string;
+type AppendMessageResult = {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly sequenceNumber: number;
+  readonly textContent: string;
+  readonly fileIds: ReadonlyArray<string>;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+type GetMessagesQuery = {
+  readonly conversationId: string;
+  readonly pageNum: number;
+  readonly pageSize: number;
+};
+
+type GetMessagesItem = {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly sequenceNumber: number;
+  readonly textContent: string;
+  readonly files: ReadonlyArray<GetMessagesFile>;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+type GetMessagesFile = {
+  readonly id: string;
+  readonly canonicalUrl: string;
+  readonly filename: string;
+  readonly mimeType: string;
+  readonly sizeInBytes: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+type ListConversationsQuery = {
+  readonly pageNum: number;
+  readonly pageSize: number;
+};
+
+type ListConversationsItem = {
+  readonly id: string;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+type CreateConversationResult = {
+  readonly id: string;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+type GetConversationQuery = {
+  readonly conversationId: string;
+};
+
+type GetConversationResult = {
+  readonly id: string;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+```
+
+### Domain Types
+
+```ts
+type FileContent = ArrayBuffer;
+
+type CreateMessageInput = {
+  readonly conversationId: string;
+  readonly sequenceNumber: number;
+  readonly textContent: string;
+  readonly fileIds: ReadonlyArray<string>;
+};
+
+type CreateNextMessageInput = {
+  readonly conversationId: string;
+  readonly textContent: string;
+  readonly fileIds: ReadonlyArray<string>;
+};
+
+type UploadFileInput = {
+  readonly conversationId: string;
+  readonly content: FileContent;
+  readonly filename: string;
+  readonly mimeType: string;
+};
+
+type UploadFilesInput = {
+  readonly files: ReadonlyArray<UploadFileInput>;
+};
+
+type GetFilesInput = {
+  readonly fileIds: ReadonlyArray<string>;
+};
+
+type CreateConversationRecord = {
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+type CreateMessageRecord = {
+  readonly conversationId: string;
+  readonly sequenceNumber: number;
+  readonly textContent: string;
+  readonly fileIds: ReadonlyArray<string>;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+type CreateFileRecord = {
+  readonly canonicalUrl: string;
+  readonly filename: string;
+  readonly mimeType: string;
+  readonly sizeInBytes: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
 };
 ```
 
@@ -113,164 +226,193 @@ type ConstructionError = {
 
 ## Actions
 
-### App.DeleteConversation (conversationId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
+### App.DeleteConversation (command: DeleteConversationCommand): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
-1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
-2. GetConversation(conversationId) → conversation → if failure, return failure.
-3. ReadAllMessagesFromMessageDBStore(conversationId) → messages → if failure, return failure.
-4. For each message: Message in messages:
-   1. For each fileId: string in message.fileIds:
-      1. DeleteFile(fileId) → if failure, return failure.
-   2. DeleteMessage(message.id) → if failure, return failure.
-5. RemoveFromConversationDBStore(conversationId) → if failure, return failure.
-6. Return succeed(void).
+1. ReadFromConversationDBStore(command.conversationId) → conversation → if failure, return failure.
+2. ReadAllMessagesFromMessageDBStore(command.conversationId) → messages → if failure, return failure.
+3. For each message: Message in messages:
+   1. DeleteMessageWithFiles(message.id) → if failure, return failure.
+4. RemoveFromConversationDBStore(command.conversationId) → if failure, return failure.
+5. Return succeed(void).
 
-### App.AppendMessageToConversation (request: AppendMessageRequest): Result<Message, ValidationError | NotFoundError | StoreError | BlobStoreError | ConstructionError>
+### App.AppendMessageToConversation (request: AppendMessageRequest): Result<AppendMessageResult, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
-1. RequireNonEmptyString(request.conversationId, "conversationId") → if failure, return failure.
-2. RequirePresent(request.textContent, "textContent") → if failure, return failure.
-3. For each attachment: Attachment in request.attachments:
-   1. RequirePresent(attachment.content, "attachment.content") → if failure, return failure.
-   2. RequireNonEmptyString(attachment.filename, "attachment.filename") → if failure, return failure.
-   3. RequireNonEmptyString(attachment.mimeType, "attachment.mimeType") → if failure, return failure.
-4. GetConversation(request.conversationId) → conversation → if failure, return failure.
-5. ReadMessageCountFromMessageDBStore(request.conversationId) → messageCount → if failure, return failure.
-6. Derive sequenceNumber from messageCount + 1.
-7. For each attachment: Attachment in request.attachments:
-   1. UploadFile(request: UploadFileRequest) → file → if failure, return failure.
-8. CreateMessage(request: CreateMessageRequest) → message → if failure, return failure.
-9. Return succeed(message).
+1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
+2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
+3. CreateNextMessage({ conversationId, textContent, fileIds from files }) → message → if failure, return failure.
+4. Map message to AppendMessageResult({ id, conversationId, sequenceNumber, textContent, fileIds, createdAt, updatedAt }).
+5. Return succeed(appendMessageResult).
 
-### App.GetMessagesOnConversation (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | NotFoundError | StoreError>
+### App.GetMessagesOnConversation (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
-1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
-2. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
-3. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
-4. GetConversation(conversationId) → conversation → if failure, return failure.
-5. Compute fromSequence = (pageNum - 1) * pageSize + 1.
-6. ReadPageFromMessageDBStore(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
-7. Return succeed(messages).
+1. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
+2. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
+3. For each message: Message in messages:
+   1. GetFiles({ fileIds: message.fileIds }) → files → if failure, return failure.
+   2. Map message and files to GetMessagesItem({ id, conversationId, sequenceNumber, textContent, files mapped to GetMessagesFile[], createdAt, updatedAt }).
+4. Return succeed(items).
 
-### App.ListConversations (pageNum: number, pageSize: number): Result<Conversation[], ValidationError | StoreError>
+### App.ListConversations (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
 
-1. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
-2. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
-3. Compute offset = (pageNum - 1) * pageSize.
-4. ReadPageFromConversationDBStore(offset, pageSize) → conversations → if failure, return failure.
-5. Return succeed(conversations).
+1. ReadPageFromConversationDBStore(query.pageNum, query.pageSize) → conversations → if failure, return failure.
+2. Map each conversation to ListConversationsItem({ id, createdAt, updatedAt }).
+3. Return succeed(items).
 
-### App.CreateConversation (): Result<Conversation, ConstructionError | StoreError>
+### App.CreateConversation (): Result<CreateConversationResult, StoreError>
 
 1. Now() → timestamp.
-2. Construct Conversation(createdAt: timestamp, updatedAt: timestamp) → conversation → if failure, return failure.
-3. PersistToConversationDBStore(conversation) → conversation → if failure, return failure.
-4. Return succeed(conversation).
+2. PersistToConversationDBStore({ createdAt: timestamp, updatedAt: timestamp }) → conversation → if failure, return failure.
+3. Map conversation to CreateConversationResult({ id, createdAt, updatedAt }).
+4. Return succeed(createConversationResult).
 
-### App.GetConversation (conversationId: string): Result<Conversation, NotFoundError | StoreError>
+### App.GetConversation (query: GetConversationQuery): Result<GetConversationResult, ValidationError | NotFoundError | StoreError>
 
-1. ReadFromConversationDBStore(conversationId) → conversation → if failure, return failure.
-2. Return succeed(conversation).
+1. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
+2. Map conversation to GetConversationResult({ id, createdAt, updatedAt }).
+3. Return succeed(getConversationResult).
 
-### CreateMessage (request: CreateMessageRequest): Result<Message, ValidationError | ConstructionError | StoreError>
+### CreateMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
 
-1. RequireNonEmptyString(request.conversationId, "conversationId") → if failure, return failure.
-2. RequirePresent(request.textContent, "textContent") → if failure, return failure.
-3. For each fileId: string in request.fileIds:
-   1. RequireNonEmptyString(fileId, "fileId") → if failure, return failure.
-4. Now() → timestamp.
-5. Construct Message(request.conversationId, request.textContent, createdAt: timestamp, updatedAt: timestamp, request.fileIds) → message → if failure, return failure.
-6. PersistToMessageDBStore(message) → message → if failure, return failure.
-7. Return succeed(message).
+1. Now() → timestamp.
+2. PersistToMessageDBStore({ conversationId, sequenceNumber, textContent, fileIds, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
+3. Return succeed(message).
 
-### DeleteMessage (messageId: string): Result<void, NotFoundError | StoreError>
+### CreateNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
+
+1. ReadMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
+2. CreateMessage({ conversationId, sequenceNumber: count + 1, textContent, fileIds }) → message → if failure, return failure.
+3. Return succeed(message).
+
+### DeleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
 
 1. ReadFromMessageDBStore(messageId) → if failure, return failure.
 2. RemoveFromMessageDBStore(messageId) → if failure, return failure.
 3. Return succeed(void).
 
-### UploadFile (request: UploadFileRequest): Result<File, ValidationError | ConstructionError | BlobStoreError | StoreError>
+### DeleteMessageWithFiles (messageId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
-1. RequirePresent(request.content, "content") → if failure, return failure.
-2. RequireNonEmptyString(request.filename, "filename") → if failure, return failure.
-3. RequireNonEmptyString(request.mimeType, "mimeType") → if failure, return failure.
-4. UploadToBlobStore(request.content) → canonicalUrl → if failure, return failure.
-5. Now() → timestamp.
-6. Construct File(canonicalUrl, request.filename, request.mimeType, sizeInBytes, createdAt: timestamp, updatedAt: timestamp) → file → if failure, return failure.
-7. PersistToFileDBStore(file) → file → if failure, return failure.
-8. Return succeed(file).
+1. ReadFromMessageDBStore(messageId) → message → if failure, return failure.
+2. For each fileId: string in message.fileIds:
+   1. DeleteFile(fileId) → if failure, return failure.
+3. RemoveFromMessageDBStore(messageId) → if failure, return failure.
+4. Return succeed(void).
 
-### DeleteFile (fileId: string): Result<void, NotFoundError | StoreError | BlobStoreError>
+### UploadFile (request: UploadFileInput): Result<File, ValidationError | BlobStoreError | StoreError>
+
+1. UploadToBlobStore({ conversationId, content, filename, mimeType }) → canonicalUrl → if failure, return failure.
+2. Now() → timestamp.
+3. PersistToFileDBStore({ canonicalUrl, filename, mimeType, sizeInBytes: content.byteLength, createdAt: timestamp, updatedAt: timestamp }) → file → if failure, return failure.
+4. Return succeed(file).
+
+### UploadFiles (request: UploadFilesInput): Result<File[], ValidationError | BlobStoreError | StoreError>
+
+1. For each file: UploadFileInput in request.files:
+   1. UploadFile(file) → uploadedFile → if failure, return failure.
+2. Return succeed(uploadedFiles).
+
+### GetFiles (request: GetFilesInput): Result<File[], NotFoundError | StoreError>
+
+1. For each fileId: string in request.fileIds:
+   1. ReadFromFileDBStore(fileId) → file → if failure, return failure.
+2. Return succeed(files).
+
+### DeleteFile (fileId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
 1. ReadFromFileDBStore(fileId) → file → if failure, return failure.
 2. DeleteFromBlobStore(file.canonicalUrl) → if failure, return failure.
 3. RemoveFromFileDBStore(fileId) → if failure, return failure.
 4. Return succeed(void).
 
-### PersistToConversationDBStore (conversation: Conversation): Result<Conversation, StoreError>
+### PersistToConversationDBStore (record: CreateConversationRecord): Result<Conversation, StoreError>
 
-1. Infra.UpsertConversationRow(conversation) → conversation → if failure, return failure.
+1. Infra.UpsertConversationRow(record) → conversation → if failure, return failure.
 
-### ReadFromConversationDBStore (id: string): Result<Conversation, NotFoundError | StoreError>
+### ReadFromConversationDBStore (id: string): Result<Conversation, ValidationError | NotFoundError | StoreError>
 
-1. Infra.SelectConversationRow(id) → conversation → if failure, return failure.
+1. RequireNonEmptyString(id, "id") → if failure, return failure.
+2. Infra.SelectConversationRow(id) → conversation → if failure, return failure.
 
-### ReadPageFromConversationDBStore (offset: number, pageSize: number): Result<Conversation[], StoreError>
+### ReadPageFromConversationDBStore (pageNum: number, pageSize: number): Result<Conversation[], ValidationError | StoreError>
 
-1. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
+1. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
+2. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
+3. Compute offset = (pageNum - 1) * pageSize.
+4. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
 
-### RemoveFromConversationDBStore (id: string): Result<void, StoreError>
+### RemoveFromConversationDBStore (id: string): Result<void, ValidationError | StoreError>
 
-1. Infra.DeleteConversationRow(id) → if failure, return failure.
+1. RequireNonEmptyString(id, "id") → if failure, return failure.
+2. Infra.DeleteConversationRow(id) → if failure, return failure.
 
-### PersistToMessageDBStore (message: Message): Result<Message, StoreError>
+### PersistToMessageDBStore (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
 
-1. Infra.UpsertMessageRow(message) → message → if failure, return failure.
+1. RequireNonEmptyString(record.conversationId, "conversationId") → if failure, return failure.
+2. RequirePositiveInteger(record.sequenceNumber, "sequenceNumber") → if failure, return failure.
+3. RequirePresent(record.textContent, "textContent") → if failure, return failure.
+4. For each fileId: string in record.fileIds:
+   1. RequireNonEmptyString(fileId, "fileId") → if failure, return failure.
+5. Infra.UpsertMessageRow(record) → message → if failure, return failure.
 
-### ReadFromMessageDBStore (id: string): Result<Message, NotFoundError | StoreError>
+### ReadFromMessageDBStore (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
 
-1. Infra.SelectMessageRow(id) → message → if failure, return failure.
+1. RequireNonEmptyString(id, "id") → if failure, return failure.
+2. Infra.SelectMessageRow(id) → message → if failure, return failure.
 
-### ReadPageFromMessageDBStore (conversationId: string, fromSequence: number, pageSize: number): Result<Message[], StoreError>
+### ReadPageFromMessageDBStore (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | StoreError>
 
-1. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
+1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
+2. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
+3. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
+4. Compute fromSequence = (pageNum - 1) * pageSize + 1.
+5. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
 
-### ReadAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], StoreError>
+### ReadAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], ValidationError | StoreError>
 
-1. Infra.SelectAllMessagesByConversation(conversationId) → messages → if failure, return failure.
+1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
+2. Infra.SelectAllMessagesByConversation(conversationId) → messages → if failure, return failure.
 
-### ReadMessageCountFromMessageDBStore (conversationId: string): Result<number, StoreError>
+### ReadMessageCountFromMessageDBStore (conversationId: string): Result<number, ValidationError | StoreError>
 
-1. Infra.CountMessagesByConversation(conversationId) → count → if failure, return failure.
+1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
+2. Infra.CountMessagesByConversation(conversationId) → count → if failure, return failure.
 
-### RemoveFromMessageDBStore (id: string): Result<void, StoreError>
+### RemoveFromMessageDBStore (id: string): Result<void, ValidationError | StoreError>
 
-1. Infra.DeleteMessageRow(id) → if failure, return failure.
+1. RequireNonEmptyString(id, "id") → if failure, return failure.
+2. Infra.DeleteMessageRow(id) → if failure, return failure.
 
-### PersistToFileDBStore (file: File): Result<File, StoreError>
+### PersistToFileDBStore (record: CreateFileRecord): Result<File, StoreError>
 
-1. Infra.UpsertFileRow(file) → file → if failure, return failure.
+1. Infra.UpsertFileRow(record) → file → if failure, return failure.
 
-### ReadFromFileDBStore (id: string): Result<File, NotFoundError | StoreError>
+### ReadFromFileDBStore (id: string): Result<File, ValidationError | NotFoundError | StoreError>
 
-1. Infra.SelectFileRow(id) → file → if failure, return failure.
+1. RequireNonEmptyString(id, "id") → if failure, return failure.
+2. Infra.SelectFileRow(id) → file → if failure, return failure.
 
-### RemoveFromFileDBStore (id: string): Result<void, StoreError>
+### RemoveFromFileDBStore (id: string): Result<void, ValidationError | StoreError>
 
-1. Infra.DeleteFileRow(id) → if failure, return failure.
+1. RequireNonEmptyString(id, "id") → if failure, return failure.
+2. Infra.DeleteFileRow(id) → if failure, return failure.
 
-### UploadToBlobStore (content: FileContent): Result<string, BlobStoreError>
+### UploadToBlobStore (request: { conversationId: string, content: FileContent, filename: string, mimeType: string }): Result<string, ValidationError | BlobStoreError>
 
-1. Infra.PutBlob(content) → url → if failure, return failure.
+1. RequirePresent(request.content, "content") → if failure, return failure.
+2. RequireNonEmptyString(request.conversationId, "conversationId") → if failure, return failure.
+3. RequireNonEmptyString(request.filename, "filename") → if failure, return failure.
+4. RequireNonEmptyString(request.mimeType, "mimeType") → if failure, return failure.
+5. Infra.PutBlob(request) → url → if failure, return failure.
 
-### DeleteFromBlobStore (url: string): Result<void, BlobStoreError>
+### DeleteFromBlobStore (canonicalUrl: string): Result<void, ValidationError | BlobStoreError>
 
-1. Infra.RemoveBlob(url) → if failure, return failure.
+1. RequireNonEmptyString(canonicalUrl, "canonicalUrl") → if failure, return failure.
+2. Infra.RemoveBlob(canonicalUrl) → if failure, return failure.
 
 ## Infra Actions
 
-### Infra.UpsertConversationRow (conversation: Conversation): Result<Conversation, StoreError>
+### Infra.UpsertConversationRow (record: CreateConversationRecord): Result<Conversation, StoreError>
 
-1. MapToRow(conversation) → row.
+1. MapToRow(record) → row.
 2. PostgresClient.query(UpsertQuery("conversations", row)) → resultRow → if error, return StoreError.
 3. MapFromRow(resultRow) → conversation.
 4. Return succeed(conversation).
@@ -293,9 +435,9 @@ type ConstructionError = {
 1. PostgresClient.query(DeleteByIdQuery("conversations", id)) → if error, return StoreError.
 2. Return succeed(void).
 
-### Infra.UpsertMessageRow (message: Message): Result<Message, StoreError>
+### Infra.UpsertMessageRow (record: CreateMessageRecord): Result<Message, StoreError>
 
-1. MapToRow(message) → row.
+1. MapToRow(record) → row.
 2. PostgresClient.query(UpsertQuery("messages", row)) → resultRow → if error, return StoreError.
 3. MapFromRow(resultRow) → message.
 4. Return succeed(message).
@@ -329,9 +471,9 @@ type ConstructionError = {
 1. PostgresClient.query(DeleteByIdQuery("messages", id)) → if error, return StoreError.
 2. Return succeed(void).
 
-### Infra.UpsertFileRow (file: File): Result<File, StoreError>
+### Infra.UpsertFileRow (record: CreateFileRecord): Result<File, StoreError>
 
-1. MapToRow(file) → row.
+1. MapToRow(record) → row.
 2. PostgresClient.query(UpsertQuery("files", row)) → resultRow → if error, return StoreError.
 3. MapFromRow(resultRow) → file.
 4. Return succeed(file).
@@ -375,6 +517,10 @@ type ConstructionError = {
   combined with `conversationId`. `DeleteConversation` and
   `AppendMessageToConversation` query the message store by `conversationId`
   directly.
+- `*DBStore` and `*BlobStore` actions are domain-level abstractions, not
+  repository or infrastructure names. They discriminate between the two kinds
+  of store (relational vs object) while remaining in the domain layer. The
+  `Infra.*` actions are the repository/adapter layer.
 
 ## Description
 

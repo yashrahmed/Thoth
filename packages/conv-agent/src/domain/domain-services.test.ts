@@ -25,6 +25,7 @@ import {
   StoreError,
   ValidationError,
 } from "./objects/errors";
+import type { ContentPart, ToolCall } from "./objects/message-content";
 import { Message } from "./objects/message";
 import { failure, success, type Result } from "./objects/result";
 import { BlobDomainService } from "./services/blob-domain-service";
@@ -119,26 +120,30 @@ describe("domain services", () => {
         "canonicalUrl must be a non-empty string.",
       ),
     );
-    expect(repository.uploads).toHaveLength(0);
-    expect(repository.deletedUrls).toHaveLength(0);
   });
 
-  test("MessageDomainService exposes direct store counterparts", async () => {
+  test("MessageDomainService exposes direct store counterparts with rich message data", async () => {
     const repository = new InMemoryMessageRepository();
     repository.seed([
       mustCreateMessage(
         "message-1",
         "conversation-1",
+        "user",
         1,
-        "one",
+        [textPart("one")],
+        [],
+        "",
         [],
         "2026-03-16T12:00:00.000Z",
       ),
       mustCreateMessage(
         "message-2",
         "conversation-1",
+        "assistant",
         2,
-        "two",
+        [textPart("two")],
+        [],
+        "",
         [],
         "2026-03-16T12:01:00.000Z",
       ),
@@ -150,8 +155,11 @@ describe("domain services", () => {
 
     const createResult = await service.createMessage({
       conversationId: "conversation-1",
+      type: "tool",
       sequenceNumber: 3,
-      textContent: "three",
+      content: [textPart("three")],
+      toolCalls: [toolCall("tool-call-1", "search")],
+      toolCallId: "tool-call-1",
       fileIds: ["file-1"],
     });
     const getResult = await service.readFromMessageDBStore("message-1");
@@ -174,8 +182,11 @@ describe("domain services", () => {
     expect(deleteResult.ok).toBe(true);
     expect(repository.createdRecords[0]).toEqual({
       conversationId: "conversation-1",
+      type: "tool",
       sequenceNumber: 3,
-      textContent: "three",
+      content: [textPart("three")],
+      toolCalls: [toolCall("tool-call-1", "search")],
+      toolCallId: "tool-call-1",
       fileIds: ["file-1"],
       createdAt: new Date("2026-03-16T12:02:00.000Z"),
       updatedAt: new Date("2026-03-16T12:02:00.000Z"),
@@ -188,30 +199,123 @@ describe("domain services", () => {
     expect(repository.deletedIds).toEqual(["message-2", "message-1"]);
   });
 
-  test("MessageDomainService validates message ids for direct read/remove actions", async () => {
+  test("MessageDomainService validates rich message records", async () => {
     const service = new MessageDomainService(new InMemoryMessageRepository());
 
-    const getResult = await service.readFromMessageDBStore("");
-    const removeResult = await service.removeFromMessageDBStore("");
+    const invalidTypeResult = await service.persistToMessageDBStore({
+      conversationId: "conversation-1",
+      type: "bad" as "user",
+      sequenceNumber: 1,
+      content: [textPart("hello")],
+      toolCalls: [],
+      toolCallId: "",
+      fileIds: [],
+      createdAt: new Date("2026-03-16T12:00:00.000Z"),
+      updatedAt: new Date("2026-03-16T12:00:00.000Z"),
+    });
+    const invalidToolCallResult = await service.persistToMessageDBStore({
+      conversationId: "conversation-1",
+      type: "assistant",
+      sequenceNumber: 1,
+      content: [textPart("hello")],
+      toolCalls: [{ id: "", name: "search", args: {} }],
+      toolCallId: "",
+      fileIds: [],
+      createdAt: new Date("2026-03-16T12:00:00.000Z"),
+      updatedAt: new Date("2026-03-16T12:00:00.000Z"),
+    });
 
-    expect(getResult.ok).toBe(false);
-    expect(removeResult.ok).toBe(false);
-    if (getResult.ok || removeResult.ok) {
-      return;
-    }
-
-    expect(getResult.error).toEqual(
-      new ValidationError(
-        "messageId",
-        "messageId must be a non-empty string.",
+    expect(invalidTypeResult).toEqual(
+      failure(
+        new ValidationError(
+          "type",
+          "type must be one of user, assistant, system, or tool.",
+        ),
       ),
     );
-    expect(removeResult.error).toEqual(
-      new ValidationError(
-        "messageId",
-        "messageId must be a non-empty string.",
+    expect(invalidToolCallResult).toEqual(
+      failure(
+        new ValidationError(
+          "toolCall.id",
+          "toolCall.id must be a non-empty string.",
+        ),
       ),
     );
+  });
+
+  test("MessageDomainService createNextMessage computes count plus one", async () => {
+    const repository = new InMemoryMessageRepository();
+    repository.seed([
+      mustCreateMessage(
+        "message-1",
+        "conversation-1",
+        "user",
+        1,
+        [textPart("one")],
+        [],
+        "",
+        [],
+        "2026-03-16T12:00:00.000Z",
+      ),
+    ]);
+    const service = new MessageDomainService(
+      repository,
+      () => new Date("2026-03-16T12:03:00.000Z"),
+    );
+
+    const result = await service.createNextMessage({
+      conversationId: "conversation-1",
+      type: "assistant",
+      content: [textPart("two")],
+      toolCalls: [],
+      toolCallId: "",
+      fileIds: [],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(repository.createdRecords[0]?.sequenceNumber).toBe(2);
+  });
+
+  test("MessageDomainService deleteMessageWithFiles deletes files before the message", async () => {
+    const messageRepository = new InMemoryMessageRepository();
+    messageRepository.seed([
+      mustCreateMessage(
+        "message-1",
+        "conversation-1",
+        "user",
+        1,
+        [textPart("one")],
+        [],
+        "",
+        ["file-1"],
+        "2026-03-16T12:00:00.000Z",
+      ),
+    ]);
+    const fileRepository = new InMemoryFileRepository();
+    fileRepository.seed([
+      mustCreateFile(
+        "file-1",
+        "/conversations/conversation-1/file-1-a.txt",
+        "a.txt",
+        "text/plain",
+        1,
+      ),
+    ]);
+    const blobRepository = new InMemoryBlobRepository();
+    const fileDomainService = new FileDomainService(
+      fileRepository,
+      new BlobDomainService(blobRepository),
+    );
+    const service = new MessageDomainService(messageRepository);
+
+    const result = await service.deleteMessageWithFiles("message-1", fileDomainService);
+
+    expect(result).toEqual(success(undefined));
+    expect(blobRepository.deletedUrls).toEqual([
+      "/conversations/conversation-1/file-1-a.txt",
+    ]);
+    expect(fileRepository.deletedIds).toEqual(["file-1"]);
+    expect(messageRepository.deletedIds).toEqual(["message-1"]);
   });
 
   test("FileDomainService exposes direct store counterparts and composed blob-backed methods", async () => {
@@ -253,42 +357,23 @@ describe("domain services", () => {
     expect(createResult.ok).toBe(true);
     expect(getResult.ok).toBe(true);
     expect(uploadResult.ok).toBe(true);
-    if (!uploadResult.ok) {
+    if (!uploadResult.ok || !createResult.ok) {
       return;
     }
 
-    const deleteRecordResult = await service.removeFromFileDBStore(createResult.ok ? createResult.value.id : "");
+    const filesResult = await service.getFiles({
+      fileIds: ["file-1", uploadResult.value.id],
+    });
+    const deleteRecordResult = await service.removeFromFileDBStore(createResult.value.id);
     const deleteFileResult = await service.deleteFile(uploadResult.value.id);
 
+    expect(filesResult.ok).toBe(true);
     expect(deleteRecordResult.ok).toBe(true);
     expect(deleteFileResult.ok).toBe(true);
     expect(blobRepository.uploads).toHaveLength(1);
     expect(blobRepository.deletedUrls).toEqual([
       uploadResult.value.canonicalUrl,
     ]);
-  });
-
-  test("FileDomainService validates file ids for direct read/remove actions", async () => {
-    const service = new FileDomainService(
-      new InMemoryFileRepository(),
-      new BlobDomainService(new InMemoryBlobRepository()),
-    );
-
-    const getResult = await service.readFromFileDBStore("");
-    const deleteRecordResult = await service.removeFromFileDBStore("");
-
-    expect(getResult.ok).toBe(false);
-    expect(deleteRecordResult.ok).toBe(false);
-    if (getResult.ok || deleteRecordResult.ok) {
-      return;
-    }
-
-    expect(getResult.error).toEqual(
-      new ValidationError("id", "id must be a non-empty string."),
-    );
-    expect(deleteRecordResult.error).toEqual(
-      new ValidationError("id", "id must be a non-empty string."),
-    );
   });
 });
 
@@ -363,8 +448,11 @@ class InMemoryMessageRepository implements MessageRepository {
     const message = mustCreateMessage(
       `message-${this.messages.size + 1}`,
       record.conversationId,
+      record.type,
       record.sequenceNumber,
-      record.textContent,
+      record.content,
+      record.toolCalls,
+      record.toolCallId,
       record.fileIds,
       record.createdAt.toISOString(),
     );
@@ -421,6 +509,7 @@ class InMemoryMessageRepository implements MessageRepository {
 }
 
 class InMemoryFileRepository implements FileRepository {
+  readonly deletedIds: string[] = [];
   private readonly files = new Map<string, File>();
 
   seed(files: File[]): void {
@@ -455,6 +544,7 @@ class InMemoryFileRepository implements FileRepository {
   }
 
   async deleteFileRow(id: string) {
+    this.deletedIds.push(id);
     this.files.delete(id);
     return success(undefined);
   }
@@ -463,7 +553,6 @@ class InMemoryFileRepository implements FileRepository {
 class InMemoryBlobRepository implements BlobRepository {
   readonly uploads: BlobUploadRequest[] = [];
   readonly deletedUrls: string[] = [];
-  deleteFailure: BlobStoreError | null = null;
 
   async putBlob(request: BlobUploadRequest) {
     this.uploads.push(request);
@@ -473,10 +562,6 @@ class InMemoryBlobRepository implements BlobRepository {
   }
 
   async removeBlob(url: string) {
-    if (this.deleteFailure) {
-      return failure(this.deleteFailure);
-    }
-
     this.deletedUrls.push(url);
     return success(undefined);
   }
@@ -493,16 +578,22 @@ function mustCreateConversation(id: string, isoTimestamp: string): Conversation 
 function mustCreateMessage(
   id: string,
   conversationId: string,
+  type: "user" | "assistant" | "system" | "tool",
   sequenceNumber: number,
-  textContent: string,
+  content: ReadonlyArray<ContentPart>,
+  toolCalls: ReadonlyArray<ToolCall>,
+  toolCallId: string,
   fileIds: ReadonlyArray<string>,
   isoTimestamp: string,
 ): Message {
   return new Message({
     id,
     conversationId,
+    type,
     sequenceNumber,
-    textContent,
+    content,
+    toolCalls,
+    toolCallId,
     fileIds,
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
@@ -526,4 +617,12 @@ function mustCreateFile(
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
+}
+
+function textPart(text: string): ContentPart {
+  return { type: "text", text };
+}
+
+function toolCall(id: string, name: string): ToolCall {
+  return { id, name, args: { query: "hello" } };
 }

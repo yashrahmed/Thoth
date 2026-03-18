@@ -3,19 +3,23 @@ import type {
   MessageRepository,
   MessageSequencePageRequest,
 } from "../../domain/contracts/message-repository";
-import { Message } from "../../domain/objects/message";
+import { Message, type MessageType } from "../../domain/objects/message";
 import { NotFoundError, StoreError } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
+import type { ContentPart, ToolCall } from "../../domain/objects/message-content";
 
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
+  readonly type: MessageType;
   readonly sequence_number: number;
-  readonly text_content: string;
+  readonly content: ContentPart[];
+  readonly tool_calls: ToolCall[];
+  readonly tool_call_id: string;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
-  readonly file_ids: string[] | null;
+  readonly file_ids: string[];
 }
 
 interface CountRow {
@@ -30,26 +34,37 @@ export class PostgresMessageRepository implements MessageRepository {
       const rows = await this.sql<MessageRow[]>`
         insert into thoth.messages (
           conversation_id,
+          type,
           sequence_number,
-          text_content,
+          content,
+          tool_calls,
+          tool_call_id,
+          file_ids,
           created_at,
           updated_at
         )
         values (
           ${record.conversationId},
+          ${record.type},
           ${record.sequenceNumber},
-          ${record.textContent},
+          ${this.sql.json(toJsonValue(record.content))},
+          ${this.sql.json(toJsonValue(record.toolCalls))},
+          ${record.toolCallId},
+          ${record.fileIds},
           ${record.createdAt.toISOString()},
           ${record.updatedAt.toISOString()}
         )
         returning
           id,
           conversation_id,
+          type,
           sequence_number,
-          text_content,
+          content,
+          tool_calls,
+          tool_call_id,
+          file_ids,
           created_at,
-          updated_at,
-          array[]::text[] as file_ids
+          updated_at
       `;
 
       const row = rows[0];
@@ -60,28 +75,7 @@ export class PostgresMessageRepository implements MessageRepository {
         );
       }
 
-      if (record.fileIds.length > 0) {
-        const messageId = row.id;
-
-        for (const [index, fileId] of record.fileIds.entries()) {
-          await this.sql`
-            insert into thoth.message_files (
-              message_id,
-              file_id,
-              attachment_position
-            )
-            values (${messageId}, ${fileId}, ${index + 1})
-          `;
-        }
-      }
-
-      return mapRow(
-        {
-          ...row,
-          file_ids: [...record.fileIds],
-        },
-        "persist",
-      );
+      return mapRow(row, "persist");
     } catch (error) {
       return failure(new StoreError("Message", "persist", getErrorMessage(error)));
     }
@@ -91,23 +85,18 @@ export class PostgresMessageRepository implements MessageRepository {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
-          m.id,
-          m.conversation_id,
-          m.sequence_number,
-          m.text_content,
-          m.created_at,
-          m.updated_at,
-          coalesce(
-            array(
-              select mf.file_id
-              from thoth.message_files mf
-              where mf.message_id = m.id
-              order by mf.attachment_position asc
-            ),
-            array[]::text[]
-          ) as file_ids
-        from thoth.messages m
-        where m.id = ${messageId}
+          id,
+          conversation_id,
+          type,
+          sequence_number,
+          content,
+          tool_calls,
+          tool_call_id,
+          file_ids,
+          created_at,
+          updated_at
+        from thoth.messages
+        where id = ${messageId}
       `;
 
       const row = rows[0];
@@ -126,26 +115,21 @@ export class PostgresMessageRepository implements MessageRepository {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
-          m.id,
-          m.conversation_id,
-          m.sequence_number,
-          m.text_content,
-          m.created_at,
-          m.updated_at,
-          coalesce(
-            array(
-              select mf.file_id
-              from thoth.message_files mf
-              where mf.message_id = m.id
-              order by mf.attachment_position asc
-            ),
-            array[]::text[]
-          ) as file_ids
-        from thoth.messages m
+          id,
+          conversation_id,
+          type,
+          sequence_number,
+          content,
+          tool_calls,
+          tool_call_id,
+          file_ids,
+          created_at,
+          updated_at
+        from thoth.messages
         where
-          m.conversation_id = ${request.conversationId}
-          and m.sequence_number >= ${request.fromSequence}
-        order by m.sequence_number asc
+          conversation_id = ${request.conversationId}
+          and sequence_number >= ${request.fromSequence}
+        order by sequence_number asc
         limit ${request.pageSize}
       `;
 
@@ -159,24 +143,19 @@ export class PostgresMessageRepository implements MessageRepository {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
-          m.id,
-          m.conversation_id,
-          m.sequence_number,
-          m.text_content,
-          m.created_at,
-          m.updated_at,
-          coalesce(
-            array(
-              select mf.file_id
-              from thoth.message_files mf
-              where mf.message_id = m.id
-              order by mf.attachment_position asc
-            ),
-            array[]::text[]
-          ) as file_ids
-        from thoth.messages m
-        where m.conversation_id = ${conversationId}
-        order by m.sequence_number asc
+          id,
+          conversation_id,
+          type,
+          sequence_number,
+          content,
+          tool_calls,
+          tool_call_id,
+          file_ids,
+          created_at,
+          updated_at
+        from thoth.messages
+        where conversation_id = ${conversationId}
+        order by sequence_number asc
       `;
 
       return mapRows(rows, "readPage");
@@ -209,11 +188,6 @@ export class PostgresMessageRepository implements MessageRepository {
 
   async deleteMessageRow(messageId: string) {
     try {
-      await this.sql`
-        delete from thoth.message_files
-        where message_id = ${messageId}
-      `;
-
       await this.sql`
         delete from thoth.messages
         where id = ${messageId}
@@ -258,11 +232,14 @@ function mapRow(
       new Message({
         id: row.id,
         conversationId: row.conversation_id,
+        type: row.type,
         sequenceNumber: row.sequence_number,
-        textContent: row.text_content,
+        content: row.content,
+        toolCalls: row.tool_calls,
+        toolCallId: row.tool_call_id,
         createdAt: toDate(row.created_at),
         updatedAt: toDate(row.updated_at),
-        fileIds: row.file_ids ?? [],
+        fileIds: row.file_ids,
       }),
     );
   } catch (error) {
@@ -282,4 +259,8 @@ function toDate(value: string | Date): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
+}
+
+function toJsonValue(value: unknown): any {
+  return JSON.parse(JSON.stringify(value));
 }

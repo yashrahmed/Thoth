@@ -1,10 +1,18 @@
 import { ConstructionError } from "./errors";
+import type { ContentPart, ToolCall } from "./message-content";
+
+const MESSAGE_TYPES = ["user", "assistant", "system", "tool"] as const;
+
+export type MessageType = (typeof MESSAGE_TYPES)[number];
 
 export interface MessageProps {
   readonly id: string;
   readonly conversationId: string;
+  readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly fileIds: ReadonlyArray<string>;
@@ -13,8 +21,11 @@ export interface MessageProps {
 export class Message {
   readonly id: string;
   readonly conversationId: string;
+  readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly fileIds: ReadonlyArray<string>;
@@ -31,6 +42,13 @@ export class Message {
       );
     }
 
+    if (!MESSAGE_TYPES.includes(props.type)) {
+      throw new ConstructionError(
+        "Message",
+        "Message type must be one of user, assistant, system, or tool.",
+      );
+    }
+
     if (!Number.isInteger(props.sequenceNumber) || props.sequenceNumber <= 0) {
       throw new ConstructionError(
         "Message",
@@ -38,8 +56,14 @@ export class Message {
       );
     }
 
-    if (typeof props.textContent !== "string") {
-      throw new ConstructionError("Message", "Message textContent must be a string.");
+    validateContent(props.content);
+    validateToolCalls(props.toolCalls);
+
+    if (typeof props.toolCallId !== "string") {
+      throw new ConstructionError(
+        "Message",
+        "Message toolCallId must be a string.",
+      );
     }
 
     if (Number.isNaN(props.createdAt.getTime())) {
@@ -67,10 +91,103 @@ export class Message {
 
     this.id = props.id;
     this.conversationId = props.conversationId;
+    this.type = props.type;
     this.sequenceNumber = props.sequenceNumber;
-    this.textContent = props.textContent;
+    this.content = props.content;
+    this.toolCalls = props.toolCalls;
+    this.toolCallId = props.toolCallId;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
     this.fileIds = props.fileIds;
+  }
+}
+
+function validateContent(content: ReadonlyArray<ContentPart>): void {
+  if (!Array.isArray(content)) {
+    throw new ConstructionError("Message", "Message content must be an array.");
+  }
+
+  for (const part of content) {
+    if (part.type === "text") {
+      if (part.text.trim().length === 0) {
+        throw new ConstructionError(
+          "Message",
+          "Message text content must be a non-empty string.",
+        );
+      }
+
+      continue;
+    }
+
+    if (part.type === "image_url") {
+      if (part.imageUrl.url.trim().length === 0) {
+        throw new ConstructionError(
+          "Message",
+          "Message image_url content must include a non-empty url.",
+        );
+      }
+
+      continue;
+    }
+
+    if (part.type === "file") {
+      if (part.fileId.trim().length === 0) {
+        throw new ConstructionError(
+          "Message",
+          "Message file content must include a non-empty fileId.",
+        );
+      }
+
+      continue;
+    }
+
+    if (part.type === "audio") {
+      if (part.data.trim().length === 0) {
+        throw new ConstructionError(
+          "Message",
+          "Message audio content must include non-empty data.",
+        );
+      }
+
+      continue;
+    }
+
+    throw new ConstructionError(
+      "Message",
+      "Message content type must be text, image_url, file, or audio.",
+    );
+  }
+}
+
+function validateToolCalls(toolCalls: ReadonlyArray<ToolCall>): void {
+  if (!Array.isArray(toolCalls)) {
+    throw new ConstructionError("Message", "Message toolCalls must be an array.");
+  }
+
+  for (const toolCall of toolCalls) {
+    if (toolCall.id.trim().length === 0) {
+      throw new ConstructionError(
+        "Message",
+        "Message toolCalls must contain non-empty ids.",
+      );
+    }
+
+    if (toolCall.name.trim().length === 0) {
+      throw new ConstructionError(
+        "Message",
+        "Message toolCalls must contain non-empty names.",
+      );
+    }
+
+    if (
+      typeof toolCall.args !== "object" ||
+      toolCall.args === null ||
+      Array.isArray(toolCall.args)
+    ) {
+      throw new ConstructionError(
+        "Message",
+        "Message toolCalls must contain object args.",
+      );
+    }
   }
 }

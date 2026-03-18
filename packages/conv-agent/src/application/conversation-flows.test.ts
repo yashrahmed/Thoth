@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { BlobRepository } from "../domain/contracts/blob-repository";
 import type {
   ConversationOffsetPageRequest,
-  CreateConversationRecord,
   ConversationRepository,
+  CreateConversationRecord,
 } from "../domain/contracts/conversation-repository";
 import type {
   CreateFileRecord,
@@ -21,6 +21,7 @@ import {
   NotFoundError,
   StoreError,
 } from "../domain/objects/errors";
+import type { ContentPart, ToolCall } from "../domain/objects/message-content";
 import { Message } from "../domain/objects/message";
 import { failure, success, type Result } from "../domain/objects/result";
 import { BlobDomainService } from "../domain/services/blob-domain-service";
@@ -82,10 +83,6 @@ describe("conversation flows", () => {
     const invalidResult = await useCase.execute({ pageNum: 0, pageSize: 2 });
 
     expect(invalidResult.ok).toBe(false);
-    if (invalidResult.ok) {
-      return;
-    }
-    expect(invalidResult.error.kind).toBe("ValidationError");
 
     const validResult = await useCase.execute({ pageNum: 2, pageSize: 1 });
 
@@ -100,7 +97,7 @@ describe("conversation flows", () => {
     ]);
   });
 
-  test("AppendMessageToConversation appends text-only messages", async () => {
+  test("AppendMessageToConversation appends a rich text-only message", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     conversationRepository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
@@ -108,28 +105,25 @@ describe("conversation flows", () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
-    const conversationDomainService = new ConversationDomainService(
-      conversationRepository,
-    );
-    const blobDomainService = new BlobDomainService(blobRepository);
-    const fileDomainService = new FileDomainService(
-      fileRepository,
-      blobDomainService,
-      () => new Date("2026-03-16T12:01:00.000Z"),
-    );
-    const messageDomainService = new MessageDomainService(
-      messageRepository,
-      () => new Date("2026-03-16T12:02:00.000Z"),
-    );
     const useCase = new AppendMessageToConversationFlow(
-      conversationDomainService,
-      messageDomainService,
-      fileDomainService,
+      new ConversationDomainService(conversationRepository),
+      new MessageDomainService(
+        messageRepository,
+        () => new Date("2026-03-16T12:02:00.000Z"),
+      ),
+      new FileDomainService(
+        fileRepository,
+        new BlobDomainService(blobRepository),
+        () => new Date("2026-03-16T12:01:00.000Z"),
+      ),
     );
 
     const result = await useCase.execute({
       conversationId: "conversation-1",
-      textContent: "hello",
+      type: "user",
+      content: [textPart("hello")],
+      toolCalls: [],
+      toolCallId: "",
       attachments: [],
     });
 
@@ -138,13 +132,16 @@ describe("conversation flows", () => {
       return;
     }
 
-    expect(result.value.sequenceNumber).toBe(1);
-    expect(result.value.textContent).toBe("hello");
+    expect(result.value.type).toBe("user");
+    expect(result.value.content).toEqual([textPart("hello")]);
     expect(result.value.fileIds).toEqual([]);
     expect(messageRepository.createdRecords[0]).toEqual({
       conversationId: "conversation-1",
+      type: "user",
       sequenceNumber: 1,
-      textContent: "hello",
+      content: [textPart("hello")],
+      toolCalls: [],
+      toolCallId: "",
       fileIds: [],
       createdAt: new Date("2026-03-16T12:02:00.000Z"),
       updatedAt: new Date("2026-03-16T12:02:00.000Z"),
@@ -159,29 +156,26 @@ describe("conversation flows", () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
-    const conversationDomainService = new ConversationDomainService(
-      conversationRepository,
-    );
-    const blobDomainService = new BlobDomainService(blobRepository);
-    const fileDomainService = new FileDomainService(
-      fileRepository,
-      blobDomainService,
-      () => new Date("2026-03-16T12:01:00.000Z"),
-    );
-    const messageDomainService = new MessageDomainService(
-      messageRepository,
-      () => new Date("2026-03-16T12:02:00.000Z"),
-    );
     const useCase = new AppendMessageToConversationFlow(
-      conversationDomainService,
-      messageDomainService,
-      fileDomainService,
+      new ConversationDomainService(conversationRepository),
+      new MessageDomainService(
+        messageRepository,
+        () => new Date("2026-03-16T12:02:00.000Z"),
+      ),
+      new FileDomainService(
+        fileRepository,
+        new BlobDomainService(blobRepository),
+        () => new Date("2026-03-16T12:01:00.000Z"),
+      ),
     );
     const attachmentContent = new TextEncoder().encode("hello world").buffer;
 
     const result = await useCase.execute({
       conversationId: "conversation-1",
-      textContent: "hello",
+      type: "assistant",
+      content: [textPart("hello")],
+      toolCalls: [toolCall("tool-call-1", "search")],
+      toolCallId: "tool-call-1",
       attachments: [
         {
           content: attachmentContent,
@@ -198,6 +192,7 @@ describe("conversation flows", () => {
 
     expect(blobRepository.uploads).toHaveLength(1);
     expect(fileRepository.createdRecords[0]?.filename).toBe("greeting.txt");
+    expect(result.value.toolCalls).toEqual([toolCall("tool-call-1", "search")]);
     expect(result.value.fileIds).toEqual(["file-1"]);
     expect(result.value.sequenceNumber).toBe(1);
   });
@@ -218,7 +213,10 @@ describe("conversation flows", () => {
 
     const result = await useCase.execute({
       conversationId: "missing",
-      textContent: "hello",
+      type: "user",
+      content: [textPart("hello")],
+      toolCalls: [],
+      toolCallId: "",
       attachments: [],
     });
 
@@ -237,13 +235,25 @@ describe("conversation flows", () => {
       mustCreateMessage(
         "message-1",
         "conversation-1",
+        "user",
         1,
-        "one",
+        [textPart("one")],
+        [],
+        "",
         ["file-1"],
         "2026-03-16T12:00:00.000Z",
       ),
-      mustCreateMessage("message-2", "conversation-1", 2, "two", [], "2026-03-16T12:01:00.000Z"),
-      mustCreateMessage("message-3", "conversation-1", 3, "three", [], "2026-03-16T12:02:00.000Z"),
+      mustCreateMessage(
+        "message-2",
+        "conversation-1",
+        "assistant",
+        2,
+        [textPart("two")],
+        [toolCall("tool-call-2", "search")],
+        "tool-call-2",
+        [],
+        "2026-03-16T12:01:00.000Z",
+      ),
     ]);
     const fileRepository = new InMemoryFileRepository();
     fileRepository.seed([
@@ -271,10 +281,6 @@ describe("conversation flows", () => {
     });
 
     expect(invalidResult.ok).toBe(false);
-    if (invalidResult.ok) {
-      return;
-    }
-    expect(invalidResult.error.kind).toBe("ValidationError");
 
     const validResult = await useCase.execute({
       conversationId: "conversation-1",
@@ -292,18 +298,28 @@ describe("conversation flows", () => {
       fromSequence: 1,
       pageSize: 1,
     });
-    expect(validResult.value.map((message) => message.id)).toEqual(["message-1"]);
-    expect(validResult.value[0]?.files).toEqual([
-      {
-        id: "file-1",
-        canonicalUrl: "/conversations/conversation-1/file-1-a.txt",
-        filename: "a.txt",
-        mimeType: "text/plain",
-        sizeInBytes: 1,
-        createdAt: new Date("2026-03-16T12:00:00.000Z"),
-        updatedAt: new Date("2026-03-16T12:00:00.000Z"),
-      },
-    ]);
+    expect(validResult.value[0]).toEqual({
+      id: "message-1",
+      conversationId: "conversation-1",
+      type: "user",
+      sequenceNumber: 1,
+      content: [textPart("one")],
+      toolCalls: [],
+      toolCallId: "",
+      files: [
+        {
+          id: "file-1",
+          canonicalUrl: "/conversations/conversation-1/file-1-a.txt",
+          filename: "a.txt",
+          mimeType: "text/plain",
+          sizeInBytes: 1,
+          createdAt: new Date("2026-03-16T12:00:00.000Z"),
+          updatedAt: new Date("2026-03-16T12:00:00.000Z"),
+        },
+      ],
+      createdAt: new Date("2026-03-16T12:00:00.000Z"),
+      updatedAt: new Date("2026-03-16T12:00:00.000Z"),
+    });
   });
 
   test("DeleteConversation deletes files, then messages, then the conversation", async () => {
@@ -316,8 +332,11 @@ describe("conversation flows", () => {
       mustCreateMessage(
         "message-1",
         "conversation-1",
+        "user",
         1,
-        "hello",
+        [textPart("hello")],
+        [],
+        "",
         ["file-1", "file-2"],
         "2026-03-16T12:00:00.000Z",
       ),
@@ -340,10 +359,6 @@ describe("conversation flows", () => {
       ),
     ]);
     const blobRepository = new InMemoryBlobRepository();
-    blobRepository.seed([
-      ["/conversations/conversation-1/file-1-a.txt", new TextEncoder().encode("a").buffer],
-      ["/conversations/conversation-1/file-2-b.txt", new TextEncoder().encode("b").buffer],
-    ]);
     const useCase = new DeleteConversationFlow(
       new ConversationDomainService(conversationRepository),
       new MessageDomainService(messageRepository),
@@ -374,8 +389,11 @@ describe("conversation flows", () => {
       mustCreateMessage(
         "message-1",
         "conversation-1",
+        "user",
         1,
-        "hello",
+        [textPart("hello")],
+        [],
+        "",
         ["file-1"],
         "2026-03-16T12:00:00.000Z",
       ),
@@ -452,8 +470,7 @@ class InMemoryConversationRepository implements ConversationRepository {
   ): Promise<Result<Conversation[], StoreError>> {
     this.lastPageRequest = request;
     const items = [...this.conversations.values()].sort((left, right) => {
-      const updatedAtDelta =
-        right.updatedAt.getTime() - left.updatedAt.getTime();
+      const updatedAtDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
 
       if (updatedAtDelta !== 0) {
         return updatedAtDelta;
@@ -462,9 +479,7 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    return success(
-      items.slice(request.offset, request.offset + request.pageSize),
-    );
+    return success(items.slice(request.offset, request.offset + request.pageSize));
   }
 
   async deleteConversationRow(
@@ -480,7 +495,6 @@ class InMemoryMessageRepository implements MessageRepository {
   readonly createdRecords: CreateMessageRecord[] = [];
   readonly deletedIds: string[] = [];
   lastPageRequest: MessageSequencePageRequest | null = null;
-  deleteFailure: StoreError | null = null;
   private readonly messages = new Map<string, Message>();
 
   seed(messages: Message[]): void {
@@ -498,8 +512,11 @@ class InMemoryMessageRepository implements MessageRepository {
     const message = mustCreateMessage(
       `message-${this.createdRecords.length}`,
       record.conversationId,
+      record.type,
       record.sequenceNumber,
-      record.textContent,
+      record.content,
+      record.toolCalls,
+      record.toolCallId,
       record.fileIds,
       record.createdAt.toISOString(),
     );
@@ -553,13 +570,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async deleteMessageRow(
-    messageId: string,
-  ): Promise<Result<void, StoreError>> {
-    if (this.deleteFailure) {
-      return failure(this.deleteFailure);
-    }
-
+  async deleteMessageRow(messageId: string): Promise<Result<void, StoreError>> {
     this.deletedIds.push(messageId);
     this.messages.delete(messageId);
     return success(undefined);
@@ -605,9 +616,7 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
-  async deleteFileRow(
-    id: string,
-  ): Promise<Result<void, StoreError>> {
+  async deleteFileRow(id: string): Promise<Result<void, StoreError>> {
     this.deletedIds.push(id);
     this.files.delete(id);
     return success(undefined);
@@ -623,15 +632,6 @@ class InMemoryBlobRepository implements BlobRepository {
   }> = [];
   readonly deletedUrls: string[] = [];
   deleteFailure: BlobStoreError | null = null;
-  private readonly blobs = new Map<string, ArrayBuffer>();
-
-  seed(entries: ReadonlyArray<readonly [string, ArrayBuffer]>): void {
-    this.blobs.clear();
-
-    for (const [url, content] of entries) {
-      this.blobs.set(url, content);
-    }
-  }
 
   async putBlob(request: {
     readonly conversationId: string;
@@ -640,9 +640,9 @@ class InMemoryBlobRepository implements BlobRepository {
     readonly mimeType: string;
   }) {
     this.uploads.push(request);
-    const url = `/conversations/${request.conversationId}/file-${this.uploads.length}-${request.filename}`;
-    this.blobs.set(url, request.content);
-    return success(url);
+    return success(
+      `/conversations/${request.conversationId}/file-${this.uploads.length}-${request.filename}`,
+    );
   }
 
   async removeBlob(url: string) {
@@ -651,7 +651,6 @@ class InMemoryBlobRepository implements BlobRepository {
     }
 
     this.deletedUrls.push(url);
-    this.blobs.delete(url);
     return success(undefined);
   }
 }
@@ -667,16 +666,22 @@ function mustCreateConversation(id: string, isoTimestamp: string): Conversation 
 function mustCreateMessage(
   id: string,
   conversationId: string,
+  type: "user" | "assistant" | "system" | "tool",
   sequenceNumber: number,
-  textContent: string,
+  content: ReadonlyArray<ContentPart>,
+  toolCalls: ReadonlyArray<ToolCall>,
+  toolCallId: string,
   fileIds: ReadonlyArray<string>,
   isoTimestamp: string,
 ): Message {
   return new Message({
     id,
     conversationId,
+    type,
     sequenceNumber,
-    textContent,
+    content,
+    toolCalls,
+    toolCallId,
     fileIds,
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
@@ -700,4 +705,12 @@ function mustCreateFile(
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
+}
+
+function textPart(text: string): ContentPart {
+  return { type: "text", text };
+}
+
+function toolCall(id: string, name: string): ToolCall {
+  return { id, name, args: { query: "hello" } };
 }

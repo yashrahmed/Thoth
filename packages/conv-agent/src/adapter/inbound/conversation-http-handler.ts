@@ -1,18 +1,45 @@
-import { ValidationError } from "../../domain/objects/errors";
-import type { AppendMessageToConversationFlow } from "../../application/append-message-to-conversation-flow";
+import type {
+  AppendMessageRequest,
+  AppendMessageResult,
+  AppendMessageToConversationFlow,
+} from "../../application/append-message-to-conversation-flow";
 import type { CreateConversationFlow } from "../../application/create-conversation-flow";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
-import type { GetMessagesOnConversationFlow } from "../../application/get-messages-on-conversation-flow";
+import type {
+  GetMessagesItem,
+  GetMessagesOnConversationFlow,
+} from "../../application/get-messages-on-conversation-flow";
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
-import type { ConversationError } from "../../domain/objects/errors";
-import { failure, type Result } from "../../domain/objects/result";
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",
   "access-control-allow-headers": "content-type",
 };
+
+const MESSAGE_TYPES = ["user", "assistant", "system", "tool"] as const;
+
+interface TransportValidationError {
+  readonly kind: "ValidationError";
+  readonly fieldName: string;
+  readonly message: string;
+}
+
+type TransportResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: TransportValidationError };
+
+type HandlerError =
+  | TransportValidationError
+  | {
+      readonly kind: string;
+      readonly fieldName?: string;
+      readonly message?: string;
+      readonly entityType?: string;
+      readonly id?: string;
+      readonly operation?: string;
+    };
 
 export function createConversationHttpHandler(
   createConversation: CreateConversationFlow,
@@ -188,7 +215,7 @@ function mapMessageResult(
   });
 }
 
-function mapError(error: ConversationError): Response {
+function mapError(error: HandlerError): Response {
   if (error.kind === "ValidationError" || error.kind === "ConstructionError") {
     return Response.json({ error }, { status: 400 });
   }
@@ -212,44 +239,39 @@ function toConversationResponse(conversation: {
   };
 }
 
-function toMessageResponse(message: {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly sequenceNumber: number;
-  readonly textContent: string;
-  readonly files?: ReadonlyArray<{
-    readonly id: string;
-    readonly canonicalUrl: string;
-    readonly filename: string;
-    readonly mimeType: string;
-    readonly sizeInBytes: number;
-    readonly createdAt: Date;
-    readonly updatedAt: Date;
-  }>;
-  readonly fileIds?: ReadonlyArray<string>;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}) {
+function toMessageResponse(message: AppendMessageResult | GetMessagesItem) {
+  if ("files" in message) {
+    return {
+      id: message.id,
+      conversationId: message.conversationId,
+      type: message.type,
+      sequenceNumber: message.sequenceNumber,
+      content: message.content,
+      toolCalls: message.toolCalls,
+      toolCallId: message.toolCallId,
+      files: message.files.map((file) => ({
+        id: file.id,
+        canonicalUrl: file.canonicalUrl,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        sizeInBytes: file.sizeInBytes,
+        createdAt: file.createdAt.toISOString(),
+        updatedAt: file.updatedAt.toISOString(),
+      })),
+      createdAt: message.createdAt.toISOString(),
+      updatedAt: message.updatedAt.toISOString(),
+    };
+  }
+
   return {
     id: message.id,
     conversationId: message.conversationId,
+    type: message.type,
     sequenceNumber: message.sequenceNumber,
-    textContent: message.textContent,
-    ...(message.files
-      ? {
-          files: message.files.map((file) => ({
-            id: file.id,
-            canonicalUrl: file.canonicalUrl,
-            filename: file.filename,
-            mimeType: file.mimeType,
-            sizeInBytes: file.sizeInBytes,
-            createdAt: file.createdAt.toISOString(),
-            updatedAt: file.updatedAt.toISOString(),
-          })),
-        }
-      : {
-          fileIds: [...(message.fileIds ?? [])],
-        }),
+    content: message.content,
+    toolCalls: message.toolCalls,
+    toolCallId: message.toolCallId,
+    fileIds: [...message.fileIds],
     createdAt: message.createdAt.toISOString(),
     updatedAt: message.updatedAt.toISOString(),
   };
@@ -308,20 +330,13 @@ function withCors(response: Response): Response {
 async function parseAppendMessageRequest(
   req: Request,
   conversationId: string,
-): Promise<
-  Result<
-    Parameters<AppendMessageToConversationFlow["execute"]>[0],
-    ValidationError
-  >
-> {
+): Promise<TransportResult<AppendMessageRequest>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("multipart/form-data")) {
-    return failure(
-      new ValidationError(
-        "content-type",
-        "content-type must be multipart/form-data.",
-      ),
+    return transportFailure(
+      "content-type",
+      "content-type must be multipart/form-data.",
     );
   }
 
@@ -330,21 +345,49 @@ async function parseAppendMessageRequest(
   try {
     formData = await req.formData();
   } catch {
-    return failure(
-      new ValidationError("body", "body must be valid multipart/form-data."),
+    return transportFailure("body", "body must be valid multipart/form-data.");
+  }
+
+  const typeValue = formData.get("type");
+
+  if (typeof typeValue !== "string" || !isMessageType(typeValue)) {
+    return transportFailure(
+      "type",
+      "type must be one of user, assistant, system, or tool.",
     );
   }
 
-  const textContentValue = formData.get("textContent");
+  const contentResult = parseJsonField<AppendMessageRequest["content"]>(
+    formData,
+    "content",
+  );
 
-  if (typeof textContentValue !== "string") {
-    return failure(
-      new ValidationError("textContent", "textContent must be present."),
-    );
+  if (!contentResult.ok) {
+    return contentResult;
   }
+
+  const toolCallsEntry = formData.get("toolCalls");
+  let toolCalls: AppendMessageRequest["toolCalls"] = [];
+
+  if (toolCallsEntry !== null) {
+    const toolCallsResult = parseJsonValue<AppendMessageRequest["toolCalls"]>(
+      toolCallsEntry,
+      "toolCalls",
+    );
+
+    if (!toolCallsResult.ok) {
+      return toolCallsResult;
+    }
+
+    toolCalls = toolCallsResult.value;
+  }
+
+  const toolCallIdEntry = formData.get("toolCallId");
+  const toolCallId =
+    typeof toolCallIdEntry === "string" ? toolCallIdEntry : "";
 
   const attachments: Array<
-    Parameters<AppendMessageToConversationFlow["execute"]>[0]["attachments"][number]
+    AppendMessageRequest["attachments"][number]
   > = [];
 
   for (const [, value] of formData.entries()) {
@@ -369,8 +412,60 @@ async function parseAppendMessageRequest(
     ok: true,
     value: {
       conversationId,
-      textContent: textContentValue,
+      type: typeValue,
+      content: contentResult.value,
+      toolCalls,
+      toolCallId,
       attachments,
     },
   };
+}
+
+function parseJsonField<T>(
+  formData: FormData,
+  fieldName: string,
+): TransportResult<T> {
+  const value = formData.get(fieldName);
+
+  if (typeof value !== "string") {
+    return transportFailure(fieldName, `${fieldName} must be present.`);
+  }
+
+  return parseJsonValue<T>(value, fieldName);
+}
+
+function parseJsonValue<T>(
+  value: FormDataEntryValue,
+  fieldName: string,
+): TransportResult<T> {
+  if (typeof value !== "string") {
+    return transportFailure(fieldName, `${fieldName} must be a JSON string.`);
+  }
+
+  try {
+    return {
+      ok: true,
+      value: JSON.parse(value) as T,
+    };
+  } catch {
+    return transportFailure(fieldName, `${fieldName} must be valid JSON.`);
+  }
+}
+
+function transportFailure(
+  fieldName: string,
+  message: string,
+): TransportResult<never> {
+  return {
+    ok: false,
+    error: {
+      kind: "ValidationError",
+      fieldName,
+      message,
+    },
+  };
+}
+
+function isMessageType(value: string): value is AppendMessageRequest["type"] {
+  return MESSAGE_TYPES.includes(value as (typeof MESSAGE_TYPES)[number]);
 }

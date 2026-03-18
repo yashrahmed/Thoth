@@ -1,11 +1,16 @@
 import type { Message } from "../objects/message";
 import type { NotFoundError, StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
+import type { ContentPart, ToolCall } from "../objects/message-content";
+import type { MessageType } from "../objects/message";
 
 export interface CreateMessageRecord {
   readonly conversationId: string;
+  readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;

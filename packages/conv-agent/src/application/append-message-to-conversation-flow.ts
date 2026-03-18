@@ -9,6 +9,8 @@ import type {
   ValidationError,
 } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
+import type { ContentPart, ToolCall } from "../domain/objects/message-content";
+import type { MessageType } from "../domain/objects/message";
 
 export interface Attachment {
   readonly content: FileContent;
@@ -18,15 +20,21 @@ export interface Attachment {
 
 export interface AppendMessageRequest {
   readonly conversationId: string;
-  readonly textContent: string;
+  readonly type: MessageType;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly attachments: ReadonlyArray<Attachment>;
 }
 
 export interface AppendMessageResult {
   readonly id: string;
   readonly conversationId: string;
+  readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -73,7 +81,10 @@ export class AppendMessageToConversationFlow {
 
     const result = await this.messageDomainService.createNextMessage({
       conversationId: request.conversationId,
-      textContent: request.textContent,
+      type: request.type,
+      content: request.content,
+      toolCalls: request.toolCalls,
+      toolCallId: request.toolCallId,
       fileIds: uploadFilesResult.value.map((file) => file.id),
     });
 
@@ -86,8 +97,11 @@ export class AppendMessageToConversationFlow {
       value: {
         id: result.value.id,
         conversationId: result.value.conversationId,
+        type: result.value.type,
         sequenceNumber: result.value.sequenceNumber,
-        textContent: result.value.textContent,
+        content: result.value.content,
+        toolCalls: result.value.toolCalls,
+        toolCallId: result.value.toolCallId,
         fileIds: [...result.value.fileIds],
         createdAt: result.value.createdAt,
         updatedAt: result.value.updatedAt,

@@ -3,6 +3,8 @@ import { type MessageDomainService } from "../domain/services/message-domain-ser
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
+import type { ContentPart, ToolCall } from "../domain/objects/message-content";
+import type { MessageType } from "../domain/objects/message";
 
 export interface GetMessagesQuery {
   readonly conversationId: string;
@@ -13,8 +15,11 @@ export interface GetMessagesQuery {
 export interface GetMessagesItem {
   readonly id: string;
   readonly conversationId: string;
+  readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -74,8 +79,11 @@ export class GetMessagesOnConversationFlow {
       items.push({
         id: message.id,
         conversationId: message.conversationId,
+        type: message.type,
         sequenceNumber: message.sequenceNumber,
-        textContent: message.textContent,
+        content: message.content,
+        toolCalls: message.toolCalls,
+        toolCallId: message.toolCallId,
         files: filesResult.value.map((file) => ({
           id: file.id,
           canonicalUrl: file.canonicalUrl,

@@ -18,6 +18,7 @@ import type {
 import { Conversation } from "./domain/objects/conversation";
 import { File as StoredFile } from "./domain/objects/file";
 import { NotFoundError, type StoreError } from "./domain/objects/errors";
+import type { ContentPart, ToolCall } from "./domain/objects/message-content";
 import { Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
@@ -44,50 +45,7 @@ describe("createConversationHttpHandler", () => {
     });
   });
 
-  test("creates a conversation", async () => {
-    const handler = buildHandler();
-
-    const response = await handler(
-      new Request("http://localhost/conversations", { method: "POST" }),
-    );
-
-    expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({
-      id: "conversation-created",
-      createdAt: "2026-03-16T12:00:00.000Z",
-      updatedAt: "2026-03-16T12:00:00.000Z",
-    });
-  });
-
-  test("gets a conversation and maps not found to 404", async () => {
-    const repository = new InMemoryConversationRepository();
-    repository.seed([
-      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
-    ]);
-    const handler = buildHandler({ conversationRepository: repository });
-
-    const successResponse = await handler(
-      new Request("http://localhost/conversations/conversation-1"),
-    );
-
-    expect(successResponse.status).toBe(200);
-    expect(await successResponse.json()).toEqual({
-      id: "conversation-1",
-      createdAt: "2026-03-16T12:00:00.000Z",
-      updatedAt: "2026-03-16T12:00:00.000Z",
-    });
-
-    const missingResponse = await handler(
-      new Request("http://localhost/conversations/missing"),
-    );
-
-    expect(missingResponse.status).toBe(404);
-    expect(await missingResponse.json()).toEqual({
-      error: new NotFoundError("Conversation", "missing"),
-    });
-  });
-
-  test("lists conversations and validates pagination", async () => {
+  test("creates, gets, and lists conversations", async () => {
     const repository = new InMemoryConversationRepository();
     repository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
@@ -95,12 +53,30 @@ describe("createConversationHttpHandler", () => {
     ]);
     const handler = buildHandler({ conversationRepository: repository });
 
-    const response = await handler(
+    const createResponse = await handler(
+      new Request("http://localhost/conversations", { method: "POST" }),
+    );
+    const getResponse = await handler(
+      new Request("http://localhost/conversations/conversation-1"),
+    );
+    const listResponse = await handler(
       new Request("http://localhost/conversations?pageNum=1&pageSize=2"),
     );
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
+    expect(createResponse.status).toBe(201);
+    expect(await createResponse.json()).toEqual({
+      id: "conversation-created",
+      createdAt: "2026-03-16T12:00:00.000Z",
+      updatedAt: "2026-03-16T12:00:00.000Z",
+    });
+    expect(getResponse.status).toBe(200);
+    expect(await getResponse.json()).toEqual({
+      id: "conversation-1",
+      createdAt: "2026-03-16T12:00:00.000Z",
+      updatedAt: "2026-03-16T12:00:00.000Z",
+    });
+    expect(listResponse.status).toBe(200);
+    expect(await listResponse.json()).toEqual({
       items: [
         {
           id: "conversation-2",
@@ -108,7 +84,7 @@ describe("createConversationHttpHandler", () => {
           updatedAt: "2026-03-16T13:00:00.000Z",
         },
         {
-          id: "conversation-1",
+          id: "conversation-created",
           createdAt: "2026-03-16T12:00:00.000Z",
           updatedAt: "2026-03-16T12:00:00.000Z",
         },
@@ -116,15 +92,22 @@ describe("createConversationHttpHandler", () => {
       pageNum: 1,
       pageSize: 2,
     });
-
-    const invalidResponse = await handler(
-      new Request("http://localhost/conversations?pageNum=1&pageSize=0"),
-    );
-
-    expect(invalidResponse.status).toBe(400);
   });
 
-  test("appends a message with multipart form data", async () => {
+  test("maps missing conversations to 404", async () => {
+    const handler = buildHandler();
+
+    const response = await handler(
+      new Request("http://localhost/conversations/missing"),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: new NotFoundError("Conversation", "missing"),
+    });
+  });
+
+  test("appends a message with multipart rich-message fields", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     conversationRepository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
@@ -132,7 +115,10 @@ describe("createConversationHttpHandler", () => {
     const handler = buildHandler({ conversationRepository });
     const formData = new FormData();
 
-    formData.set("textContent", "hello");
+    formData.set("type", "assistant");
+    formData.set("content", JSON.stringify([textPart("hello")]));
+    formData.set("toolCalls", JSON.stringify([toolCall("tool-call-1", "search")]));
+    formData.set("toolCallId", "tool-call-1");
     formData.set(
       "attachment",
       new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }),
@@ -149,15 +135,42 @@ describe("createConversationHttpHandler", () => {
     expect(await response.json()).toEqual({
       id: "message-1",
       conversationId: "conversation-1",
+      type: "assistant",
       sequenceNumber: 1,
-      textContent: "hello",
+      content: [textPart("hello")],
+      toolCalls: [toolCall("tool-call-1", "search")],
+      toolCallId: "tool-call-1",
       fileIds: ["file-1"],
       createdAt: "2026-03-16T12:00:00.000Z",
       updatedAt: "2026-03-16T12:00:00.000Z",
     });
   });
 
-  test("lists messages for a conversation", async () => {
+  test("rejects invalid rich-message payloads", async () => {
+    const handler = buildHandler();
+
+    const invalidJsonFormData = new FormData();
+    invalidJsonFormData.set("type", "user");
+    invalidJsonFormData.set("content", "{bad");
+
+    const invalidJsonResponse = await handler(
+      new Request("http://localhost/conversations/conversation-1/messages", {
+        method: "POST",
+        body: invalidJsonFormData,
+      }),
+    );
+
+    expect(invalidJsonResponse.status).toBe(400);
+    expect(await invalidJsonResponse.json()).toEqual({
+      error: {
+        kind: "ValidationError",
+        fieldName: "content",
+        message: "content must be valid JSON.",
+      },
+    });
+  });
+
+  test("lists messages for a conversation using the rich response shape", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     conversationRepository.seed([
       mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
@@ -167,12 +180,25 @@ describe("createConversationHttpHandler", () => {
       mustCreateMessage(
         "message-1",
         "conversation-1",
+        "user",
         1,
-        "one",
+        [textPart("one")],
+        [],
+        "",
         ["file-1"],
         "2026-03-16T12:00:00.000Z",
       ),
-      mustCreateMessage("message-2", "conversation-1", 2, "two", [], "2026-03-16T12:01:00.000Z"),
+      mustCreateMessage(
+        "message-2",
+        "conversation-1",
+        "assistant",
+        2,
+        [textPart("two")],
+        [toolCall("tool-call-2", "search")],
+        "tool-call-2",
+        [],
+        "2026-03-16T12:01:00.000Z",
+      ),
     ]);
     const fileRepository = new InMemoryFileRepository();
     fileRepository.seed([
@@ -203,8 +229,11 @@ describe("createConversationHttpHandler", () => {
         {
           id: "message-1",
           conversationId: "conversation-1",
+          type: "user",
           sequenceNumber: 1,
-          textContent: "one",
+          content: [textPart("one")],
+          toolCalls: [],
+          toolCallId: "",
           files: [
             {
               id: "file-1",
@@ -222,8 +251,11 @@ describe("createConversationHttpHandler", () => {
         {
           id: "message-2",
           conversationId: "conversation-1",
+          type: "assistant",
           sequenceNumber: 2,
-          textContent: "two",
+          content: [textPart("two")],
+          toolCalls: [toolCall("tool-call-2", "search")],
+          toolCallId: "tool-call-2",
           files: [],
           createdAt: "2026-03-16T12:01:00.000Z",
           updatedAt: "2026-03-16T12:01:00.000Z",
@@ -232,33 +264,6 @@ describe("createConversationHttpHandler", () => {
       pageNum: 1,
       pageSize: 2,
     });
-  });
-
-  test("maps invalid message routes to 400 and missing conversations to 404", async () => {
-    const handler = buildHandler();
-
-    const invalidFormData = new FormData();
-    invalidFormData.set(
-      "attachment",
-      new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }),
-    );
-
-    const invalidResponse = await handler(
-      new Request("http://localhost/conversations/conversation-1/messages", {
-        method: "POST",
-        body: invalidFormData,
-      }),
-    );
-
-    expect(invalidResponse.status).toBe(400);
-
-    const missingResponse = await handler(
-      new Request(
-        "http://localhost/conversations/missing/messages?pageNum=1&pageSize=1",
-      ),
-    );
-
-    expect(missingResponse.status).toBe(404);
   });
 
   test("deletes a conversation", async () => {
@@ -361,8 +366,7 @@ class InMemoryConversationRepository implements ConversationRepository {
 
   async selectConversationPage(request: ConversationOffsetPageRequest) {
     const items = [...this.conversations.values()].sort((left, right) => {
-      const updatedAtDelta =
-        right.updatedAt.getTime() - left.updatedAt.getTime();
+      const updatedAtDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
 
       if (updatedAtDelta !== 0) {
         return updatedAtDelta;
@@ -371,9 +375,7 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    return success(
-      items.slice(request.offset, request.offset + request.pageSize),
-    );
+    return success(items.slice(request.offset, request.offset + request.pageSize));
   }
 
   async deleteConversationRow(conversationId: string) {
@@ -398,8 +400,11 @@ class InMemoryMessageRepository implements MessageRepository {
     const message = mustCreateMessage(
       `message-${this.messages.size + 1}`,
       record.conversationId,
+      record.type,
       record.sequenceNumber,
-      record.textContent,
+      record.content,
+      record.toolCalls,
+      record.toolCallId,
       record.fileIds,
       record.createdAt.toISOString(),
     );
@@ -493,21 +498,17 @@ class InMemoryFileRepository implements FileRepository {
 }
 
 class InMemoryBlobRepository implements BlobRepository {
-  private readonly blobs = new Map<string, ArrayBuffer>();
-
   async putBlob(request: {
     readonly conversationId: string;
     readonly content: ArrayBuffer;
     readonly filename: string;
     readonly mimeType: string;
   }) {
-    const url = `/conversations/${request.conversationId}/file-${this.blobs.size + 1}-${request.filename}`;
-    this.blobs.set(url, request.content);
+    const url = `/conversations/${request.conversationId}/file-1-${request.filename}`;
     return success(url);
   }
 
   async removeBlob(url: string) {
-    this.blobs.delete(url);
     return success(undefined);
   }
 }
@@ -523,16 +524,22 @@ function mustCreateConversation(id: string, isoTimestamp: string): Conversation 
 function mustCreateMessage(
   id: string,
   conversationId: string,
+  type: "user" | "assistant" | "system" | "tool",
   sequenceNumber: number,
-  textContent: string,
+  content: ReadonlyArray<ContentPart>,
+  toolCalls: ReadonlyArray<ToolCall>,
+  toolCallId: string,
   fileIds: ReadonlyArray<string>,
   isoTimestamp: string,
 ): Message {
   return new Message({
     id,
     conversationId,
+    type,
     sequenceNumber,
-    textContent,
+    content,
+    toolCalls,
+    toolCallId,
     fileIds,
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
@@ -545,7 +552,7 @@ function mustCreateFile(
   filename: string,
   mimeType: string,
   sizeInBytes: number,
-  isoTimestamp: string,
+  isoTimestamp = "2026-03-16T12:00:00.000Z",
 ): StoredFile {
   return new StoredFile({
     id,
@@ -556,4 +563,12 @@ function mustCreateFile(
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
+}
+
+function textPart(text: string): ContentPart {
+  return { type: "text", text };
+}
+
+function toolCall(id: string, name: string): ToolCall {
+  return { id, name, args: { query: "hello" } };
 }

@@ -9,7 +9,7 @@ ENV_FILE="$REPO_ROOT/db/local/.env"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./scripts/db-local.sh <start|stop>"
+  echo "Usage: ./scripts/db-local.sh <start|stop|restart>"
   exit 1
 fi
 
@@ -21,9 +21,14 @@ case "$COMMAND" in
   stop)
     docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
     ;;
+  restart)
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d postgres
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
+    ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./scripts/db-local.sh <start|stop>"
+    echo "Usage: ./scripts/db-local.sh <start|stop|restart>"
     exit 1
     ;;
 esac

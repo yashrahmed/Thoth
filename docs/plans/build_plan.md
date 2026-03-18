@@ -10,8 +10,11 @@ class Conversation {
 class Message {
   readonly id: string;
   readonly conversationId: string;
+  readonly type: "user" | "assistant" | "system" | "tool";
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly fileIds: ReadonlyArray<string>;
@@ -39,7 +42,10 @@ type DeleteConversationCommand = {
 
 type AppendMessageRequest = {
   readonly conversationId: string;
-  readonly textContent: string;
+  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly attachments: ReadonlyArray<Attachment>;
 };
 
@@ -52,8 +58,11 @@ type Attachment = {
 type AppendMessageResult = {
   readonly id: string;
   readonly conversationId: string;
+  readonly type: "user" | "assistant" | "system" | "tool";
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -68,8 +77,11 @@ type GetMessagesQuery = {
 type GetMessagesItem = {
   readonly id: string;
   readonly conversationId: string;
+  readonly type: "user" | "assistant" | "system" | "tool";
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -118,16 +130,34 @@ type GetConversationResult = {
 ```ts
 type FileContent = ArrayBuffer;
 
+type ContentPart =
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "image_url"; readonly imageUrl: { readonly url: string } }
+  | { readonly type: "file"; readonly fileId: string }
+  | { readonly type: "audio"; readonly data: string };
+
+type ToolCall = {
+  readonly id: string;
+  readonly name: string;
+  readonly args: Record<string, unknown>;
+};
+
 type CreateMessageInput = {
   readonly conversationId: string;
+  readonly type: "user" | "assistant" | "system" | "tool";
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly fileIds: ReadonlyArray<string>;
 };
 
 type CreateNextMessageInput = {
   readonly conversationId: string;
-  readonly textContent: string;
+  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly fileIds: ReadonlyArray<string>;
 };
 
@@ -153,8 +183,11 @@ type CreateConversationRecord = {
 
 type CreateMessageRecord = {
   readonly conversationId: string;
+  readonly type: "user" | "assistant" | "system" | "tool";
   readonly sequenceNumber: number;
-  readonly textContent: string;
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly toolCallId: string;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -239,8 +272,8 @@ type ConstructionError = {
 
 1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
 2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
-3. CreateNextMessage({ conversationId, textContent, fileIds from files }) → message → if failure, return failure.
-4. Map message to AppendMessageResult({ id, conversationId, sequenceNumber, textContent, fileIds, createdAt, updatedAt }).
+3. CreateNextMessage({ conversationId, type: request.type, content: request.content, toolCalls: request.toolCalls, toolCallId: request.toolCallId, fileIds from files }) → message → if failure, return failure.
+4. Map message to AppendMessageResult({ id, conversationId, type, sequenceNumber, content, toolCalls, toolCallId, fileIds, createdAt, updatedAt }).
 5. Return succeed(appendMessageResult).
 
 ### App.GetMessagesOnConversation (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
@@ -249,7 +282,7 @@ type ConstructionError = {
 2. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
 3. For each message: Message in messages:
    1. GetFiles({ fileIds: message.fileIds }) → files → if failure, return failure.
-   2. Map message and files to GetMessagesItem({ id, conversationId, sequenceNumber, textContent, files mapped to GetMessagesFile[], createdAt, updatedAt }).
+   2. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content, toolCalls, toolCallId, files mapped to GetMessagesFile[], createdAt, updatedAt }).
 4. Return succeed(items).
 
 ### App.ListConversations (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
@@ -274,13 +307,13 @@ type ConstructionError = {
 ### CreateMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
 
 1. Now() → timestamp.
-2. PersistToMessageDBStore({ conversationId, sequenceNumber, textContent, fileIds, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
+2. PersistToMessageDBStore({ conversationId, type: request.type, sequenceNumber, content: request.content, toolCalls: request.toolCalls, toolCallId: request.toolCallId, fileIds, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
 3. Return succeed(message).
 
 ### CreateNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
 
 1. ReadMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
-2. CreateMessage({ conversationId, sequenceNumber: count + 1, textContent, fileIds }) → message → if failure, return failure.
+2. CreateMessage({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content, toolCalls: request.toolCalls, toolCallId: request.toolCallId, fileIds }) → message → if failure, return failure.
 3. Return succeed(message).
 
 ### DeleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
@@ -348,10 +381,17 @@ type ConstructionError = {
 
 1. RequireNonEmptyString(record.conversationId, "conversationId") → if failure, return failure.
 2. RequirePositiveInteger(record.sequenceNumber, "sequenceNumber") → if failure, return failure.
-3. RequirePresent(record.textContent, "textContent") → if failure, return failure.
-4. For each fileId: string in record.fileIds:
+3. RequirePresent(record.content, "content") → if failure, return failure.
+4. RequireNonEmptyString(record.type, "type") → if failure, return failure.
+5. If record.toolCalls is non-empty:
+   1. For each toolCall: ToolCall in record.toolCalls:
+      1. RequireNonEmptyString(toolCall.id, "toolCall.id") → if failure, return failure.
+      2. RequireNonEmptyString(toolCall.name, "toolCall.name") → if failure, return failure.
+6. If record.toolCallId is non-empty string:
+   1. RequireNonEmptyString(record.toolCallId, "toolCallId") → if failure, return failure.
+7. For each fileId: string in record.fileIds:
    1. RequireNonEmptyString(fileId, "fileId") → if failure, return failure.
-5. Infra.UpsertMessageRow(record) → message → if failure, return failure.
+8. Infra.UpsertMessageRow(record) → message → if failure, return failure.
 
 ### ReadFromMessageDBStore (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
 

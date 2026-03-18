@@ -10,7 +10,7 @@ class Conversation {
 class Message {
   readonly id: string;
   readonly conversationId: string;
-  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly type: DomainMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -36,15 +36,29 @@ class File {
 ### Flow Input/Output Types
 
 ```ts
+type MessageType = "user" | "assistant" | "system" | "tool";
+
+type ContentPartDto =
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "image_url"; readonly imageUrl: { readonly url: string } }
+  | { readonly type: "file"; readonly fileId: string }
+  | { readonly type: "audio"; readonly data: string };
+
+type ToolCallDto = {
+  readonly id: string;
+  readonly name: string;
+  readonly args: Record<string, unknown>;
+};
+
 type DeleteConversationCommand = {
   readonly conversationId: string;
 };
 
 type AppendMessageRequest = {
   readonly conversationId: string;
-  readonly type: "user" | "assistant" | "system" | "tool";
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly type: MessageType;
+  readonly content: ReadonlyArray<ContentPartDto>;
+  readonly toolCalls: ReadonlyArray<ToolCallDto>;
   readonly toolCallId: string;
   readonly attachments: ReadonlyArray<Attachment>;
 };
@@ -58,10 +72,10 @@ type Attachment = {
 type AppendMessageResult = {
   readonly id: string;
   readonly conversationId: string;
-  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly content: ReadonlyArray<ContentPartDto>;
+  readonly toolCalls: ReadonlyArray<ToolCallDto>;
   readonly toolCallId: string;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
@@ -77,10 +91,10 @@ type GetMessagesQuery = {
 type GetMessagesItem = {
   readonly id: string;
   readonly conversationId: string;
-  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly content: ReadonlyArray<ContentPartDto>;
+  readonly toolCalls: ReadonlyArray<ToolCallDto>;
   readonly toolCallId: string;
   readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
@@ -130,6 +144,8 @@ type GetConversationResult = {
 ```ts
 type FileContent = ArrayBuffer;
 
+type DomainMessageType = "user" | "assistant" | "system" | "tool";
+
 type ContentPart =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "image_url"; readonly imageUrl: { readonly url: string } }
@@ -144,7 +160,7 @@ type ToolCall = {
 
 type CreateMessageInput = {
   readonly conversationId: string;
-  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly type: DomainMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -154,7 +170,7 @@ type CreateMessageInput = {
 
 type CreateNextMessageInput = {
   readonly conversationId: string;
-  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly type: DomainMessageType;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
   readonly toolCallId: string;
@@ -183,7 +199,7 @@ type CreateConversationRecord = {
 
 type CreateMessageRecord = {
   readonly conversationId: string;
-  readonly type: "user" | "assistant" | "system" | "tool";
+  readonly type: DomainMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -257,6 +273,16 @@ type ConstructionError = {
 - RequirePositiveInteger(value: number, fieldName: string): Result<number, ValidationError>
 - RequirePresent(value: unknown, fieldName: string): Result<void, ValidationError>
 
+## Application Mapping Utilities
+
+These map between application-layer Dto types and domain types at the
+App action boundary. They live in the application layer.
+
+- MapContentPartDtosToDomain(dtos: ReadonlyArray\<ContentPartDto\>): ReadonlyArray\<ContentPart\>
+- MapToolCallDtosToDomain(dtos: ReadonlyArray\<ToolCallDto\>): ReadonlyArray\<ToolCall\>
+- MapContentPartsToDtos(parts: ReadonlyArray\<ContentPart\>): ReadonlyArray\<ContentPartDto\>
+- MapToolCallsToDtos(calls: ReadonlyArray\<ToolCall\>): ReadonlyArray\<ToolCallDto\>
+
 ## Actions
 
 ### App.DeleteConversation (command: DeleteConversationCommand): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
@@ -272,9 +298,11 @@ type ConstructionError = {
 
 1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
 2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
-3. CreateNextMessage({ conversationId, type: request.type, content: request.content, toolCalls: request.toolCalls, toolCallId: request.toolCallId, fileIds from files }) → message → if failure, return failure.
-4. Map message to AppendMessageResult({ id, conversationId, type, sequenceNumber, content, toolCalls, toolCallId, fileIds, createdAt, updatedAt }).
-5. Return succeed(appendMessageResult).
+3. Map request Dto fields to domain types: MapContentPartDtosToDomain(request.content) → contentParts, MapToolCallDtosToDomain(request.toolCalls) → toolCalls.
+4. CreateNextMessage({ conversationId, type: request.type, content: contentParts, toolCalls, toolCallId: request.toolCallId, fileIds from files }) → message → if failure, return failure.
+5. Map message domain fields to Dto types: MapContentPartsToDtos(message.content) → contentDtos, MapToolCallsToDtos(message.toolCalls) → toolCallDtos.
+6. Map message to AppendMessageResult({ id, conversationId, type, sequenceNumber, content: contentDtos, toolCalls: toolCallDtos, toolCallId, fileIds, createdAt, updatedAt }).
+7. Return succeed(appendMessageResult).
 
 ### App.GetMessagesOnConversation (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
@@ -282,7 +310,8 @@ type ConstructionError = {
 2. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
 3. For each message: Message in messages:
    1. GetFiles({ fileIds: message.fileIds }) → files → if failure, return failure.
-   2. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content, toolCalls, toolCallId, files mapped to GetMessagesFile[], createdAt, updatedAt }).
+   2. Map message domain fields to Dto types: MapContentPartsToDtos(message.content) → contentDtos, MapToolCallsToDtos(message.toolCalls) → toolCallDtos.
+   3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: contentDtos, toolCalls: toolCallDtos, toolCallId, files mapped to GetMessagesFile[], createdAt, updatedAt }).
 4. Return succeed(items).
 
 ### App.ListConversations (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
@@ -561,6 +590,17 @@ type ConstructionError = {
   repository or infrastructure names. They discriminate between the two kinds
   of store (relational vs object) while remaining in the domain layer. The
   `Infra.*` actions are the repository/adapter layer.
+- `ContentPartDto`/`ToolCallDto`/`MessageType` are application-layer types
+  exposed via Flow I/O Types. `ContentPart`/`ToolCall`/`DomainMessageType`
+  are domain-layer types used by entities and domain actions. `App.*` actions
+  sit at the boundary and map between the two using Application Mapping
+  Utilities. This ensures inbound adapters never import domain types directly
+  (per AGENTS.md layer dependency rules).
+- Inbound adapters must define their own transport DTOs for request parsing
+  and response serialization. Transport validation errors (e.g. malformed
+  multipart fields) must use adapter-local error types, not domain
+  `ValidationError`. The adapter maps transport errors to HTTP status codes
+  independently of the domain error hierarchy.
 
 ## Description
 

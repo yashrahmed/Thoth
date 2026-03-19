@@ -33,6 +33,15 @@ const POSTGRES_COMMAND = [
   "max_connections=100",
 ] as const;
 
+interface StoppableContainer {
+  stop(): Promise<unknown>;
+}
+
+interface StartedPostgresContainer extends StoppableContainer {
+  getHost(): string;
+  getMappedPort(port: number): number;
+}
+
 export interface ConvIntegrationSetup {
   readonly blobBucket: string;
   readonly blobClient: S3Client;
@@ -45,12 +54,8 @@ export async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
   const network = await new Network().start();
   let appSetup: ConvSetupResult | undefined;
   let database: PostgresDatabase | undefined;
-  let postgresContainer:
-    | Awaited<ReturnType<InstanceType<typeof GenericContainer>["start"]>>
-    | undefined;
-  let flywayContainer:
-    | Awaited<ReturnType<InstanceType<typeof GenericContainer>["start"]>>
-    | undefined;
+  let postgresContainer: StartedPostgresContainer | undefined;
+  let flywayContainer: StoppableContainer | undefined;
   let s3MockContainer:
     | Awaited<ReturnType<InstanceType<typeof S3MockContainer>["start"]>>
     | undefined;
@@ -185,7 +190,7 @@ function buildDatabaseUrl(host: string, port: number): string {
   return `postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${host}:${port}/${DATABASE_NAME}`;
 }
 
-async function stopContainer(container: { stop(): Promise<unknown> } | undefined) {
+async function stopContainer(container: StoppableContainer | undefined) {
   if (!container) {
     return;
   }

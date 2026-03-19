@@ -9,11 +9,17 @@
     "build": "bun x tsc --noEmit",
     "dev": "bun run --watch src/server.ts",
     "start": "bun run src/server.ts",
-    "test": "bun test",
+    "test": "bun test src/setup.test.ts src/application src/domain",
+    "test:integration": "bun test --timeout 180000 src/integration/conv-agent-it.test.ts",
     "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
     "@thoth/config": "workspace:*",
     "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
+    "@testcontainers/s3mock": "^11.7.2",
+    "testcontainers": "^11.7.2"
   }
 }

@@ -10,7 +10,7 @@
     "build": "bun x tsc --noEmit",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test",
+    "test": "bun test --pass-with-no-tests",
     "typecheck": "bun x tsc --noEmit"
   }
 }

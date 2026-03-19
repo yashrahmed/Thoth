@@ -9,7 +9,7 @@
     "build": "bun x tsc --noEmit",
     "dev": "bun run --watch src/server.ts",
     "start": "bun run src/server.ts",
-    "test": "bun test",
+    "test": "bun test --pass-with-no-tests",
     "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {

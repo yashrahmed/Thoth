@@ -102,12 +102,12 @@ export function createConversationHttpHandler(
         );
       }
 
-      const messagesRoute = getConversationMessagesRoute(pathname);
+      const chatRoute = getConversationChatRoute(pathname);
 
-      if (messagesRoute && req.method === "POST") {
+      if (chatRoute && req.method === "POST") {
         const appendRequestResult = await parseAppendMessageRequest(
           req,
-          messagesRoute.conversationId,
+          chatRoute.conversationId,
         );
 
         if (!appendRequestResult.ok) {
@@ -121,11 +121,11 @@ export function createConversationHttpHandler(
         return withCors(mapMessageResult(result, 201));
       }
 
-      if (messagesRoute && req.method === "GET") {
+      if (chatRoute && req.method === "GET") {
         const pageNum = Number(url.searchParams.get("pageNum"));
         const pageSize = Number(url.searchParams.get("pageSize"));
         const result = await getMessagesOnConversation.execute({
-          conversationId: messagesRoute.conversationId,
+          conversationId: chatRoute.conversationId,
           pageNum,
           pageSize,
         });
@@ -287,7 +287,7 @@ function getConversationId(pathname: string): string | null {
   return null;
 }
 
-function getConversationMessagesRoute(
+function getConversationChatRoute(
   pathname: string,
 ): { readonly conversationId: string } | null {
   const segments = pathname.split("/").filter(Boolean);
@@ -295,7 +295,7 @@ function getConversationMessagesRoute(
   if (
     segments.length === 3 &&
     segments[0] === "conversations" &&
-    segments[2] === "messages"
+    segments[2] === "chat"
   ) {
     return {
       conversationId: segments[1] ?? "",

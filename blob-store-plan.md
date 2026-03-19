@@ -7,7 +7,7 @@ The first blob-backed file flow is already in place:
 - `Message.media_content` has been replaced by `Message.files`.
 - File metadata is stored in Postgres.
 - Blob bytes are uploaded to R2 through a storage adapter.
-- `POST /messages` accepts `multipart/form-data` with zero or more files.
+- `POST /conversations/:conversationId/chat` accepts `multipart/form-data` with zero or more files.
 - Message and conversation responses now expose file metadata instead of a raw
   media URL.
 

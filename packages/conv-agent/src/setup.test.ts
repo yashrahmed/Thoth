@@ -125,7 +125,7 @@ describe("createConversationHttpHandler", () => {
     );
 
     const response = await handler(
-      new Request("http://localhost/conversations/conversation-1/messages", {
+      new Request("http://localhost/conversations/conversation-1/chat", {
         method: "POST",
         body: formData,
       }),
@@ -154,7 +154,7 @@ describe("createConversationHttpHandler", () => {
     invalidJsonFormData.set("content", "{bad");
 
     const invalidJsonResponse = await handler(
-      new Request("http://localhost/conversations/conversation-1/messages", {
+      new Request("http://localhost/conversations/conversation-1/chat", {
         method: "POST",
         body: invalidJsonFormData,
       }),
@@ -219,7 +219,7 @@ describe("createConversationHttpHandler", () => {
 
     const response = await handler(
       new Request(
-        "http://localhost/conversations/conversation-1/messages?pageNum=1&pageSize=2",
+        "http://localhost/conversations/conversation-1/chat?pageNum=1&pageSize=2",
       ),
     );
 

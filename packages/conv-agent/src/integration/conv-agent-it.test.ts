@@ -47,7 +47,7 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
     // Append 10 image-backed messages so the API has enough data to paginate.
     for (let index = 1; index <= 10; index += 1) {
       const appendResponse = await fetch(
-        new URL(`/conversations/${conversationId}/messages`, startedSetup.server.url),
+        new URL(`/conversations/${conversationId}/chat`, startedSetup.server.url),
         {
           method: "POST",
           body: buildImageMessageFormData(
@@ -84,7 +84,7 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
     // Read the first 5 messages and assert the first half of the sequence.
     const firstPageResponse = await fetch(
       new URL(
-        `/conversations/${conversationId}/messages?pageNum=1&pageSize=5`,
+        `/conversations/${conversationId}/chat?pageNum=1&pageSize=5`,
         startedSetup.server.url,
       ),
     );
@@ -115,7 +115,7 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
     // Read the second 5 messages and assert the remaining half of the sequence.
     const secondPageResponse = await fetch(
       new URL(
-        `/conversations/${conversationId}/messages?pageNum=2&pageSize=5`,
+        `/conversations/${conversationId}/chat?pageNum=2&pageSize=5`,
         startedSetup.server.url,
       ),
     );

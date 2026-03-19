@@ -1,9 +1,16 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { HeadBucketCommand } from "@aws-sdk/client-s3";
 import {
   convIntegrationSetup,
   type ConvIntegrationSetup,
 } from "./conv-agent-it-setup";
+
+const IMAGE_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "resources/lambo.jpg",
+);
 
 let setup: ConvIntegrationSetup | undefined;
 
@@ -16,52 +23,200 @@ afterAll(async () => {
   setup = undefined;
 });
 
-test("starts postgres, runs flyway, starts s3mock, and prints hello world", async () => {
-  expect(setup).toBeDefined();
+test("creates 10 image messages, paginates 5 at a time, and cleans up", async () => {
+  const startedSetup = requireSetup();
+  let conversationId: string | undefined;
+  const imageBytes = readFileSync(IMAGE_PATH);
 
+  try {
+    // Create a fresh conversation for the pagination scenario.
+    const createResponse = await fetch(
+      new URL("/conversations", startedSetup.server.url),
+      {
+        method: "POST",
+      },
+    );
+
+    expect(createResponse.status).toBe(201);
+
+    const createdConversation = await createResponse.json();
+
+    expect(createdConversation.id).toEqual(expect.any(String));
+    conversationId = createdConversation.id;
+
+    // Append 10 image-backed messages so the API has enough data to paginate.
+    for (let index = 1; index <= 10; index += 1) {
+      const appendResponse = await fetch(
+        new URL(`/conversations/${conversationId}/messages`, startedSetup.server.url),
+        {
+          method: "POST",
+          body: buildImageMessageFormData(
+            imageBytes,
+            `Manual lambo image upload ${index}`,
+          ),
+        },
+      );
+
+      expect(appendResponse.status).toBe(201);
+
+      const createdMessage = await appendResponse.json();
+
+      expect(createdMessage.conversationId).toBe(conversationId);
+      expect(createdMessage.type).toBe("user");
+      expect(createdMessage.sequenceNumber).toBe(index);
+      expect(createdMessage.content).toEqual([
+        { type: "text", text: `Manual lambo image upload ${index}` },
+      ]);
+      expect(createdMessage.fileIds).toHaveLength(1);
+    }
+
+    // Confirm the conversation itself is still readable before paging messages.
+    const getConversationResponse = await fetch(
+      new URL(`/conversations/${conversationId}`, startedSetup.server.url),
+    );
+
+    expect(getConversationResponse.status).toBe(200);
+
+    const fetchedConversation = await getConversationResponse.json();
+
+    expect(fetchedConversation.id).toBe(conversationId);
+
+    // Read the first 5 messages and assert the first half of the sequence.
+    const firstPageResponse = await fetch(
+      new URL(
+        `/conversations/${conversationId}/messages?pageNum=1&pageSize=5`,
+        startedSetup.server.url,
+      ),
+    );
+
+    expect(firstPageResponse.status).toBe(200);
+
+    const firstPage = await firstPageResponse.json();
+
+    expect(firstPage.items).toHaveLength(5);
+    expect(firstPage.pageNum).toBe(1);
+    expect(firstPage.pageSize).toBe(5);
+
+    for (let index = 0; index < 5; index += 1) {
+      const expectedSequence = index + 1;
+      expect(firstPage.items[index]?.conversationId).toBe(conversationId);
+      expect(firstPage.items[index]?.sequenceNumber).toBe(expectedSequence);
+      expect(firstPage.items[index]?.content).toEqual([
+        { type: "text", text: `Manual lambo image upload ${expectedSequence}` },
+      ]);
+      expect(firstPage.items[index]?.files).toHaveLength(1);
+      expect(firstPage.items[index]?.files[0]).toMatchObject({
+        filename: "lambo.jpg",
+        mimeType: "image/jpeg",
+        sizeInBytes: imageBytes.byteLength,
+      });
+    }
+
+    // Read the second 5 messages and assert the remaining half of the sequence.
+    const secondPageResponse = await fetch(
+      new URL(
+        `/conversations/${conversationId}/messages?pageNum=2&pageSize=5`,
+        startedSetup.server.url,
+      ),
+    );
+
+    expect(secondPageResponse.status).toBe(200);
+
+    const secondPage = await secondPageResponse.json();
+
+    expect(secondPage.items).toHaveLength(5);
+    expect(secondPage.pageNum).toBe(2);
+    expect(secondPage.pageSize).toBe(5);
+
+    for (let index = 0; index < 5; index += 1) {
+      const expectedSequence = index + 6;
+      expect(secondPage.items[index]?.conversationId).toBe(conversationId);
+      expect(secondPage.items[index]?.sequenceNumber).toBe(expectedSequence);
+      expect(secondPage.items[index]?.content).toEqual([
+        { type: "text", text: `Manual lambo image upload ${expectedSequence}` },
+      ]);
+      expect(secondPage.items[index]?.files).toHaveLength(1);
+      expect(secondPage.items[index]?.files[0]).toMatchObject({
+        filename: "lambo.jpg",
+        mimeType: "image/jpeg",
+        sizeInBytes: imageBytes.byteLength,
+      });
+    }
+
+    // Delete the conversation and verify the API reports it as gone.
+    const deleteResponse = await fetch(
+      new URL(`/conversations/${conversationId}`, startedSetup.server.url),
+      {
+        method: "DELETE",
+      },
+    );
+
+    expect(deleteResponse.status).toBe(204);
+    conversationId = undefined;
+
+    const missingConversationResponse = await fetch(
+      new URL(`/conversations/${createdConversation.id}`, startedSetup.server.url),
+    );
+
+    expect(missingConversationResponse.status).toBe(404);
+    expect(await missingConversationResponse.json()).toEqual({
+      error: {
+        entityType: "Conversation",
+        id: createdConversation.id,
+        kind: "NotFoundError",
+      },
+    });
+  } finally {
+    // Clean up the conversation if the test failed before the explicit delete.
+    await deleteConversationIfPresent(startedSetup, conversationId);
+  }
+});
+
+function requireSetup(): ConvIntegrationSetup {
   if (!setup) {
     throw new Error("Integration setup was not started.");
   }
 
-  expect(setup.server.port).toBeDefined();
+  return setup;
+}
 
-  const healthResponse = await fetch(new URL("/health", setup.server.url));
+async function deleteConversationIfPresent(
+  startedSetup: ConvIntegrationSetup,
+  conversationId: string | undefined,
+): Promise<void> {
+  if (!conversationId) {
+    return;
+  }
 
-  expect(healthResponse.status).toBe(200);
-  expect(await healthResponse.json()).toEqual({
-    status: "ok",
-    service: "conv-agent",
+  await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url), {
+    method: "DELETE",
   });
+}
 
-  const databaseResult = await setup.database<{ value: number }[]>`
-    select 1 as value
-  `;
-  const schemaResult = await setup.database<{ schema_name: string }[]>`
-    select schema_name
-    from information_schema.schemata
-    where schema_name = 'thoth'
-  `;
-  const tableResult = await setup.database<{ table_name: string }[]>`
-    select table_name
-    from information_schema.tables
-    where table_schema = 'thoth'
-      and table_name = 'messages'
-  `;
+function buildImageMessageFormData(
+  imageBytes: Uint8Array,
+  text: string,
+): FormData {
+  const formData = new FormData();
 
-  expect(databaseResult).toHaveLength(1);
-  expect(databaseResult[0]?.value).toBe(1);
-  expect(schemaResult).toHaveLength(1);
-  expect(schemaResult[0]?.schema_name).toBe("thoth");
-  expect(tableResult).toHaveLength(1);
-  expect(tableResult[0]?.table_name).toBe("messages");
-
-  const bucketResult = await setup.blobClient.send(
-    new HeadBucketCommand({
-      Bucket: setup.blobBucket,
+  formData.set("type", "user");
+  formData.set(
+    "content",
+    JSON.stringify([{ type: "text", text }]),
+  );
+  formData.set(
+    "attachment",
+    new File([toArrayBuffer(imageBytes)], "lambo.jpg", {
+      type: "image/jpeg",
     }),
   );
 
-  expect(bucketResult.$metadata.httpStatusCode).toBe(200);
+  return formData;
+}
 
-  console.log("hello world");
-});
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}

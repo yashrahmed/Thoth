@@ -16,8 +16,13 @@ import type {
   MessageSequencePageRequest,
 } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
+import { ContentPartType } from "./domain/objects/content-part-type";
 import { File as StoredFile } from "./domain/objects/file";
-import { NotFoundError, type StoreError } from "./domain/objects/errors";
+import {
+  EntityType,
+  NotFoundError,
+  type StoreError,
+} from "./domain/objects/errors";
 import type { ContentPart, ToolCall } from "./domain/objects/message-content";
 import { Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
@@ -103,7 +108,7 @@ describe("createConversationHttpHandler", () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({
-      error: new NotFoundError("Conversation", "missing"),
+      error: new NotFoundError(EntityType.Conversation, "missing"),
     });
   });
 
@@ -358,7 +363,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     const conversation = this.conversations.get(conversationId);
 
     if (!conversation) {
-      return failure(new NotFoundError("Conversation", conversationId));
+      return failure(new NotFoundError(EntityType.Conversation, conversationId));
     }
 
     return success(conversation);
@@ -416,7 +421,7 @@ class InMemoryMessageRepository implements MessageRepository {
     const message = this.messages.get(messageId);
 
     if (!message) {
-      return failure(new NotFoundError("Message", messageId));
+      return failure(new NotFoundError(EntityType.Message, messageId));
     }
 
     return success(message);
@@ -485,7 +490,7 @@ class InMemoryFileRepository implements FileRepository {
     const file = this.files.get(id);
 
     if (!file) {
-      return failure(new NotFoundError("File", id));
+      return failure(new NotFoundError(EntityType.File, id));
     }
 
     return success(file);
@@ -566,7 +571,7 @@ function mustCreateFile(
 }
 
 function textPart(text: string): ContentPart {
-  return { type: "text", text };
+  return { type: ContentPartType.Text, text };
 }
 
 function toolCall(id: string, name: string): ToolCall {

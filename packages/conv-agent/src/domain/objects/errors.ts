@@ -17,6 +17,12 @@ export enum BlobStoreOperation {
   Delete = "delete",
 }
 
+const BLOB_STORE_OPERATION_VALUES = new Set<BlobStoreOperation>([
+  BlobStoreOperation.Upload,
+  BlobStoreOperation.Fetch,
+  BlobStoreOperation.Delete,
+]);
+
 export class ValidationError {
   readonly kind = "ValidationError";
 
@@ -51,7 +57,11 @@ export class BlobStoreError {
   constructor(
     readonly operation: BlobStoreOperation,
     readonly message: string,
-  ) {}
+  ) {
+    if (!BLOB_STORE_OPERATION_VALUES.has(operation)) {
+      throw new Error(`Unsupported blob store operation: ${operation}`);
+    }
+  }
 }
 
 export class ConstructionError {

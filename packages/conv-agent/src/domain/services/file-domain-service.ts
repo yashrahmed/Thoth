@@ -1,9 +1,8 @@
-import type { FileContent } from "../objects/file";
+import type { File as FileEntity, FileContent } from "../objects/file";
 import type {
   CreateFileRecord,
   FileRepository,
 } from "../contracts/file-repository";
-import type { File as FileEntity } from "../objects/file";
 import type {
   BlobStoreError,
   NotFoundError,

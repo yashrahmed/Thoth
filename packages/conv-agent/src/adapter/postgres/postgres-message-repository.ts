@@ -4,7 +4,12 @@ import type {
   MessageSequencePageRequest,
 } from "../../domain/contracts/message-repository";
 import { Message, type MessageType } from "../../domain/objects/message";
-import { NotFoundError, StoreError } from "../../domain/objects/errors";
+import {
+  EntityType,
+  NotFoundError,
+  StoreError,
+  StoreOperation,
+} from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 import type { ContentPart, ToolCall } from "../../domain/objects/message-content";
@@ -25,6 +30,14 @@ interface MessageRow {
 interface CountRow {
   readonly count: number | string | bigint;
 }
+
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { readonly [key: string]: JsonValue }
+  | JsonValue[];
 
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
@@ -71,13 +84,23 @@ export class PostgresMessageRepository implements MessageRepository {
 
       if (!row) {
         return failure(
-          new StoreError("Message", "persist", "Message row was not returned."),
+          new StoreError(
+            EntityType.Message,
+            StoreOperation.Persist,
+            "Message row was not returned.",
+          ),
         );
       }
 
-      return mapRow(row, "persist");
+      return mapRow(row, StoreOperation.Persist);
     } catch (error) {
-      return failure(new StoreError("Message", "persist", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Message,
+          StoreOperation.Persist,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 
@@ -102,12 +125,14 @@ export class PostgresMessageRepository implements MessageRepository {
       const row = rows[0];
 
       if (!row) {
-        return failure(new NotFoundError("Message", messageId));
+        return failure(new NotFoundError(EntityType.Message, messageId));
       }
 
-      return mapRow(row, "read");
+      return mapRow(row, StoreOperation.Read);
     } catch (error) {
-      return failure(new StoreError("Message", "read", getErrorMessage(error)));
+      return failure(
+        new StoreError(EntityType.Message, StoreOperation.Read, getErrorMessage(error)),
+      );
     }
   }
 
@@ -133,9 +158,15 @@ export class PostgresMessageRepository implements MessageRepository {
         limit ${request.pageSize}
       `;
 
-      return mapRows(rows, "readPage");
+      return mapRows(rows, StoreOperation.ReadPage);
     } catch (error) {
-      return failure(new StoreError("Message", "readPage", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Message,
+          StoreOperation.ReadPage,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 
@@ -158,9 +189,15 @@ export class PostgresMessageRepository implements MessageRepository {
         order by sequence_number asc
       `;
 
-      return mapRows(rows, "readPage");
+      return mapRows(rows, StoreOperation.ReadPage);
     } catch (error) {
-      return failure(new StoreError("Message", "readPage", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Message,
+          StoreOperation.ReadPage,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 
@@ -176,13 +213,23 @@ export class PostgresMessageRepository implements MessageRepository {
 
       if (!row) {
         return failure(
-          new StoreError("Message", "readPage", "Message count row was not returned."),
+          new StoreError(
+            EntityType.Message,
+            StoreOperation.ReadPage,
+            "Message count row was not returned.",
+          ),
         );
       }
 
       return success(Number(row.count));
     } catch (error) {
-      return failure(new StoreError("Message", "readPage", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Message,
+          StoreOperation.ReadPage,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 
@@ -195,14 +242,20 @@ export class PostgresMessageRepository implements MessageRepository {
 
       return success(undefined);
     } catch (error) {
-      return failure(new StoreError("Message", "remove", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Message,
+          StoreOperation.Remove,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 }
 
 function mapRows(
   rows: MessageRow[],
-  operation: StoreError["operation"],
+  operation: StoreOperation,
 ): Result<Message[], StoreError> {
   const messages: Message[] = [];
 
@@ -221,10 +274,12 @@ function mapRows(
 
 function mapRow(
   row: MessageRow | undefined,
-  operation: StoreError["operation"],
+  operation: StoreOperation,
 ): Result<Message, StoreError> {
   if (!row) {
-    return failure(new StoreError("Message", operation, "Message row was not returned."));
+    return failure(
+      new StoreError(EntityType.Message, operation, "Message row was not returned."),
+    );
   }
 
   try {
@@ -244,11 +299,15 @@ function mapRow(
     );
   } catch (error) {
     if (error instanceof Error) {
-      return failure(new StoreError("Message", operation, error.message));
+      return failure(new StoreError(EntityType.Message, operation, error.message));
     }
 
     return failure(
-      new StoreError("Message", operation, "Unexpected message mapping error."),
+      new StoreError(
+        EntityType.Message,
+        operation,
+        "Unexpected message mapping error.",
+      ),
     );
   }
 }
@@ -261,6 +320,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
 }
 
-function toJsonValue(value: unknown): any {
-  return JSON.parse(JSON.stringify(value));
+function toJsonValue(value: unknown): JsonValue {
+  return JSON.parse(JSON.stringify(value)) as JsonValue;
 }

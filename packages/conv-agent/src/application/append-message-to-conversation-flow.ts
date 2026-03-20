@@ -1,4 +1,4 @@
-import type { FileContent } from "../domain/objects/file-content";
+import type { FileContent } from "../domain/objects/file";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";

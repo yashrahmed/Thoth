@@ -228,14 +228,6 @@ type Result<T, E> = Success<T> | Failure<E>;
 type Success<T> = { readonly ok: true; readonly value: T };
 type Failure<E> = { readonly ok: false; readonly error: E };
 
-type DomainError =
-  | ValidationError
-  | NotFoundError
-  | StoreError
-  | BlobStoreError
-  | ConstructionError
-  | LlmError;
-
 type ValidationError = {
   readonly kind: "ValidationError";
   readonly fieldName: string;

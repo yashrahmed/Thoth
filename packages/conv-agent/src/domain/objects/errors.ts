@@ -63,11 +63,3 @@ export class ConstructionError {
   ) {}
 }
 
-export type DomainError =
-  | ValidationError
-  | NotFoundError
-  | StoreError
-  | BlobStoreError
-  | ConstructionError;
-
-export type ConversationError = DomainError;

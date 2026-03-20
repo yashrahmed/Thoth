@@ -351,16 +351,21 @@ interface LlmCompletionService {
 
 ### App.CreateConversation (): Result<CreateConversationResult, StoreError>
 
-1. Now() → timestamp.
-2. PersistToConversationDBStore({ createdAt: timestamp, updatedAt: timestamp }) → conversation → if failure, return failure.
-3. Map conversation to CreateConversationResult({ id, createdAt, updatedAt }).
-4. Return succeed(createConversationResult).
+1. CreateConversation() → conversation → if failure, return failure.
+2. Map conversation to CreateConversationResult({ id, createdAt, updatedAt }).
+3. Return succeed(createConversationResult).
 
 ### App.GetConversation (query: GetConversationQuery): Result<GetConversationResult, ValidationError | NotFoundError | StoreError>
 
 1. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
 2. Map conversation to GetConversationResult({ id, createdAt, updatedAt }).
 3. Return succeed(getConversationResult).
+
+### CreateConversation (): Result<Conversation, StoreError>
+
+1. Now() → timestamp.
+2. PersistToConversationDBStore({ createdAt: timestamp, updatedAt: timestamp }) → conversation → if failure, return failure.
+3. Return succeed(conversation).
 
 ### CreateMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
 

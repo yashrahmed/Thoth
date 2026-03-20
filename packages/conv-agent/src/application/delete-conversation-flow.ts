@@ -9,7 +9,7 @@ import type {
 } from "../domain/objects/errors";
 import { type Result, success } from "../domain/objects/result";
 
-export interface DeleteConversationCommand {
+interface DeleteConversationCommand {
   readonly conversationId: string;
 }
 

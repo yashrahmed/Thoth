@@ -5,8 +5,6 @@ export enum ContentPartType {
   Audio = "audio",
 }
 
-export const CONTENT_PART_TYPES = Object.values(ContentPartType);
-
 export type DomainContentPart =
   | { readonly type: ContentPartType.Text; readonly text: string }
   | {

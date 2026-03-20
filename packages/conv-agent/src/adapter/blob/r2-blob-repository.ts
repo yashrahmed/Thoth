@@ -7,14 +7,14 @@ import type {
 import { BlobStoreError, BlobStoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 
-export interface R2BlobConfig {
+interface R2BlobConfig {
   readonly endpoint: string;
   readonly bucket: string;
   readonly region: string;
   readonly folder: string;
 }
 
-export interface R2BlobCredentials {
+interface R2BlobCredentials {
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
 }

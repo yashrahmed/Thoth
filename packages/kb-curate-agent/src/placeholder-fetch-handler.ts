@@ -4,7 +4,7 @@ const CORS_HEADERS = {
   "access-control-allow-headers": "content-type",
 };
 
-export interface PlaceholderFetchHandlerOptions {
+interface PlaceholderFetchHandlerOptions {
   cors?: boolean;
 }
 

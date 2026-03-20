@@ -1,6 +1,6 @@
 import { ConstructionError } from "./errors";
 
-export interface ConversationProps {
+interface ConversationProps {
   readonly id: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;

@@ -1,20 +1,21 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
+  "bun": false,
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.ts"],
       "project": ["scripts/**/*.ts"]
     },
     "packages/conv-agent": {
-      "entry": ["src/**/*server.ts", "src/**/*.test.ts"],
+      "entry": ["src/setup.test.ts", "src/integration/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/kb-curate-agent": {
-      "entry": ["src/**/*server.ts", "src/**/*.test.ts"],
+      "entry": ["src/**/*server.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/planning-agent": {
-      "entry": ["src/**/*server.ts", "src/**/*.test.ts"],
+      "entry": ["src/**/*server.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/config": {
@@ -27,6 +28,7 @@
       "project": ["**/*.ts"]
     },
     "packages/message-proxy": {
+      "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/mobile": {

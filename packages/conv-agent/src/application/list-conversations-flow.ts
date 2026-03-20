@@ -1,17 +1,7 @@
 import type { StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-
-export interface ListConversationsQuery {
-  readonly pageNum: number;
-  readonly pageSize: number;
-}
-
-export interface ListConversationsItem {
-  readonly id: string;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}
+import type { ListConversationsItem, ListConversationsQuery } from "./dtos";
 
 export class ListConversationsFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}

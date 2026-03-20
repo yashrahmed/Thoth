@@ -1,16 +1,7 @@
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-
-export interface GetConversationQuery {
-  readonly conversationId: string;
-}
-
-export interface GetConversationResult {
-  readonly id: string;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}
+import type { GetConversationQuery, GetConversationResult } from "./dtos";
 
 export class GetConversationFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}

@@ -35,16 +35,22 @@ class File {
 
 ### Flow Input/Output Types
 
-Flow DTOs are type aliases of their corresponding domain types.
-No mapping is needed at the application boundary because the shapes
-are identical.
+Flow DTOs are type aliases or structurally identical interfaces of
+their corresponding domain types. No mapping is needed at the
+application boundary because the shapes are identical. Inbound
+adapters consume flow DTOs directly — there is no separate
+transport-DTO layer.
 
 ```ts
 type MessageType = LlmMessageType;
 
 type ContentPartDto = ContentPart;
 
-type ToolCallDto = ToolCall;
+type ToolCallDto = {
+  readonly id: string;
+  readonly name: string;
+  readonly args: Record<string, unknown>;
+};
 
 type DeleteConversationCommand = {
   readonly conversationId: string;
@@ -626,17 +632,17 @@ interface LlmCompletionService {
   repository or infrastructure names. They discriminate between the two kinds
   of store (relational vs object) while remaining in the domain layer. The
   `Infra.*` actions are the repository/adapter layer.
-- `ContentPartDto`/`ToolCallDto`/`MessageType` are application-layer type
-  aliases of their domain counterparts (`ContentPart`/`ToolCall`/`LlmMessageType`).
-  Because the shapes are identical, no mapping is needed at the application
-  boundary — `App.*` actions pass values through directly. Inbound adapters
-  import the flow-level aliases, not the domain types (per AGENTS.md layer
-  dependency rules).
-- Inbound adapters must define their own transport DTOs for request parsing
-  and response serialization. Transport validation errors (e.g. malformed
-  multipart fields) must use adapter-local error types, not domain
-  `ValidationError`. The adapter maps transport errors to HTTP status codes
-  independently of the domain error hierarchy.
+- `ContentPartDto`/`MessageType` are application-layer type aliases of their
+  domain counterparts (`ContentPart`/`LlmMessageType`). `ToolCallDto` is a
+  structurally identical interface. Because the shapes match, no mapping is
+  needed at the application boundary — `App.*` actions pass values through
+  directly.
+- Inbound adapters consume flow DTOs directly for request parsing and
+  response serialization — there is no separate transport-DTO layer.
+  Transport validation errors (e.g. malformed multipart fields) should use
+  adapter-local error types, not domain `ValidationError`. The adapter maps
+  transport errors to HTTP status codes independently of the domain error
+  hierarchy.
 
 ## Description
 

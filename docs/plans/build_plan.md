@@ -10,7 +10,7 @@ class Conversation {
 class Message {
   readonly id: string;
   readonly conversationId: string;
-  readonly type: DomainMessageType;
+  readonly type: LlmMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -58,8 +58,6 @@ type AppendMessageRequest = {
   readonly conversationId: string;
   readonly type: MessageType;
   readonly content: ReadonlyArray<ContentPartDto>;
-  readonly toolCalls: ReadonlyArray<ToolCallDto>;
-  readonly toolCallId: string;
   readonly attachments: ReadonlyArray<Attachment>;
 };
 
@@ -67,19 +65,6 @@ type Attachment = {
   readonly content: FileContent;
   readonly filename: string;
   readonly mimeType: string;
-};
-
-type AppendMessageResult = {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly type: MessageType;
-  readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPartDto>;
-  readonly toolCalls: ReadonlyArray<ToolCallDto>;
-  readonly toolCallId: string;
-  readonly fileIds: ReadonlyArray<string>;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
 };
 
 type GetMessagesQuery = {
@@ -94,8 +79,6 @@ type GetMessagesItem = {
   readonly type: MessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPartDto>;
-  readonly toolCalls: ReadonlyArray<ToolCallDto>;
-  readonly toolCallId: string;
   readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -144,7 +127,7 @@ type GetConversationResult = {
 ```ts
 type FileContent = ArrayBuffer;
 
-type DomainMessageType = "user" | "assistant" | "system" | "tool";
+type LlmMessageType = "user" | "assistant" | "system" | "tool";
 
 type ContentPart =
   | { readonly type: "text"; readonly text: string }
@@ -160,7 +143,7 @@ type ToolCall = {
 
 type CreateMessageInput = {
   readonly conversationId: string;
-  readonly type: DomainMessageType;
+  readonly type: LlmMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -170,7 +153,7 @@ type CreateMessageInput = {
 
 type CreateNextMessageInput = {
   readonly conversationId: string;
-  readonly type: DomainMessageType;
+  readonly type: LlmMessageType;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
   readonly toolCallId: string;
@@ -199,7 +182,7 @@ type CreateConversationRecord = {
 
 type CreateMessageRecord = {
   readonly conversationId: string;
-  readonly type: DomainMessageType;
+  readonly type: LlmMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -217,6 +200,11 @@ type CreateFileRecord = {
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
+
+type LlmCompletionResult = {
+  readonly content: ReadonlyArray<ContentPart>;
+  readonly toolCalls: ReadonlyArray<ToolCall>;
+};
 ```
 
 ## Result and Error Types
@@ -231,7 +219,8 @@ type DomainError =
   | NotFoundError
   | StoreError
   | BlobStoreError
-  | ConstructionError;
+  | ConstructionError
+  | LlmError;
 
 type ValidationError = {
   readonly kind: "ValidationError";
@@ -263,6 +252,23 @@ type ConstructionError = {
   readonly entityType: string;
   readonly message: string;
 };
+
+type LlmError = {
+  readonly kind: "LlmError";
+  readonly message: string;
+};
+```
+
+## Domain Contracts (Ports)
+
+### LlmCompletionService
+
+```ts
+interface LlmCompletionService {
+  complete(
+    messages: ReadonlyArray<Message>,
+  ): Promise<Result<LlmCompletionResult, LlmError>>;
+}
 ```
 
 ## Atomic Operations
@@ -294,25 +300,27 @@ App action boundary. They live in the application layer.
 4. RemoveFromConversationDBStore(command.conversationId) → if failure, return failure.
 5. Return succeed(void).
 
-### App.AppendMessageToConversation (request: AppendMessageRequest): Result<AppendMessageResult, ValidationError | NotFoundError | StoreError | BlobStoreError>
+### App.AppendMessageToConversation (request: AppendMessageRequest): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>
 
 1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
 2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
-3. Map request Dto fields to domain types: MapContentPartDtosToDomain(request.content) → contentParts, MapToolCallDtosToDomain(request.toolCalls) → toolCalls.
-4. CreateNextMessage({ conversationId, type: request.type, content: contentParts, toolCalls, toolCallId: request.toolCallId, fileIds from files }) → message → if failure, return failure.
-5. Map message domain fields to Dto types: MapContentPartsToDtos(message.content) → contentDtos, MapToolCallsToDtos(message.toolCalls) → toolCallDtos.
-6. Map message to AppendMessageResult({ id, conversationId, type, sequenceNumber, content: contentDtos, toolCalls: toolCallDtos, toolCallId, fileIds, createdAt, updatedAt }).
-7. Return succeed(appendMessageResult).
+3. Map request Dto fields to domain types: MapContentPartDtosToDomain(request.content) → contentParts.
+4. CreateNextMessage({ conversationId, type: request.type, content: contentParts, toolCalls: [], toolCallId: "", fileIds from files }) → userMessage → if failure, return failure.
+5. ReadAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
+6. SendToLLMChatService(allMessages) → llmResult → if failure, return failure.
+7. CreateNextMessage({ conversationId, type: "assistant", content: llmResult.content, toolCalls: llmResult.toolCalls, toolCallId: "", fileIds: [] }) → assistantMessage → if failure, return failure.
+8. Return succeed(void).
 
 ### App.GetMessagesOnConversation (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
 1. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
 2. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
-3. For each message: Message in messages:
+3. Filter messages to only those with type "user" or "assistant" → visibleMessages.
+4. For each message: Message in visibleMessages:
    1. GetFiles({ fileIds: message.fileIds }) → files → if failure, return failure.
-   2. Map message domain fields to Dto types: MapContentPartsToDtos(message.content) → contentDtos, MapToolCallsToDtos(message.toolCalls) → toolCallDtos.
-   3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: contentDtos, toolCalls: toolCallDtos, toolCallId, files mapped to GetMessagesFile[], createdAt, updatedAt }).
-4. Return succeed(items).
+   2. Map message domain fields to Dto types: MapContentPartsToDtos(message.content) → contentDtos.
+   3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: contentDtos, files mapped to GetMessagesFile[], createdAt, updatedAt }).
+5. Return succeed(items).
 
 ### App.ListConversations (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
 
@@ -477,6 +485,11 @@ App action boundary. They live in the application layer.
 1. RequireNonEmptyString(canonicalUrl, "canonicalUrl") → if failure, return failure.
 2. Infra.RemoveBlob(canonicalUrl) → if failure, return failure.
 
+### SendToLLMChatService (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
+
+1. Infra.LlmComplete(messages) → llmResult → if failure, return failure.
+2. Return succeed(llmResult).
+
 ## Infra Actions
 
 ### Infra.UpsertConversationRow (record: CreateConversationRecord): Result<Conversation, StoreError>
@@ -569,6 +582,14 @@ App action boundary. They live in the application layer.
 1. R2Client.delete(url) → if error, return BlobStoreError.
 2. Return succeed(void).
 
+### Infra.LlmComplete (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
+
+1. Map domain Message[] to LangChain BaseMessage[] (user → HumanMessage, assistant → AIMessage, system → SystemMessage, tool → ToolMessage).
+2. BaseChatModel.invoke(baseMessages) → aiMessage → if error, return LlmError.
+3. Map aiMessage content to LlmCompletionResult.content (ReadonlyArray\<ContentPart\>).
+4. Map aiMessage tool_calls to LlmCompletionResult.toolCalls (ReadonlyArray\<ToolCall\>).
+5. Return succeed(llmCompletionResult).
+
 ## Notes
 
 - Actions use early-return-on-failure: the first `Failure` result short-circuits
@@ -591,7 +612,7 @@ App action boundary. They live in the application layer.
   of store (relational vs object) while remaining in the domain layer. The
   `Infra.*` actions are the repository/adapter layer.
 - `ContentPartDto`/`ToolCallDto`/`MessageType` are application-layer types
-  exposed via Flow I/O Types. `ContentPart`/`ToolCall`/`DomainMessageType`
+  exposed via Flow I/O Types. `ContentPart`/`ToolCall`/`LlmMessageType`
   are domain-layer types used by entities and domain actions. `App.*` actions
   sit at the boundary and map between the two using Application Mapping
   Utilities. This ensures inbound adapters never import domain types directly

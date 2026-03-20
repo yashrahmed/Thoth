@@ -4,26 +4,27 @@ import type {
   MessagePageRequest,
   MessageSequencePageRequest,
 } from "../contracts/message-repository";
-import type { Message, MessageType } from "../objects/message";
+import type { Message } from "../objects/message";
 import {
   BlobStoreError,
   NotFoundError,
   StoreError,
   ValidationError,
 } from "../objects/errors";
-import type { Result } from "../objects/result";
+import { failure, type Result } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
+import { ContentPartType } from "../objects/content-part-type";
+import { LLMMessageType } from "../objects/llm";
 import type { ContentPart, ToolCall } from "../objects/message-content";
-import { failure } from "../objects/result";
 import {
   requireNonEmptyString,
   requirePositiveInteger,
   requirePresent,
 } from "../validation";
 
-export interface CreateMessageInput {
+interface CreateMessageInput {
   readonly conversationId: string;
-  readonly type: MessageType;
+  readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -31,9 +32,9 @@ export interface CreateMessageInput {
   readonly fileIds: ReadonlyArray<string>;
 }
 
-export interface CreateNextMessageInput {
+interface CreateNextMessageInput {
   readonly conversationId: string;
-  readonly type: MessageType;
+  readonly type: LLMMessageType;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
   readonly toolCallId: string;
@@ -284,7 +285,7 @@ export class MessageDomainService {
 
 function validateMessageType(
   value: string,
-): Result<MessageType, ValidationError> {
+): Result<LLMMessageType, ValidationError> {
   const typeResult = requireNonEmptyString(value, "type");
 
   if (!typeResult.ok) {
@@ -292,10 +293,10 @@ function validateMessageType(
   }
 
   if (
-    value !== "user" &&
-    value !== "assistant" &&
-    value !== "system" &&
-    value !== "tool"
+    value !== LLMMessageType.User &&
+    value !== LLMMessageType.Assistant &&
+    value !== LLMMessageType.System &&
+    value !== LLMMessageType.Tool
   ) {
     return failure(
       new ValidationError(
@@ -325,7 +326,7 @@ function validateContent(
   }
 
   for (const part of content) {
-    if (part.type === "text") {
+    if (part.type === ContentPartType.Text) {
       const textResult = requireNonEmptyString(part.text, "content.text");
 
       if (!textResult.ok) {
@@ -335,7 +336,7 @@ function validateContent(
       continue;
     }
 
-    if (part.type === "image_url") {
+    if (part.type === ContentPartType.ImageUrl) {
       const imageUrlResult = requireNonEmptyString(
         part.imageUrl.url,
         "content.imageUrl.url",
@@ -348,7 +349,7 @@ function validateContent(
       continue;
     }
 
-    if (part.type === "file") {
+    if (part.type === ContentPartType.File) {
       const fileIdResult = requireNonEmptyString(part.fileId, "content.fileId");
 
       if (!fileIdResult.ok) {
@@ -358,7 +359,7 @@ function validateContent(
       continue;
     }
 
-    if (part.type === "audio") {
+    if (part.type === ContentPartType.Audio) {
       const dataResult = requireNonEmptyString(part.data, "content.data");
 
       if (!dataResult.ok) {

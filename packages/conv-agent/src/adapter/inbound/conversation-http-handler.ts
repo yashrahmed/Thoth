@@ -1,24 +1,32 @@
-import type {
-  AppendMessageRequest,
-  AppendMessageResult,
-  AppendMessageToConversationFlow,
+import {
+  MESSAGE_TYPES,
+  type AppendMessageToConversationFlow,
+  type AppendMessageRequest as ApplicationAppendMessageRequest,
+  type Attachment,
 } from "../../application/append-message-to-conversation-flow";
-import type { CreateConversationFlow } from "../../application/create-conversation-flow";
-import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
-import type { GetConversationFlow } from "../../application/get-conversation-flow";
 import type {
-  GetMessagesItem,
+  CreateConversationFlow,
+  CreateConversationResult,
+} from "../../application/create-conversation-flow";
+import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
+import type {
+  GetConversationFlow,
+  GetConversationResult,
+} from "../../application/get-conversation-flow";
+import type {
   GetMessagesOnConversationFlow,
+  GetMessagesItem,
 } from "../../application/get-messages-on-conversation-flow";
-import type { ListConversationsFlow } from "../../application/list-conversations-flow";
+import type {
+  ListConversationsFlow,
+  ListConversationsItem,
+} from "../../application/list-conversations-flow";
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",
   "access-control-allow-headers": "content-type",
 };
-
-const MESSAGE_TYPES = ["user", "assistant", "system", "tool"] as const;
 
 interface TransportValidationError {
   readonly kind: "ValidationError";
@@ -40,6 +48,9 @@ type HandlerError =
       readonly id?: string;
       readonly operation?: string;
     };
+
+type ApplicationMessageType = ApplicationAppendMessageRequest["type"];
+type ApplicationContent = ApplicationAppendMessageRequest["content"];
 
 export function createConversationHttpHandler(
   createConversation: CreateConversationFlow,
@@ -114,11 +125,9 @@ export function createConversationHttpHandler(
           return withCors(mapError(appendRequestResult.error));
         }
 
-        const result = await appendMessageToConversation.execute(
-          appendRequestResult.value,
-        );
+        const result = await appendMessageToConversation.execute(appendRequestResult.value);
 
-        return withCors(mapMessageResult(result, 201));
+        return withCors(mapAppendMessageResult(result));
       }
 
       if (chatRoute && req.method === "GET") {
@@ -202,17 +211,14 @@ function mapConversationResult(
   });
 }
 
-function mapMessageResult(
+function mapAppendMessageResult(
   result: Awaited<ReturnType<AppendMessageToConversationFlow["execute"]>>,
-  successStatus: number,
 ): Response {
   if (!result.ok) {
     return mapError(result.error);
   }
 
-  return Response.json(toMessageResponse(result.value), {
-    status: successStatus,
-  });
+  return new Response(null, { status: 204 });
 }
 
 function mapError(error: HandlerError): Response {
@@ -227,11 +233,12 @@ function mapError(error: HandlerError): Response {
   return Response.json({ error }, { status: 500 });
 }
 
-function toConversationResponse(conversation: {
-  readonly id: string;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}) {
+function toConversationResponse(
+  conversation:
+    | CreateConversationResult
+    | GetConversationResult
+    | ListConversationsItem,
+) {
   return {
     id: conversation.id,
     createdAt: conversation.createdAt.toISOString(),
@@ -239,39 +246,24 @@ function toConversationResponse(conversation: {
   };
 }
 
-function toMessageResponse(message: AppendMessageResult | GetMessagesItem) {
-  if ("files" in message) {
-    return {
-      id: message.id,
-      conversationId: message.conversationId,
-      type: message.type,
-      sequenceNumber: message.sequenceNumber,
-      content: message.content,
-      toolCalls: message.toolCalls,
-      toolCallId: message.toolCallId,
-      files: message.files.map((file) => ({
-        id: file.id,
-        canonicalUrl: file.canonicalUrl,
-        filename: file.filename,
-        mimeType: file.mimeType,
-        sizeInBytes: file.sizeInBytes,
-        createdAt: file.createdAt.toISOString(),
-        updatedAt: file.updatedAt.toISOString(),
-      })),
-      createdAt: message.createdAt.toISOString(),
-      updatedAt: message.updatedAt.toISOString(),
-    };
-  }
-
+function toMessageResponse(
+  message: GetMessagesItem,
+) {
   return {
     id: message.id,
     conversationId: message.conversationId,
     type: message.type,
     sequenceNumber: message.sequenceNumber,
     content: message.content,
-    toolCalls: message.toolCalls,
-    toolCallId: message.toolCallId,
-    fileIds: [...message.fileIds],
+    files: message.files.map((file) => ({
+      id: file.id,
+      canonicalUrl: file.canonicalUrl,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      sizeInBytes: file.sizeInBytes,
+      createdAt: file.createdAt.toISOString(),
+      updatedAt: file.updatedAt.toISOString(),
+    })),
     createdAt: message.createdAt.toISOString(),
     updatedAt: message.updatedAt.toISOString(),
   };
@@ -330,7 +322,7 @@ function withCors(response: Response): Response {
 async function parseAppendMessageRequest(
   req: Request,
   conversationId: string,
-): Promise<TransportResult<AppendMessageRequest>> {
+): Promise<TransportResult<ApplicationAppendMessageRequest>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("multipart/form-data")) {
@@ -357,38 +349,13 @@ async function parseAppendMessageRequest(
     );
   }
 
-  const contentResult = parseJsonField<AppendMessageRequest["content"]>(
-    formData,
-    "content",
-  );
+  const contentResult = parseJsonField<ApplicationContent>(formData, "content");
 
   if (!contentResult.ok) {
     return contentResult;
   }
 
-  const toolCallsEntry = formData.get("toolCalls");
-  let toolCalls: AppendMessageRequest["toolCalls"] = [];
-
-  if (toolCallsEntry !== null) {
-    const toolCallsResult = parseJsonValue<AppendMessageRequest["toolCalls"]>(
-      toolCallsEntry,
-      "toolCalls",
-    );
-
-    if (!toolCallsResult.ok) {
-      return toolCallsResult;
-    }
-
-    toolCalls = toolCallsResult.value;
-  }
-
-  const toolCallIdEntry = formData.get("toolCallId");
-  const toolCallId =
-    typeof toolCallIdEntry === "string" ? toolCallIdEntry : "";
-
-  const attachments: Array<
-    AppendMessageRequest["attachments"][number]
-  > = [];
+  const attachments: Attachment[] = [];
 
   for (const [, value] of formData.entries()) {
     if (typeof value === "string") {
@@ -414,8 +381,6 @@ async function parseAppendMessageRequest(
       conversationId,
       type: typeValue,
       content: contentResult.value,
-      toolCalls,
-      toolCallId,
       attachments,
     },
   };
@@ -466,6 +431,6 @@ function transportFailure(
   };
 }
 
-function isMessageType(value: string): value is AppendMessageRequest["type"] {
+function isMessageType(value: string): value is ApplicationMessageType {
   return MESSAGE_TYPES.includes(value as (typeof MESSAGE_TYPES)[number]);
 }

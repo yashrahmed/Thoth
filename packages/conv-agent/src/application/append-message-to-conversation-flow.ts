@@ -1,16 +1,24 @@
-import type { FileContent } from "../domain/objects/file";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type {
   BlobStoreError,
+  LlmError,
   NotFoundError,
   StoreError,
   ValidationError,
 } from "../domain/objects/errors";
-import type { Result } from "../domain/objects/result";
-import type { ContentPart, ToolCall } from "../domain/objects/message-content";
-import type { MessageType } from "../domain/objects/message";
+import { success, type Result } from "../domain/objects/result";
+import {
+  LLM_MESSAGE_TYPES,
+  LLMMessageType,
+  type LLMMessageType as LLMMessageTypeValue,
+} from "../domain/objects/llm";
+import type { FileContent } from "../domain/objects/file";
+import type { DomainContentPart } from "../domain/objects/content-part-type";
+import { type LlmDomainService } from "../domain/services/llm-domain-service";
+
+export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 
 export interface Attachment {
   readonly content: FileContent;
@@ -20,24 +28,9 @@ export interface Attachment {
 
 export interface AppendMessageRequest {
   readonly conversationId: string;
-  readonly type: MessageType;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
+  readonly type: LLMMessageTypeValue;
+  readonly content: ReadonlyArray<DomainContentPart>;
   readonly attachments: ReadonlyArray<Attachment>;
-}
-
-export interface AppendMessageResult {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly type: MessageType;
-  readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
-  readonly fileIds: ReadonlyArray<string>;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
 }
 
 export class AppendMessageToConversationFlow {
@@ -45,17 +38,15 @@ export class AppendMessageToConversationFlow {
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
+    private readonly llmDomainService: LlmDomainService,
   ) {}
 
   async execute(
     request: AppendMessageRequest,
   ): Promise<
     Result<
-      AppendMessageResult,
-      | ValidationError
-      | NotFoundError
-      | StoreError
-      | BlobStoreError
+      void,
+      ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError
     >
   > {
     const conversationResult = await this.conversationDomainService.readFromConversationDBStore(
@@ -79,33 +70,48 @@ export class AppendMessageToConversationFlow {
       return uploadFilesResult;
     }
 
-    const result = await this.messageDomainService.createNextMessage({
+    const createUserMessageResult = await this.messageDomainService.createNextMessage({
       conversationId: request.conversationId,
       type: request.type,
       content: request.content,
-      toolCalls: request.toolCalls,
-      toolCallId: request.toolCallId,
+      toolCalls: [],
+      toolCallId: "",
       fileIds: uploadFilesResult.value.map((file) => file.id),
     });
 
-    if (!result.ok) {
-      return result;
+    if (!createUserMessageResult.ok) {
+      return createUserMessageResult;
     }
 
-    return {
-      ok: true,
-      value: {
-        id: result.value.id,
-        conversationId: result.value.conversationId,
-        type: result.value.type,
-        sequenceNumber: result.value.sequenceNumber,
-        content: result.value.content,
-        toolCalls: result.value.toolCalls,
-        toolCallId: result.value.toolCallId,
-        fileIds: [...result.value.fileIds],
-        createdAt: result.value.createdAt,
-        updatedAt: result.value.updatedAt,
-      },
-    };
+    const allMessagesResult = await this.messageDomainService.readAllMessagesFromMessageDBStore(
+      request.conversationId,
+    );
+
+    if (!allMessagesResult.ok) {
+      return allMessagesResult;
+    }
+
+    const llmResult = await this.llmDomainService.sendToLLMChatService(
+      allMessagesResult.value,
+    );
+
+    if (!llmResult.ok) {
+      return llmResult;
+    }
+
+    const createAssistantMessageResult = await this.messageDomainService.createNextMessage({
+      conversationId: request.conversationId,
+      type: LLMMessageType.Assistant,
+      content: llmResult.value.content,
+      toolCalls: llmResult.value.toolCalls,
+      toolCallId: "",
+      fileIds: [],
+    });
+
+    if (!createAssistantMessageResult.ok) {
+      return createAssistantMessageResult;
+    }
+
+    return success(undefined);
   }
 }

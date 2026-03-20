@@ -1,12 +1,12 @@
 import type { Message } from "../objects/message";
 import type { NotFoundError, StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
+import { type LLMMessageType } from "../objects/llm";
 import type { ContentPart, ToolCall } from "../objects/message-content";
-import type { MessageType } from "../objects/message";
 
 export interface CreateMessageRecord {
   readonly conversationId: string;
-  readonly type: MessageType;
+  readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;

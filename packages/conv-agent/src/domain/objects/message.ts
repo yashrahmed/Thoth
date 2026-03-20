@@ -1,14 +1,15 @@
 import { ConstructionError } from "./errors";
+import { ContentPartType } from "./content-part-type";
+import {
+  LLM_MESSAGE_TYPES,
+  LLMMessageType,
+} from "./llm";
 import type { ContentPart, ToolCall } from "./message-content";
 
-const MESSAGE_TYPES = ["user", "assistant", "system", "tool"] as const;
-
-export type MessageType = (typeof MESSAGE_TYPES)[number];
-
-export interface MessageProps {
+interface MessageProps {
   readonly id: string;
   readonly conversationId: string;
-  readonly type: MessageType;
+  readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -21,7 +22,7 @@ export interface MessageProps {
 export class Message {
   readonly id: string;
   readonly conversationId: string;
-  readonly type: MessageType;
+  readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<ContentPart>;
   readonly toolCalls: ReadonlyArray<ToolCall>;
@@ -42,7 +43,7 @@ export class Message {
       );
     }
 
-    if (!MESSAGE_TYPES.includes(props.type)) {
+    if (!LLM_MESSAGE_TYPES.includes(props.type)) {
       throw new ConstructionError(
         "Message",
         "Message type must be one of user, assistant, system, or tool.",
@@ -108,7 +109,7 @@ function validateContent(content: ReadonlyArray<ContentPart>): void {
   }
 
   for (const part of content) {
-    if (part.type === "text") {
+    if (part.type === ContentPartType.Text) {
       if (part.text.trim().length === 0) {
         throw new ConstructionError(
           "Message",
@@ -119,7 +120,7 @@ function validateContent(content: ReadonlyArray<ContentPart>): void {
       continue;
     }
 
-    if (part.type === "image_url") {
+    if (part.type === ContentPartType.ImageUrl) {
       if (part.imageUrl.url.trim().length === 0) {
         throw new ConstructionError(
           "Message",
@@ -130,7 +131,7 @@ function validateContent(content: ReadonlyArray<ContentPart>): void {
       continue;
     }
 
-    if (part.type === "file") {
+    if (part.type === ContentPartType.File) {
       if (part.fileId.trim().length === 0) {
         throw new ConstructionError(
           "Message",
@@ -141,7 +142,7 @@ function validateContent(content: ReadonlyArray<ContentPart>): void {
       continue;
     }
 
-    if (part.type === "audio") {
+    if (part.type === ContentPartType.Audio) {
       if (part.data.trim().length === 0) {
         throw new ConstructionError(
           "Message",

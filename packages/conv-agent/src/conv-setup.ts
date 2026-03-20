@@ -1,5 +1,6 @@
 import { R2BlobRepository } from "./adapter/blob/r2-blob-repository";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
+import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";
 import { createPostgresDatabase } from "./adapter/postgres/postgres-database";
 import { PostgresConversationRepository } from "./adapter/postgres/postgres-conversation-repository";
 import { PostgresFileRepository } from "./adapter/postgres/postgres-file-repository";
@@ -13,9 +14,10 @@ import { ListConversationsFlow } from "./application/list-conversations-flow";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
+import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 
-export interface ConvSetupBlobStorage {
+interface ConvSetupBlobStorage {
   readonly endpoint: string;
   readonly bucket: string;
   readonly region: string;
@@ -24,7 +26,7 @@ export interface ConvSetupBlobStorage {
   readonly secretAccessKey: string;
 }
 
-export interface ConvSetupInput {
+interface ConvSetupInput {
   readonly port: number;
   readonly databaseUrl: string;
   readonly blobStorage: ConvSetupBlobStorage;
@@ -52,6 +54,9 @@ export async function convSetup(
       conversationRepository,
     );
     const blobDomainService = new BlobDomainService(blobRepository);
+    const llmDomainService = new LlmDomainService(
+      new PlaceholderLlmRepository(),
+    );
     const fileDomainService = new FileDomainService(
       fileRepository,
       blobDomainService,
@@ -72,6 +77,7 @@ export async function convSetup(
           conversationDomainService,
           messageDomainService,
           fileDomainService,
+          llmDomainService,
         ),
         new GetMessagesOnConversationFlow(
           conversationDomainService,

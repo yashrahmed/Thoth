@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
+import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
 import type {
   ConversationOffsetPageRequest,
   CreateConversationRecord,
@@ -18,8 +19,10 @@ import type {
 import { Conversation } from "./domain/objects/conversation";
 import { ContentPartType } from "./domain/objects/content-part-type";
 import { File as StoredFile } from "./domain/objects/file";
+import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
 import {
   EntityType,
+  LlmError,
   NotFoundError,
   type StoreError,
 } from "./domain/objects/errors";
@@ -29,6 +32,7 @@ import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
+import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
@@ -122,8 +126,6 @@ describe("createConversationHttpHandler", () => {
 
     formData.set("type", "assistant");
     formData.set("content", JSON.stringify([textPart("hello")]));
-    formData.set("toolCalls", JSON.stringify([toolCall("tool-call-1", "search")]));
-    formData.set("toolCallId", "tool-call-1");
     formData.set(
       "attachment",
       new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }),
@@ -136,19 +138,8 @@ describe("createConversationHttpHandler", () => {
       }),
     );
 
-    expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({
-      id: "message-1",
-      conversationId: "conversation-1",
-      type: "assistant",
-      sequenceNumber: 1,
-      content: [textPart("hello")],
-      toolCalls: [toolCall("tool-call-1", "search")],
-      toolCallId: "tool-call-1",
-      fileIds: ["file-1"],
-      createdAt: "2026-03-16T12:00:00.000Z",
-      updatedAt: "2026-03-16T12:00:00.000Z",
-    });
+    expect(response.status).toBe(204);
+    expect(await response.text()).toBe("");
   });
 
   test("rejects invalid rich-message payloads", async () => {
@@ -185,7 +176,7 @@ describe("createConversationHttpHandler", () => {
       mustCreateMessage(
         "message-1",
         "conversation-1",
-        "user",
+        LLMMessageType.User,
         1,
         [textPart("one")],
         [],
@@ -196,7 +187,7 @@ describe("createConversationHttpHandler", () => {
       mustCreateMessage(
         "message-2",
         "conversation-1",
-        "assistant",
+        LLMMessageType.Assistant,
         2,
         [textPart("two")],
         [toolCall("tool-call-2", "search")],
@@ -237,8 +228,6 @@ describe("createConversationHttpHandler", () => {
           type: "user",
           sequenceNumber: 1,
           content: [textPart("one")],
-          toolCalls: [],
-          toolCallId: "",
           files: [
             {
               id: "file-1",
@@ -259,8 +248,6 @@ describe("createConversationHttpHandler", () => {
           type: "assistant",
           sequenceNumber: 2,
           content: [textPart("two")],
-          toolCalls: [toolCall("tool-call-2", "search")],
-          toolCallId: "tool-call-2",
           files: [],
           createdAt: "2026-03-16T12:01:00.000Z",
           updatedAt: "2026-03-16T12:01:00.000Z",
@@ -294,6 +281,7 @@ function buildHandler(overrides?: {
   readonly messageRepository?: InMemoryMessageRepository;
   readonly fileRepository?: InMemoryFileRepository;
   readonly blobRepository?: InMemoryBlobRepository;
+  readonly llmCompletionService?: InMemoryLlmCompletionService;
 }) {
   const conversationRepository =
     overrides?.conversationRepository ?? new InMemoryConversationRepository();
@@ -301,6 +289,8 @@ function buildHandler(overrides?: {
     overrides?.messageRepository ?? new InMemoryMessageRepository();
   const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
+  const llmCompletionService =
+    overrides?.llmCompletionService ?? new InMemoryLlmCompletionService();
   const now = () => new Date("2026-03-16T12:00:00.000Z");
   const conversationDomainService = new ConversationDomainService(
     conversationRepository,
@@ -308,6 +298,7 @@ function buildHandler(overrides?: {
   );
   const blobDomainService = new BlobDomainService(blobRepository);
   const messageDomainService = new MessageDomainService(messageRepository, now);
+  const llmDomainService = new LlmDomainService(llmCompletionService);
   const fileDomainService = new FileDomainService(
     fileRepository,
     blobDomainService,
@@ -327,6 +318,7 @@ function buildHandler(overrides?: {
       conversationDomainService,
       messageDomainService,
       fileDomainService,
+      llmDomainService,
     ),
     new GetMessagesOnConversationFlow(
       conversationDomainService,
@@ -513,8 +505,25 @@ class InMemoryBlobRepository implements BlobRepository {
     return success(url);
   }
 
-  async removeBlob(url: string) {
+  async removeBlob(_url: string) {
     return success(undefined);
+  }
+}
+
+class InMemoryLlmCompletionService implements LlmCompletionService {
+  result: Result<LlmCompletionResult, LlmError> | null = null;
+
+  async complete(messages: ReadonlyArray<Message>) {
+    if (this.result) {
+      return this.result;
+    }
+
+    const latestMessage = messages.at(-1);
+
+    return success({
+      content: latestMessage ? [...latestMessage.content] : [textPart("empty")],
+      toolCalls: [],
+    });
   }
 }
 
@@ -529,7 +538,7 @@ function mustCreateConversation(id: string, isoTimestamp: string): Conversation 
 function mustCreateMessage(
   id: string,
   conversationId: string,
-  type: "user" | "assistant" | "system" | "tool",
+  type: LLMMessageType,
   sequenceNumber: number,
   content: ReadonlyArray<ContentPart>,
   toolCalls: ReadonlyArray<ToolCall>,

@@ -73,3 +73,8 @@ export class ConstructionError {
   ) {}
 }
 
+export class LlmError {
+  readonly kind = "LlmError";
+
+  constructor(readonly message: string) {}
+}

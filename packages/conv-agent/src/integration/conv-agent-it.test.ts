@@ -23,7 +23,7 @@ afterAll(async () => {
   setup = undefined;
 });
 
-test("creates 10 image messages, paginates 5 at a time, and cleans up", async () => {
+test("creates 10 user messages plus assistant replies, paginates 5 at a time, and cleans up", async () => {
   const startedSetup = requireSetup();
   let conversationId: string | undefined;
   const imageBytes = readFileSync(IMAGE_PATH);
@@ -44,7 +44,7 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
     expect(createdConversation.id).toEqual(expect.any(String));
     conversationId = createdConversation.id;
 
-    // Append 10 image-backed messages so the API has enough data to paginate.
+    // Append 10 image-backed user messages; each append also creates an assistant reply.
     for (let index = 1; index <= 10; index += 1) {
       const appendResponse = await fetch(
         new URL(`/conversations/${conversationId}/chat`, startedSetup.server.url),
@@ -57,17 +57,8 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
         },
       );
 
-      expect(appendResponse.status).toBe(201);
-
-      const createdMessage = await appendResponse.json();
-
-      expect(createdMessage.conversationId).toBe(conversationId);
-      expect(createdMessage.type).toBe("user");
-      expect(createdMessage.sequenceNumber).toBe(index);
-      expect(createdMessage.content).toEqual([
-        { type: "text", text: `Manual lambo image upload ${index}` },
-      ]);
-      expect(createdMessage.fileIds).toHaveLength(1);
+      expect(appendResponse.status).toBe(204);
+      expect(await appendResponse.text()).toBe("");
     }
 
     // Confirm the conversation itself is still readable before paging messages.
@@ -81,7 +72,7 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
 
     expect(fetchedConversation.id).toBe(conversationId);
 
-    // Read the first 5 messages and assert the first half of the sequence.
+    // Read the first 5 visible messages and assert alternating user/assistant output.
     const firstPageResponse = await fetch(
       new URL(
         `/conversations/${conversationId}/chat?pageNum=1&pageSize=5`,
@@ -99,20 +90,27 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
 
     for (let index = 0; index < 5; index += 1) {
       const expectedSequence = index + 1;
+      const expectedMessageIndex = Math.ceil(expectedSequence / 2);
+      const expectedType = expectedSequence % 2 === 1 ? "user" : "assistant";
       expect(firstPage.items[index]?.conversationId).toBe(conversationId);
       expect(firstPage.items[index]?.sequenceNumber).toBe(expectedSequence);
+      expect(firstPage.items[index]?.type).toBe(expectedType);
       expect(firstPage.items[index]?.content).toEqual([
-        { type: "text", text: `Manual lambo image upload ${expectedSequence}` },
+        { type: "text", text: `Manual lambo image upload ${expectedMessageIndex}` },
       ]);
-      expect(firstPage.items[index]?.files).toHaveLength(1);
-      expect(firstPage.items[index]?.files[0]).toMatchObject({
-        filename: "lambo.jpg",
-        mimeType: "image/jpeg",
-        sizeInBytes: imageBytes.byteLength,
-      });
+      if (expectedType === "user") {
+        expect(firstPage.items[index]?.files).toHaveLength(1);
+        expect(firstPage.items[index]?.files[0]).toMatchObject({
+          filename: "lambo.jpg",
+          mimeType: "image/jpeg",
+          sizeInBytes: imageBytes.byteLength,
+        });
+      } else {
+        expect(firstPage.items[index]?.files).toEqual([]);
+      }
     }
 
-    // Read the second 5 messages and assert the remaining half of the sequence.
+    // Read the second 5 visible messages and assert the sequence continues.
     const secondPageResponse = await fetch(
       new URL(
         `/conversations/${conversationId}/chat?pageNum=2&pageSize=5`,
@@ -130,17 +128,24 @@ test("creates 10 image messages, paginates 5 at a time, and cleans up", async ()
 
     for (let index = 0; index < 5; index += 1) {
       const expectedSequence = index + 6;
+      const expectedMessageIndex = Math.ceil(expectedSequence / 2);
+      const expectedType = expectedSequence % 2 === 1 ? "user" : "assistant";
       expect(secondPage.items[index]?.conversationId).toBe(conversationId);
       expect(secondPage.items[index]?.sequenceNumber).toBe(expectedSequence);
+      expect(secondPage.items[index]?.type).toBe(expectedType);
       expect(secondPage.items[index]?.content).toEqual([
-        { type: "text", text: `Manual lambo image upload ${expectedSequence}` },
+        { type: "text", text: `Manual lambo image upload ${expectedMessageIndex}` },
       ]);
-      expect(secondPage.items[index]?.files).toHaveLength(1);
-      expect(secondPage.items[index]?.files[0]).toMatchObject({
-        filename: "lambo.jpg",
-        mimeType: "image/jpeg",
-        sizeInBytes: imageBytes.byteLength,
-      });
+      if (expectedType === "user") {
+        expect(secondPage.items[index]?.files).toHaveLength(1);
+        expect(secondPage.items[index]?.files[0]).toMatchObject({
+          filename: "lambo.jpg",
+          mimeType: "image/jpeg",
+          sizeInBytes: imageBytes.byteLength,
+        });
+      } else {
+        expect(secondPage.items[index]?.files).toEqual([]);
+      }
     }
 
     // Delete the conversation and verify the API reports it as gone.

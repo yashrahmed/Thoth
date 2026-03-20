@@ -3,26 +3,13 @@ import { type MessageDomainService } from "../domain/services/message-domain-ser
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
-import type { ContentPart, ToolCall } from "../domain/objects/message-content";
-import type { MessageType } from "../domain/objects/message";
+import { LLMMessageType, type LLMMessageType as MessageType } from "../domain/objects/llm";
+import type { DomainContentPart } from "../domain/objects/content-part-type";
 
 export interface GetMessagesQuery {
   readonly conversationId: string;
   readonly pageNum: number;
   readonly pageSize: number;
-}
-
-export interface GetMessagesItem {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly type: MessageType;
-  readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
-  readonly files: ReadonlyArray<GetMessagesFile>;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
 }
 
 export interface GetMessagesFile {
@@ -31,6 +18,17 @@ export interface GetMessagesFile {
   readonly filename: string;
   readonly mimeType: string;
   readonly sizeInBytes: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface GetMessagesItem {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly type: MessageType;
+  readonly sequenceNumber: number;
+  readonly content: ReadonlyArray<DomainContentPart>;
+  readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -68,6 +66,13 @@ export class GetMessagesOnConversationFlow {
     const items: GetMessagesItem[] = [];
 
     for (const message of result.value) {
+      if (
+        message.type !== LLMMessageType.User &&
+        message.type !== LLMMessageType.Assistant
+      ) {
+        continue;
+      }
+
       const filesResult = await this.fileDomainService.getFiles({
         fileIds: message.fileIds,
       });
@@ -82,8 +87,6 @@ export class GetMessagesOnConversationFlow {
         type: message.type,
         sequenceNumber: message.sequenceNumber,
         content: message.content,
-        toolCalls: message.toolCalls,
-        toolCallId: message.toolCallId,
         files: filesResult.value.map((file) => ({
           id: file.id,
           canonicalUrl: file.canonicalUrl,

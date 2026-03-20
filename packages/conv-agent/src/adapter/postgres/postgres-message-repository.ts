@@ -3,7 +3,8 @@ import type {
   MessageRepository,
   MessageSequencePageRequest,
 } from "../../domain/contracts/message-repository";
-import { Message, type MessageType } from "../../domain/objects/message";
+import { Message } from "../../domain/objects/message";
+import { type LLMMessageType } from "../../domain/objects/llm";
 import {
   EntityType,
   NotFoundError,
@@ -17,7 +18,7 @@ import type { ContentPart, ToolCall } from "../../domain/objects/message-content
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
-  readonly type: MessageType;
+  readonly type: LLMMessageType;
   readonly sequence_number: number;
   readonly content: ContentPart[];
   readonly tool_calls: ToolCall[];

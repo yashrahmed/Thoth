@@ -4,23 +4,11 @@ import {
   type AppendMessageRequest as ApplicationAppendMessageRequest,
   type Attachment,
 } from "../../application/append-message-to-conversation-flow";
-import type {
-  CreateConversationFlow,
-  CreateConversationResult,
-} from "../../application/create-conversation-flow";
+import type { CreateConversationFlow, CreateConversationResult } from "../../application/create-conversation-flow";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
-import type {
-  GetConversationFlow,
-  GetConversationResult,
-} from "../../application/get-conversation-flow";
-import type {
-  GetMessagesOnConversationFlow,
-  GetMessagesItem,
-} from "../../application/get-messages-on-conversation-flow";
-import type {
-  ListConversationsFlow,
-  ListConversationsItem,
-} from "../../application/list-conversations-flow";
+import type { GetConversationFlow, GetConversationResult } from "../../application/get-conversation-flow";
+import type { GetMessagesOnConversationFlow, GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
+import type { ListConversationsFlow, ListConversationsItem } from "../../application/list-conversations-flow";
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -34,9 +22,7 @@ interface TransportValidationError {
   readonly message: string;
 }
 
-type TransportResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: TransportValidationError };
+type TransportResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: TransportValidationError };
 
 type HandlerError =
   | TransportValidationError
@@ -116,10 +102,7 @@ export function createConversationHttpHandler(
       const chatRoute = getConversationChatRoute(pathname);
 
       if (chatRoute && req.method === "POST") {
-        const appendRequestResult = await parseAppendMessageRequest(
-          req,
-          chatRoute.conversationId,
-        );
+        const appendRequestResult = await parseAppendMessageRequest(req, chatRoute.conversationId);
 
         if (!appendRequestResult.ok) {
           return withCors(mapError(appendRequestResult.error));
@@ -171,15 +154,9 @@ export function createConversationHttpHandler(
         return withCors(new Response(null, { status: 204 }));
       }
 
-      return withCors(
-        Response.json(
-          { error: `Route ${req.method} ${pathname} is not supported.` },
-          { status: 404 },
-        ),
-      );
+      return withCors(Response.json({ error: `Route ${req.method} ${pathname} is not supported.` }, { status: 404 }));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unexpected conv-agent error.";
+      const message = error instanceof Error ? error.message : "Unexpected conv-agent error.";
 
       return withCors(
         Response.json(
@@ -197,9 +174,7 @@ export function createConversationHttpHandler(
 }
 
 function mapConversationResult(
-  result:
-    | Awaited<ReturnType<CreateConversationFlow["execute"]>>
-    | Awaited<ReturnType<GetConversationFlow["execute"]>>,
+  result: Awaited<ReturnType<CreateConversationFlow["execute"]>> | Awaited<ReturnType<GetConversationFlow["execute"]>>,
   successStatus: number,
 ): Response {
   if (!result.ok) {
@@ -211,9 +186,7 @@ function mapConversationResult(
   });
 }
 
-function mapAppendMessageResult(
-  result: Awaited<ReturnType<AppendMessageToConversationFlow["execute"]>>,
-): Response {
+function mapAppendMessageResult(result: Awaited<ReturnType<AppendMessageToConversationFlow["execute"]>>): Response {
   if (!result.ok) {
     return mapError(result.error);
   }
@@ -233,12 +206,7 @@ function mapError(error: HandlerError): Response {
   return Response.json({ error }, { status: 500 });
 }
 
-function toConversationResponse(
-  conversation:
-    | CreateConversationResult
-    | GetConversationResult
-    | ListConversationsItem,
-) {
+function toConversationResponse(conversation: CreateConversationResult | GetConversationResult | ListConversationsItem) {
   return {
     id: conversation.id,
     createdAt: conversation.createdAt.toISOString(),
@@ -246,9 +214,7 @@ function toConversationResponse(
   };
 }
 
-function toMessageResponse(
-  message: GetMessagesItem,
-) {
+function toMessageResponse(message: GetMessagesItem) {
   return {
     id: message.id,
     conversationId: message.conversationId,
@@ -279,16 +245,10 @@ function getConversationId(pathname: string): string | null {
   return null;
 }
 
-function getConversationChatRoute(
-  pathname: string,
-): { readonly conversationId: string } | null {
+function getConversationChatRoute(pathname: string): { readonly conversationId: string } | null {
   const segments = pathname.split("/").filter(Boolean);
 
-  if (
-    segments.length === 3 &&
-    segments[0] === "conversations" &&
-    segments[2] === "chat"
-  ) {
+  if (segments.length === 3 && segments[0] === "conversations" && segments[2] === "chat") {
     return {
       conversationId: segments[1] ?? "",
     };
@@ -319,17 +279,11 @@ function withCors(response: Response): Response {
   });
 }
 
-async function parseAppendMessageRequest(
-  req: Request,
-  conversationId: string,
-): Promise<TransportResult<ApplicationAppendMessageRequest>> {
+async function parseAppendMessageRequest(req: Request, conversationId: string): Promise<TransportResult<ApplicationAppendMessageRequest>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("multipart/form-data")) {
-    return transportFailure(
-      "content-type",
-      "content-type must be multipart/form-data.",
-    );
+    return transportFailure("content-type", "content-type must be multipart/form-data.");
   }
 
   let formData: FormData;
@@ -343,10 +297,7 @@ async function parseAppendMessageRequest(
   const typeValue = formData.get("type");
 
   if (typeof typeValue !== "string" || !isMessageType(typeValue)) {
-    return transportFailure(
-      "type",
-      "type must be one of user, assistant, system, or tool.",
-    );
+    return transportFailure("type", "type must be one of user, assistant, system, or tool.");
   }
 
   const contentResult = parseJsonField<ApplicationContent>(formData, "content");
@@ -386,10 +337,7 @@ async function parseAppendMessageRequest(
   };
 }
 
-function parseJsonField<T>(
-  formData: FormData,
-  fieldName: string,
-): TransportResult<T> {
+function parseJsonField<T>(formData: FormData, fieldName: string): TransportResult<T> {
   const value = formData.get(fieldName);
 
   if (typeof value !== "string") {
@@ -399,10 +347,7 @@ function parseJsonField<T>(
   return parseJsonValue<T>(value, fieldName);
 }
 
-function parseJsonValue<T>(
-  value: FormDataEntryValue,
-  fieldName: string,
-): TransportResult<T> {
+function parseJsonValue<T>(value: FormDataEntryValue, fieldName: string): TransportResult<T> {
   if (typeof value !== "string") {
     return transportFailure(fieldName, `${fieldName} must be a JSON string.`);
   }
@@ -417,10 +362,7 @@ function parseJsonValue<T>(
   }
 }
 
-function transportFailure(
-  fieldName: string,
-  message: string,
-): TransportResult<never> {
+function transportFailure(fieldName: string, message: string): TransportResult<never> {
   return {
     ok: false,
     error: {

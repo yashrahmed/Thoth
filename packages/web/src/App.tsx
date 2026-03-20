@@ -45,15 +45,12 @@ type MessagePageResponse = {
   readonly pageSize: number;
 };
 
-const CONV_AGENT_URL =
-  import.meta.env.VITE_CONV_AGENT_URL?.trim() || "http://localhost:3001";
+const CONV_AGENT_URL = import.meta.env.VITE_CONV_AGENT_URL?.trim() || "http://localhost:3001";
 const MESSAGE_PAGE_SIZE = 50;
 const CONVERSATION_PAGE_SIZE = 40;
 
 export function App() {
-  const [conversations, setConversations] = useState<ReadonlyArray<ConversationResponse>>(
-    [],
-  );
+  const [conversations, setConversations] = useState<ReadonlyArray<ConversationResponse>>([]);
   const [conversationId, setConversationId] = useState<string>("");
   const [messages, setMessages] = useState<ReadonlyArray<ChatMessage>>([]);
   const [draft, setDraft] = useState("");
@@ -111,19 +108,13 @@ export function App() {
         await createConversation();
       }
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to connect to conv-agent.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to connect to conv-agent.");
     } finally {
       setBooting(false);
     }
   }
 
-  async function loadConversations(
-    options?: { readonly quiet?: boolean },
-  ): Promise<ReadonlyArray<ConversationResponse>> {
+  async function loadConversations(options?: { readonly quiet?: boolean }): Promise<ReadonlyArray<ConversationResponse>> {
     if (!options?.quiet) {
       setLoadingConversations(true);
     }
@@ -173,20 +164,13 @@ export function App() {
       await loadConversations({ quiet: true });
       await loadMessages(conversation.id, { quiet: true });
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to connect to conv-agent.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to connect to conv-agent.");
     } finally {
       setBooting(false);
     }
   }
 
-  async function loadMessages(
-    id: string,
-    options?: { readonly quiet?: boolean },
-  ): Promise<void> {
+  async function loadMessages(id: string, options?: { readonly quiet?: boolean }): Promise<void> {
     if (!options?.quiet) {
       setRefreshing(true);
     }
@@ -207,11 +191,7 @@ export function App() {
       setMessages(page.items);
       setError("");
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to load messages.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to load messages.");
     } finally {
       if (!options?.quiet) {
         setRefreshing(false);
@@ -237,20 +217,15 @@ export function App() {
     setError("");
 
     try {
-      const response = await fetch(
-        new URL(`/conversations/${id}`, CONV_AGENT_URL),
-        {
-          method: "DELETE",
-        },
-      );
+      const response = await fetch(new URL(`/conversations/${id}`, CONV_AGENT_URL), {
+        method: "DELETE",
+      });
 
       if (!response.ok) {
         throw new Error(`Conversation delete failed with ${response.status}.`);
       }
 
-      const remainingConversations = conversations.filter(
-        (conversation) => conversation.id !== id,
-      );
+      const remainingConversations = conversations.filter((conversation) => conversation.id !== id);
 
       setConversations(remainingConversations);
 
@@ -271,11 +246,7 @@ export function App() {
       setMessages([]);
       await createConversation();
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to delete the conversation.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to delete the conversation.");
     } finally {
       setDeletingConversationId("");
     }
@@ -301,9 +272,7 @@ export function App() {
 
     try {
       const formData = new FormData();
-      const content: ContentPart[] = trimmedDraft
-        ? [{ type: "text", text: trimmedDraft }]
-        : [];
+      const content: ContentPart[] = trimmedDraft ? [{ type: "text", text: trimmedDraft }] : [];
 
       formData.set("type", "user");
       formData.set("content", JSON.stringify(content));
@@ -312,13 +281,10 @@ export function App() {
         formData.append("attachment", file);
       }
 
-      const response = await fetch(
-        new URL(`/conversations/${conversationId}/chat`, CONV_AGENT_URL),
-        {
-          method: "POST",
-          body: formData,
-        },
-      );
+      const response = await fetch(new URL(`/conversations/${conversationId}/chat`, CONV_AGENT_URL), {
+        method: "POST",
+        body: formData,
+      });
 
       if (!response.ok) {
         throw new Error(`Message send failed with ${response.status}.`);
@@ -329,11 +295,7 @@ export function App() {
       await loadConversations({ quiet: true });
       await loadMessages(conversationId, { quiet: true });
     } catch (caughtError) {
-      setComposerError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to send the message.",
-      );
+      setComposerError(caughtError instanceof Error ? caughtError.message : "Unable to send the message.");
     } finally {
       setSending(false);
     }
@@ -351,9 +313,7 @@ export function App() {
   }
 
   function removeSelectedFile(indexToRemove: number): void {
-    setSelectedFiles((currentFiles) =>
-      currentFiles.filter((_, index) => index !== indexToRemove),
-    );
+    setSelectedFiles((currentFiles) => currentFiles.filter((_, index) => index !== indexToRemove));
   }
 
   return (
@@ -371,23 +331,14 @@ export function App() {
 
           <div style={statusPanelStyle}>
             <StatusRow label="Endpoint" value={CONV_AGENT_URL} mono />
-            <StatusRow
-              label="Conversation"
-              value={conversationId || "Starting..."}
-              mono
-            />
-            <StatusRow
-              label="State"
-              value={booting ? "Booting" : sending ? "Sending" : refreshing ? "Syncing" : "Ready"}
-            />
+            <StatusRow label="Conversation" value={conversationId || "Starting..."} mono />
+            <StatusRow label="State" value={booting ? "Booting" : sending ? "Sending" : refreshing ? "Syncing" : "Ready"} />
           </div>
 
           <section style={conversationSectionStyle}>
             <div style={conversationSectionHeaderStyle}>
               <p style={sectionEyebrowStyle}>Threads</p>
-              <span style={sectionMetaStyle}>
-                {loadingConversations ? "Loading..." : `${conversations.length} total`}
-              </span>
+              <span style={sectionMetaStyle}>{loadingConversations ? "Loading..." : `${conversations.length} total`}</span>
             </div>
 
             <div style={conversationListStyle}>
@@ -398,14 +349,7 @@ export function App() {
                   const isActive = conversation.id === conversationId;
 
                   return (
-                    <div
-                      key={conversation.id}
-                      style={
-                        isActive
-                          ? activeConversationButtonStyle
-                          : conversationButtonStyle
-                      }
-                    >
+                    <div key={conversation.id} style={isActive ? activeConversationButtonStyle : conversationButtonStyle}>
                       <button
                         type="button"
                         onClick={() => {
@@ -413,12 +357,8 @@ export function App() {
                         }}
                         style={conversationSelectButtonStyle}
                       >
-                        <span style={conversationButtonTitleStyle}>
-                          {formatConversationLabel(conversation.id)}
-                        </span>
-                        <span style={conversationButtonMetaStyle}>
-                          {formatTimestamp(conversation.updatedAt)}
-                        </span>
+                        <span style={conversationButtonTitleStyle}>{formatConversationLabel(conversation.id)}</span>
+                        <span style={conversationButtonMetaStyle}>{formatTimestamp(conversation.updatedAt)}</span>
                       </button>
                       <button
                         type="button"
@@ -469,30 +409,13 @@ export function App() {
         <main style={chatPanelStyle}>
           <div ref={scrollerRef} style={messageListStyle}>
             {booting ? (
-              <EmptyState
-                title="Starting conversation"
-                body="The UI is creating a fresh conversation and waiting for the service."
-              />
+              <EmptyState title="Starting conversation" body="The UI is creating a fresh conversation and waiting for the service." />
             ) : messages.length === 0 ? (
-              <EmptyState
-                title="No messages yet"
-                body="Send the first prompt to start the thread."
-              />
+              <EmptyState title="No messages yet" body="Send the first prompt to start the thread." />
             ) : (
               messages.map((message) => (
-                <article
-                  key={message.id}
-                  style={
-                    message.type === "user"
-                      ? userBubbleWrapStyle
-                      : assistantBubbleWrapStyle
-                  }
-                >
-                  <div
-                    style={
-                      message.type === "user" ? userBubbleStyle : assistantBubbleStyle
-                    }
-                  >
+                <article key={message.id} style={message.type === "user" ? userBubbleWrapStyle : assistantBubbleWrapStyle}>
+                  <div style={message.type === "user" ? userBubbleStyle : assistantBubbleStyle}>
                     <div style={bubbleMetaStyle}>
                       <span>{message.type === "user" ? "You" : "Assistant"}</span>
                       <span>#{message.sequenceNumber}</span>
@@ -503,13 +426,7 @@ export function App() {
                     {message.files.length > 0 ? (
                       <div style={fileListStyle}>
                         {message.files.map((file) => (
-                          <a
-                            key={file.id}
-                            href={new URL(file.canonicalUrl, CONV_AGENT_URL).toString()}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={fileChipStyle}
-                          >
+                          <a key={file.id} href={new URL(file.canonicalUrl, CONV_AGENT_URL).toString()} target="_blank" rel="noreferrer" style={fileChipStyle}>
                             {file.filename}
                           </a>
                         ))}
@@ -527,18 +444,13 @@ export function App() {
             </label>
             <div style={attachmentToolbarStyle}>
               <label style={attachmentPickerStyle}>
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileSelection}
-                  disabled={booting || sending}
-                  style={visuallyHiddenInputStyle}
-                />
+                <input type="file" multiple onChange={handleFileSelection} disabled={booting || sending} style={visuallyHiddenInputStyle} />
                 Attach Files
               </label>
               {selectedFiles.length > 0 ? (
                 <span style={attachmentSummaryStyle}>
-                  {selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"} selected
+                  {selectedFiles.length} file
+                  {selectedFiles.length === 1 ? "" : "s"} selected
                 </span>
               ) : null}
             </div>
@@ -550,12 +462,7 @@ export function App() {
                       <span style={selectedFileNameStyle}>{file.name}</span>
                       <span style={selectedFileSizeStyle}>{formatFileSize(file.size)}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeSelectedFile(index)}
-                      style={selectedFileRemoveStyle}
-                      aria-label={`Remove ${file.name}`}
-                    >
+                    <button type="button" onClick={() => removeSelectedFile(index)} style={selectedFileRemoveStyle} aria-label={`Remove ${file.name}`}>
                       <CloseIcon />
                     </button>
                   </div>
@@ -572,11 +479,7 @@ export function App() {
                 disabled={booting || sending}
                 style={composerInputStyle}
               />
-              <button
-                type="submit"
-                disabled={booting || sending}
-                style={primaryButtonStyle}
-              >
+              <button type="submit" disabled={booting || sending} style={primaryButtonStyle}>
                 {sending ? "Sending..." : "Send"}
               </button>
             </div>
@@ -588,25 +491,16 @@ export function App() {
   );
 }
 
-function StatusRow(props: {
-  readonly label: string;
-  readonly value: string;
-  readonly mono?: boolean;
-}) {
+function StatusRow(props: { readonly label: string; readonly value: string; readonly mono?: boolean }) {
   return (
     <div style={statusRowStyle}>
       <span style={statusLabelStyle}>{props.label}</span>
-      <span style={props.mono ? statusValueMonoStyle : statusValueStyle}>
-        {props.value}
-      </span>
+      <span style={props.mono ? statusValueMonoStyle : statusValueStyle}>{props.value}</span>
     </div>
   );
 }
 
-function EmptyState(props: {
-  readonly title: string;
-  readonly body: string;
-}) {
+function EmptyState(props: { readonly title: string; readonly body: string }) {
   return (
     <div style={emptyStateStyle}>
       <h2 style={emptyTitleStyle}>{props.title}</h2>
@@ -637,17 +531,7 @@ function ContentPartView(props: { readonly part: ContentPart }) {
 
 function TrashIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 7h16" />
       <path d="M9 4h6" />
       <path d="M7 7l1 12h8l1-12" />
@@ -659,17 +543,7 @@ function TrashIcon() {
 
 function CloseIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 6l12 12" />
       <path d="M18 6L6 18" />
     </svg>
@@ -837,7 +711,7 @@ const statusValueStyle: React.CSSProperties = {
 
 const statusValueMonoStyle: React.CSSProperties = {
   ...statusValueStyle,
-  fontFamily: "\"SFMono-Regular\", Menlo, Consolas, monospace",
+  fontFamily: '"SFMono-Regular", Menlo, Consolas, monospace',
   fontSize: "0.88rem",
   wordBreak: "break-all",
 };
@@ -925,7 +799,7 @@ const deleteConversationButtonStyle: React.CSSProperties = {
 };
 
 const conversationButtonTitleStyle: React.CSSProperties = {
-  fontFamily: "\"SFMono-Regular\", Menlo, Consolas, monospace",
+  fontFamily: '"SFMono-Regular", Menlo, Consolas, monospace',
   fontSize: "0.86rem",
 };
 

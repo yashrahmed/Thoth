@@ -17,11 +17,7 @@ export enum BlobStoreOperation {
   Delete = "delete",
 }
 
-const BLOB_STORE_OPERATION_VALUES = new Set<BlobStoreOperation>([
-  BlobStoreOperation.Upload,
-  BlobStoreOperation.Fetch,
-  BlobStoreOperation.Delete,
-]);
+const BLOB_STORE_OPERATION_VALUES = new Set<BlobStoreOperation>([BlobStoreOperation.Upload, BlobStoreOperation.Fetch, BlobStoreOperation.Delete]);
 
 export class ValidationError {
   readonly kind = "ValidationError";

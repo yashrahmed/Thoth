@@ -37,9 +37,7 @@ export interface ConvSetupResult {
   stop(): Promise<void>;
 }
 
-export async function convSetup(
-  input: ConvSetupInput,
-): Promise<ConvSetupResult> {
+export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult> {
   const database = createPostgresDatabase(input.databaseUrl);
 
   try {
@@ -50,17 +48,10 @@ export async function convSetup(
       accessKeyId: input.blobStorage.accessKeyId,
       secretAccessKey: input.blobStorage.secretAccessKey,
     });
-    const conversationDomainService = new ConversationDomainService(
-      conversationRepository,
-    );
+    const conversationDomainService = new ConversationDomainService(conversationRepository);
     const blobDomainService = new BlobDomainService(blobRepository);
-    const llmDomainService = new LlmDomainService(
-      new PlaceholderLlmRepository(),
-    );
-    const fileDomainService = new FileDomainService(
-      fileRepository,
-      blobDomainService,
-    );
+    const llmDomainService = new LlmDomainService(new PlaceholderLlmRepository());
+    const fileDomainService = new FileDomainService(fileRepository, blobDomainService);
     const messageDomainService = new MessageDomainService(messageRepository);
     const server = Bun.serve({
       port: input.port,
@@ -68,22 +59,9 @@ export async function convSetup(
         new CreateConversationFlow(conversationDomainService),
         new GetConversationFlow(conversationDomainService),
         new ListConversationsFlow(conversationDomainService),
-        new DeleteConversationFlow(
-          conversationDomainService,
-          messageDomainService,
-          fileDomainService,
-        ),
-        new AppendMessageToConversationFlow(
-          conversationDomainService,
-          messageDomainService,
-          fileDomainService,
-          llmDomainService,
-        ),
-        new GetMessagesOnConversationFlow(
-          conversationDomainService,
-          messageDomainService,
-          fileDomainService,
-        ),
+        new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+        new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
+        new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
       ),
     });
     let stopped = false;

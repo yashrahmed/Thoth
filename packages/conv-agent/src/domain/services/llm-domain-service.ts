@@ -5,13 +5,9 @@ import type { Message } from "../objects/message";
 import type { Result } from "../objects/result";
 
 export class LlmDomainService {
-  constructor(
-    private readonly llmCompletionService: LlmCompletionService,
-  ) {}
+  constructor(private readonly llmCompletionService: LlmCompletionService) {}
 
-  async sendToLLMChatService(
-    messages: ReadonlyArray<Message>,
-  ): Promise<Result<LlmCompletionResult, LlmError>> {
+  async sendToLLMChatService(messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>> {
     return this.llmCompletionService.complete(messages);
   }
 }

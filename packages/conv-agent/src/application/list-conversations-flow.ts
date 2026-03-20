@@ -16,9 +16,7 @@ export interface ListConversationsItem {
 export class ListConversationsFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
-  async execute(
-    query: ListConversationsQuery,
-  ): Promise<Result<ListConversationsItem[], StoreError | ValidationError>> {
+  async execute(query: ListConversationsQuery): Promise<Result<ListConversationsItem[], StoreError | ValidationError>> {
     const result = await this.conversationDomainService.readPageFromConversationDBStore({
       pageNum: query.pageNum,
       pageSize: query.pageSize,

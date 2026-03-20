@@ -1,16 +1,7 @@
-import type {
-  CreateMessageRecord,
-  MessageRepository,
-  MessageSequencePageRequest,
-} from "../../domain/contracts/message-repository";
+import type { CreateMessageRecord, MessageRepository, MessageSequencePageRequest } from "../../domain/contracts/message-repository";
 import { Message } from "../../domain/objects/message";
 import { type LLMMessageType } from "../../domain/objects/llm";
-import {
-  EntityType,
-  NotFoundError,
-  StoreError,
-  StoreOperation,
-} from "../../domain/objects/errors";
+import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 import type { ContentPart, ToolCall } from "../../domain/objects/message-content";
@@ -32,13 +23,7 @@ interface CountRow {
   readonly count: number | string | bigint;
 }
 
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | { readonly [key: string]: JsonValue }
-  | JsonValue[];
+type JsonValue = string | number | boolean | null | { readonly [key: string]: JsonValue } | JsonValue[];
 
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
@@ -84,24 +69,12 @@ export class PostgresMessageRepository implements MessageRepository {
       const row = rows[0];
 
       if (!row) {
-        return failure(
-          new StoreError(
-            EntityType.Message,
-            StoreOperation.Persist,
-            "Message row was not returned.",
-          ),
-        );
+        return failure(new StoreError(EntityType.Message, StoreOperation.Persist, "Message row was not returned."));
       }
 
       return mapRow(row, StoreOperation.Persist);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Message,
-          StoreOperation.Persist,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
 
@@ -131,9 +104,7 @@ export class PostgresMessageRepository implements MessageRepository {
 
       return mapRow(row, StoreOperation.Read);
     } catch (error) {
-      return failure(
-        new StoreError(EntityType.Message, StoreOperation.Read, getErrorMessage(error)),
-      );
+      return failure(new StoreError(EntityType.Message, StoreOperation.Read, getErrorMessage(error)));
     }
   }
 
@@ -161,13 +132,7 @@ export class PostgresMessageRepository implements MessageRepository {
 
       return mapRows(rows, StoreOperation.ReadPage);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Message,
-          StoreOperation.ReadPage,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }
   }
 
@@ -192,13 +157,7 @@ export class PostgresMessageRepository implements MessageRepository {
 
       return mapRows(rows, StoreOperation.ReadPage);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Message,
-          StoreOperation.ReadPage,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }
   }
 
@@ -213,24 +172,12 @@ export class PostgresMessageRepository implements MessageRepository {
       const row = rows[0];
 
       if (!row) {
-        return failure(
-          new StoreError(
-            EntityType.Message,
-            StoreOperation.ReadPage,
-            "Message count row was not returned.",
-          ),
-        );
+        return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, "Message count row was not returned."));
       }
 
       return success(Number(row.count));
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Message,
-          StoreOperation.ReadPage,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }
   }
 
@@ -243,21 +190,12 @@ export class PostgresMessageRepository implements MessageRepository {
 
       return success(undefined);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Message,
-          StoreOperation.Remove,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Message, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
 }
 
-function mapRows(
-  rows: MessageRow[],
-  operation: StoreOperation,
-): Result<Message[], StoreError> {
+function mapRows(rows: MessageRow[], operation: StoreOperation): Result<Message[], StoreError> {
   const messages: Message[] = [];
 
   for (const row of rows) {
@@ -273,14 +211,9 @@ function mapRows(
   return success(messages);
 }
 
-function mapRow(
-  row: MessageRow | undefined,
-  operation: StoreOperation,
-): Result<Message, StoreError> {
+function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<Message, StoreError> {
   if (!row) {
-    return failure(
-      new StoreError(EntityType.Message, operation, "Message row was not returned."),
-    );
+    return failure(new StoreError(EntityType.Message, operation, "Message row was not returned."));
   }
 
   try {
@@ -303,13 +236,7 @@ function mapRow(
       return failure(new StoreError(EntityType.Message, operation, error.message));
     }
 
-    return failure(
-      new StoreError(
-        EntityType.Message,
-        operation,
-        "Unexpected message mapping error.",
-      ),
-    );
+    return failure(new StoreError(EntityType.Message, operation, "Unexpected message mapping error."));
   }
 }
 

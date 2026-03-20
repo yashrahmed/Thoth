@@ -1,8 +1,7 @@
 import { getPlanningAgentConfig } from "@thoth/config";
 import { createPlaceholderFetchHandler } from "./placeholder-fetch-handler";
 
-export const createPlanningAgentFetchHandler = () =>
-  createPlaceholderFetchHandler("planning-agent");
+export const createPlanningAgentFetchHandler = () => createPlaceholderFetchHandler("planning-agent");
 
 if (import.meta.main) {
   const server = Bun.serve({

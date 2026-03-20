@@ -1,8 +1,7 @@
 import { getKbCurateAgentConfig } from "@thoth/config";
 import { createPlaceholderFetchHandler } from "./placeholder-fetch-handler";
 
-export const createKbCurateAgentFetchHandler = () =>
-  createPlaceholderFetchHandler("kb-curate-agent");
+export const createKbCurateAgentFetchHandler = () => createPlaceholderFetchHandler("kb-curate-agent");
 
 if (import.meta.main) {
   const server = Bun.serve({

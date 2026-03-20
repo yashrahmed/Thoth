@@ -15,14 +15,8 @@ export interface GetConversationResult {
 export class GetConversationFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
-  async execute(
-    query: GetConversationQuery,
-  ): Promise<
-    Result<GetConversationResult, NotFoundError | StoreError | ValidationError>
-  > {
-    const result = await this.conversationDomainService.readFromConversationDBStore(
-      query.conversationId,
-    );
+  async execute(query: GetConversationQuery): Promise<Result<GetConversationResult, NotFoundError | StoreError | ValidationError>> {
+    const result = await this.conversationDomainService.readFromConversationDBStore(query.conversationId);
 
     if (!result.ok) {
       return result;

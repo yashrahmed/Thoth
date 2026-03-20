@@ -1,26 +1,12 @@
-import type {
-  CreateMessageRecord,
-  MessageRepository,
-  MessagePageRequest,
-  MessageSequencePageRequest,
-} from "../contracts/message-repository";
+import type { CreateMessageRecord, MessageRepository, MessagePageRequest, MessageSequencePageRequest } from "../contracts/message-repository";
 import type { Message } from "../objects/message";
-import {
-  BlobStoreError,
-  NotFoundError,
-  StoreError,
-  ValidationError,
-} from "../objects/errors";
+import { BlobStoreError, NotFoundError, StoreError, ValidationError } from "../objects/errors";
 import { failure, type Result } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
 import { ContentPartType } from "../objects/content-part-type";
 import { LLMMessageType } from "../objects/llm";
 import type { ContentPart, ToolCall } from "../objects/message-content";
-import {
-  requireNonEmptyString,
-  requirePositiveInteger,
-  requirePresent,
-} from "../validation";
+import { requireNonEmptyString, requirePositiveInteger, requirePresent } from "../validation";
 
 interface CreateMessageInput {
   readonly conversationId: string;
@@ -47,30 +33,18 @@ export class MessageDomainService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async createMessage(
-    request: CreateMessageInput,
-  ): Promise<Result<Message, ValidationError | StoreError>> {
-    return this.persistToMessageDBStore(
-      this.buildRecord(request),
-    );
+  async createMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
+    return this.persistToMessageDBStore(this.buildRecord(request));
   }
 
-  async persistToMessageDBStore(
-    record: CreateMessageRecord,
-  ): Promise<Result<Message, ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      record.conversationId,
-      "conversationId",
-    );
+  async persistToMessageDBStore(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(record.conversationId, "conversationId");
 
     if (!conversationIdResult.ok) {
       return conversationIdResult;
     }
 
-    const sequenceNumberResult = requirePositiveInteger(
-      record.sequenceNumber,
-      "sequenceNumber",
-    );
+    const sequenceNumberResult = requirePositiveInteger(record.sequenceNumber, "sequenceNumber");
 
     if (!sequenceNumberResult.ok) {
       return sequenceNumberResult;
@@ -95,10 +69,7 @@ export class MessageDomainService {
     }
 
     if (record.toolCallId.length > 0) {
-      const toolCallIdResult = requireNonEmptyString(
-        record.toolCallId,
-        "toolCallId",
-      );
+      const toolCallIdResult = requireNonEmptyString(record.toolCallId, "toolCallId");
 
       if (!toolCallIdResult.ok) {
         return toolCallIdResult;
@@ -116,13 +87,8 @@ export class MessageDomainService {
     return this.messageRepository.upsertMessageRow(record);
   }
 
-  async readFromMessageDBStore(
-    messageId: string,
-  ): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
-    const messageIdResult = requireNonEmptyString(
-      messageId,
-      "messageId",
-    );
+  async readFromMessageDBStore(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
+    const messageIdResult = requireNonEmptyString(messageId, "messageId");
 
     if (!messageIdResult.ok) {
       return messageIdResult;
@@ -131,13 +97,8 @@ export class MessageDomainService {
     return this.messageRepository.selectMessageRow(messageIdResult.value);
   }
 
-  async readPageFromMessageDBStore(
-    request: MessagePageRequest,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      request.conversationId,
-      "conversationId",
-    );
+  async readPageFromMessageDBStore(request: MessagePageRequest): Promise<Result<Message[], ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(request.conversationId, "conversationId");
 
     if (!conversationIdResult.ok) {
       return conversationIdResult;
@@ -164,47 +125,28 @@ export class MessageDomainService {
     return this.messageRepository.selectMessagePage(pageRequest);
   }
 
-  async readAllMessagesFromMessageDBStore(
-    conversationId: string,
-  ): Promise<Result<Message[], ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      conversationId,
-      "conversationId",
-    );
+  async readAllMessagesFromMessageDBStore(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(conversationId, "conversationId");
 
     if (!conversationIdResult.ok) {
       return conversationIdResult;
     }
 
-    return this.messageRepository.selectAllMessagesByConversation(
-      conversationIdResult.value,
-    );
+    return this.messageRepository.selectAllMessagesByConversation(conversationIdResult.value);
   }
 
-  async readMessageCountFromMessageDBStore(
-    conversationId: string,
-  ): Promise<Result<number, ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(
-      conversationId,
-      "conversationId",
-    );
+  async readMessageCountFromMessageDBStore(conversationId: string): Promise<Result<number, ValidationError | StoreError>> {
+    const conversationIdResult = requireNonEmptyString(conversationId, "conversationId");
 
     if (!conversationIdResult.ok) {
       return conversationIdResult;
     }
 
-    return this.messageRepository.countMessagesByConversation(
-      conversationIdResult.value,
-    );
+    return this.messageRepository.countMessagesByConversation(conversationIdResult.value);
   }
 
-  async removeFromMessageDBStore(
-    messageId: string,
-  ): Promise<Result<void, ValidationError | StoreError>> {
-    const messageIdResult = requireNonEmptyString(
-      messageId,
-      "messageId",
-    );
+  async removeFromMessageDBStore(messageId: string): Promise<Result<void, ValidationError | StoreError>> {
+    const messageIdResult = requireNonEmptyString(messageId, "messageId");
 
     if (!messageIdResult.ok) {
       return messageIdResult;
@@ -212,9 +154,7 @@ export class MessageDomainService {
 
     return this.messageRepository.deleteMessageRow(messageIdResult.value);
   }
-  async deleteMessage(
-    messageId: string,
-  ): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
+  async deleteMessage(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
     const messageResult = await this.readFromMessageDBStore(messageId);
 
     if (!messageResult.ok) {
@@ -224,10 +164,7 @@ export class MessageDomainService {
     return this.removeFromMessageDBStore(messageId);
   }
 
-  async deleteMessageWithFiles(
-    messageId: string,
-    fileDomainService: FileDomainService,
-  ): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
+  async deleteMessageWithFiles(messageId: string, fileDomainService: FileDomainService): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
     const messageResult = await this.readFromMessageDBStore(messageId);
 
     if (!messageResult.ok) {
@@ -244,12 +181,8 @@ export class MessageDomainService {
 
     return this.removeFromMessageDBStore(messageId);
   }
-  async createNextMessage(
-    request: CreateNextMessageInput,
-  ): Promise<Result<Message, ValidationError | StoreError>> {
-    const countResult = await this.readMessageCountFromMessageDBStore(
-      request.conversationId,
-    );
+  async createNextMessage(request: CreateNextMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
+    const countResult = await this.readMessageCountFromMessageDBStore(request.conversationId);
 
     if (!countResult.ok) {
       return countResult;
@@ -283,27 +216,15 @@ export class MessageDomainService {
   }
 }
 
-function validateMessageType(
-  value: string,
-): Result<LLMMessageType, ValidationError> {
+function validateMessageType(value: string): Result<LLMMessageType, ValidationError> {
   const typeResult = requireNonEmptyString(value, "type");
 
   if (!typeResult.ok) {
     return typeResult;
   }
 
-  if (
-    value !== LLMMessageType.User &&
-    value !== LLMMessageType.Assistant &&
-    value !== LLMMessageType.System &&
-    value !== LLMMessageType.Tool
-  ) {
-    return failure(
-      new ValidationError(
-        "type",
-        "type must be one of user, assistant, system, or tool.",
-      ),
-    );
+  if (value !== LLMMessageType.User && value !== LLMMessageType.Assistant && value !== LLMMessageType.System && value !== LLMMessageType.Tool) {
+    return failure(new ValidationError("type", "type must be one of user, assistant, system, or tool."));
   }
 
   return {
@@ -312,9 +233,7 @@ function validateMessageType(
   };
 }
 
-function validateContent(
-  content: ReadonlyArray<ContentPart>,
-): Result<void, ValidationError> {
+function validateContent(content: ReadonlyArray<ContentPart>): Result<void, ValidationError> {
   const presentResult = requirePresent(content, "content");
 
   if (!presentResult.ok) {
@@ -337,10 +256,7 @@ function validateContent(
     }
 
     if (part.type === ContentPartType.ImageUrl) {
-      const imageUrlResult = requireNonEmptyString(
-        part.imageUrl.url,
-        "content.imageUrl.url",
-      );
+      const imageUrlResult = requireNonEmptyString(part.imageUrl.url, "content.imageUrl.url");
 
       if (!imageUrlResult.ok) {
         return imageUrlResult;
@@ -369,20 +285,13 @@ function validateContent(
       continue;
     }
 
-    return failure(
-      new ValidationError(
-        "content.type",
-        "content.type must be text, image_url, file, or audio.",
-      ),
-    );
+    return failure(new ValidationError("content.type", "content.type must be text, image_url, file, or audio."));
   }
 
   return { ok: true, value: undefined };
 }
 
-function validateToolCalls(
-  toolCalls: ReadonlyArray<ToolCall>,
-): Result<void, ValidationError> {
+function validateToolCalls(toolCalls: ReadonlyArray<ToolCall>): Result<void, ValidationError> {
   const presentResult = requirePresent(toolCalls, "toolCalls");
 
   if (!presentResult.ok) {
@@ -390,9 +299,7 @@ function validateToolCalls(
   }
 
   if (!Array.isArray(toolCalls)) {
-    return failure(
-      new ValidationError("toolCalls", "toolCalls must be an array."),
-    );
+    return failure(new ValidationError("toolCalls", "toolCalls must be an array."));
   }
 
   for (const toolCall of toolCalls) {
@@ -408,14 +315,8 @@ function validateToolCalls(
       return nameResult;
     }
 
-    if (
-      typeof toolCall.args !== "object" ||
-      toolCall.args === null ||
-      Array.isArray(toolCall.args)
-    ) {
-      return failure(
-        new ValidationError("toolCall.args", "toolCall.args must be an object."),
-      );
+    if (typeof toolCall.args !== "object" || toolCall.args === null || Array.isArray(toolCall.args)) {
+      return failure(new ValidationError("toolCall.args", "toolCall.args must be an object."));
     }
   }
 

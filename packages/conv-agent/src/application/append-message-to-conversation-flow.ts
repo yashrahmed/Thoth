@@ -1,19 +1,9 @@
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import type {
-  BlobStoreError,
-  LlmError,
-  NotFoundError,
-  StoreError,
-  ValidationError,
-} from "../domain/objects/errors";
+import type { BlobStoreError, LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import { success, type Result } from "../domain/objects/result";
-import {
-  LLM_MESSAGE_TYPES,
-  LLMMessageType,
-  type LLMMessageType as LLMMessageTypeValue,
-} from "../domain/objects/llm";
+import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
 import type { FileContent } from "../domain/objects/file";
 import type { DomainContentPart } from "../domain/objects/content-part-type";
 import { type LlmDomainService } from "../domain/services/llm-domain-service";
@@ -41,17 +31,8 @@ export class AppendMessageToConversationFlow {
     private readonly llmDomainService: LlmDomainService,
   ) {}
 
-  async execute(
-    request: AppendMessageRequest,
-  ): Promise<
-    Result<
-      void,
-      ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError
-    >
-  > {
-    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(
-      request.conversationId,
-    );
+  async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>> {
+    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(request.conversationId);
 
     if (!conversationResult.ok) {
       return conversationResult;
@@ -83,17 +64,13 @@ export class AppendMessageToConversationFlow {
       return createUserMessageResult;
     }
 
-    const allMessagesResult = await this.messageDomainService.readAllMessagesFromMessageDBStore(
-      request.conversationId,
-    );
+    const allMessagesResult = await this.messageDomainService.readAllMessagesFromMessageDBStore(request.conversationId);
 
     if (!allMessagesResult.ok) {
       return allMessagesResult;
     }
 
-    const llmResult = await this.llmDomainService.sendToLLMChatService(
-      allMessagesResult.value,
-    );
+    const llmResult = await this.llmDomainService.sendToLLMChatService(allMessagesResult.value);
 
     if (!llmResult.ok) {
       return llmResult;

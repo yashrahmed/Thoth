@@ -1,8 +1,7 @@
 import { Buffer } from "node:buffer";
 import { createHash, createHmac } from "node:crypto";
 
-const R2_ENDPOINT =
-  "https://61caa9d56c5a0143bfda0f07fd01088a.r2.cloudflarestorage.com";
+const R2_ENDPOINT = "https://61caa9d56c5a0143bfda0f07fd01088a.r2.cloudflarestorage.com";
 const R2_BUCKET = "thoth-obj-store-dev";
 const R2_REGION = "auto";
 const R2_SERVICE = "s3";
@@ -15,18 +14,14 @@ async function main() {
   const filePath = Bun.argv[3];
 
   if (!command || !isCommand(command) || !filePath) {
-    printJsonError(
-      "Usage: bun scripts/r2-ops.ts <upload|download> <file-path>",
-    );
+    printJsonError("Usage: bun scripts/r2-ops.ts <upload|download> <file-path>");
   }
 
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
   if (!accessKeyId || !secretAccessKey) {
-    printJsonError(
-      "Missing R2 credentials. Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.",
-    );
+    printJsonError("Missing R2 credentials. Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.");
   }
 
   if (command === "upload") {
@@ -37,11 +32,7 @@ async function main() {
   await downloadFile(filePath, accessKeyId, secretAccessKey);
 }
 
-async function uploadFile(
-  filePath: string,
-  accessKeyId: string,
-  secretAccessKey: string,
-) {
+async function uploadFile(filePath: string, accessKeyId: string, secretAccessKey: string) {
   const file = Bun.file(filePath);
 
   if (!(await file.exists())) {
@@ -87,11 +78,7 @@ async function uploadFile(
   }
 }
 
-async function downloadFile(
-  outputPath: string,
-  accessKeyId: string,
-  secretAccessKey: string,
-) {
+async function downloadFile(outputPath: string, accessKeyId: string, secretAccessKey: string) {
   const fileName = getFileName(outputPath);
   const objectKey = `${R2_FOLDER}/${fileName}`;
   const response = await signedFetch({
@@ -134,67 +121,23 @@ async function downloadFile(
   }
 }
 
-async function signedFetch(input: {
-  accessKeyId: string;
-  secretAccessKey: string;
-  method: "GET" | "PUT";
-  objectKey: string;
-  body?: ArrayBuffer;
-  contentType?: string;
-}) {
+async function signedFetch(input: { accessKeyId: string; secretAccessKey: string; method: "GET" | "PUT"; objectKey: string; body?: ArrayBuffer; contentType?: string }) {
   const now = new Date();
   const amzDate = toAmzDate(now);
   const dateStamp = toDateStamp(now);
   const endpointUrl = new URL(R2_ENDPOINT);
-  const canonicalUri = `/${encodePathSegment(R2_BUCKET)}/${encodeObjectKey(
-    input.objectKey,
-  )}`;
-  const bodyHash = input.body
-    ? sha256Hex(Buffer.from(input.body))
-    : "UNSIGNED-PAYLOAD";
-  const canonicalHeaders = [
-    input.contentType ? `content-type:${input.contentType}` : null,
-    `host:${endpointUrl.host}`,
-    `x-amz-content-sha256:${bodyHash}`,
-    `x-amz-date:${amzDate}`,
-  ]
+  const canonicalUri = `/${encodePathSegment(R2_BUCKET)}/${encodeObjectKey(input.objectKey)}`;
+  const bodyHash = input.body ? sha256Hex(Buffer.from(input.body)) : "UNSIGNED-PAYLOAD";
+  const canonicalHeaders = [input.contentType ? `content-type:${input.contentType}` : null, `host:${endpointUrl.host}`, `x-amz-content-sha256:${bodyHash}`, `x-amz-date:${amzDate}`]
     .filter((value): value is string => value !== null)
     .join("\n");
-  const signedHeaders = [
-    input.contentType ? "content-type" : null,
-    "host",
-    "x-amz-content-sha256",
-    "x-amz-date",
-  ]
-    .filter((value): value is string => value !== null)
-    .join(";");
-  const canonicalRequest = [
-    input.method,
-    canonicalUri,
-    "",
-    `${canonicalHeaders}\n`,
-    signedHeaders,
-    bodyHash,
-  ].join("\n");
+  const signedHeaders = [input.contentType ? "content-type" : null, "host", "x-amz-content-sha256", "x-amz-date"].filter((value): value is string => value !== null).join(";");
+  const canonicalRequest = [input.method, canonicalUri, "", `${canonicalHeaders}\n`, signedHeaders, bodyHash].join("\n");
   const credentialScope = `${dateStamp}/${R2_REGION}/${R2_SERVICE}/aws4_request`;
-  const stringToSign = [
-    "AWS4-HMAC-SHA256",
-    amzDate,
-    credentialScope,
-    sha256Hex(canonicalRequest),
-  ].join("\n");
-  const signingKey = getSignatureKey(
-    input.secretAccessKey,
-    dateStamp,
-    R2_REGION,
-    R2_SERVICE,
-  );
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
+  const signingKey = getSignatureKey(input.secretAccessKey, dateStamp, R2_REGION, R2_SERVICE);
   const signature = hmacSha256Hex(signingKey, stringToSign);
-  const authorization = [
-    `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${credentialScope}`,
-    `SignedHeaders=${signedHeaders}`,
-    `Signature=${signature}`,
-  ].join(", ");
+  const authorization = [`AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${credentialScope}`, `SignedHeaders=${signedHeaders}`, `Signature=${signature}`].join(", ");
 
   return fetch(`${R2_ENDPOINT}${canonicalUri}`, {
     method: input.method,
@@ -210,9 +153,7 @@ async function signedFetch(input: {
 }
 
 function getRequestUrl(objectKey: string): string {
-  return `${R2_ENDPOINT}/${encodePathSegment(R2_BUCKET)}/${encodeObjectKey(
-    objectKey,
-  )}`;
+  return `${R2_ENDPOINT}/${encodePathSegment(R2_BUCKET)}/${encodeObjectKey(objectKey)}`;
 }
 
 function getFileName(filePath: string): string {
@@ -275,12 +216,7 @@ function hmacSha256Hex(key: Uint8Array | string, data: string): string {
   return createHmac("sha256", key).update(data).digest("hex");
 }
 
-function getSignatureKey(
-  secretAccessKey: string,
-  dateStamp: string,
-  regionName: string,
-  serviceName: string,
-): Uint8Array {
+function getSignatureKey(secretAccessKey: string, dateStamp: string, regionName: string, serviceName: string): Uint8Array {
   const kDate = hmacSha256(`AWS4${secretAccessKey}`, dateStamp);
   const kRegion = hmacSha256(kDate, regionName);
   const kService = hmacSha256(kRegion, serviceName);
@@ -289,8 +225,7 @@ function getSignatureKey(
 }
 
 void main().catch((error: unknown) => {
-  const message =
-    error instanceof Error ? error.message : "Unexpected R2 operation failure.";
+  const message = error instanceof Error ? error.message : "Unexpected R2 operation failure.";
 
   printJsonError(message);
 });

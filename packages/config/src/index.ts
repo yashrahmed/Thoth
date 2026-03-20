@@ -51,10 +51,7 @@ function getThothConfig(): ThothConfig {
   const rawConfig = readFileSync(resolvedPath, "utf8");
   const parsedConfig = parse(rawConfig);
 
-  cachedConfig = parseConfig(
-    parsedConfig,
-    loadBlobStorageCredentials(dirname(resolvedPath)),
-  );
+  cachedConfig = parseConfig(parsedConfig, loadBlobStorageCredentials(dirname(resolvedPath)));
 
   return cachedConfig;
 }
@@ -75,19 +72,13 @@ export function getPlanningAgentConfig(): PlanningAgentConfig {
   return getThothConfig().planningAgent;
 }
 
-function parseConfig(
-  value: unknown,
-  blobStorageCredentials: BlobStorageCredentials,
-): ThothConfig {
+function parseConfig(value: unknown, blobStorageCredentials: BlobStorageCredentials): ThothConfig {
   const config = requireObject(value, "config");
   const proxy = requireObject(config.proxy, "proxy");
   const convAgent = requireObject(config.convAgent, "convAgent");
   const kbCurateAgent = requireObject(config.kbCurateAgent, "kbCurateAgent");
   const planningAgent = requireObject(config.planningAgent, "planningAgent");
-  const convAgentBlobStorage = requireObject(
-    convAgent.blobStorage,
-    "convAgent.blobStorage",
-  );
+  const convAgentBlobStorage = requireObject(convAgent.blobStorage, "convAgent.blobStorage");
 
   return {
     proxy: {
@@ -97,31 +88,12 @@ function parseConfig(
       port: requireNumber(convAgent.port, "convAgent.port"),
       databaseUrl: requireString(convAgent.databaseUrl, "convAgent.databaseUrl"),
       blobStorage: {
-        endpoint: requireString(
-          convAgentBlobStorage.endpoint,
-          "convAgent.blobStorage.endpoint",
-        ),
-        bucket: requireString(
-          convAgentBlobStorage.bucket,
-          "convAgent.blobStorage.bucket",
-        ),
-        region: requireString(
-          convAgentBlobStorage.region,
-          "convAgent.blobStorage.region",
-        ),
-        folder: requireString(
-          convAgentBlobStorage.folder,
-          "convAgent.blobStorage.folder",
-        ),
-        accessKeyId: requireString(
-          convAgentBlobStorage.accessKeyId ?? blobStorageCredentials.accessKeyId,
-          "convAgent.blobStorage.accessKeyId",
-        ),
-        secretAccessKey: requireString(
-          convAgentBlobStorage.secretAccessKey ??
-            blobStorageCredentials.secretAccessKey,
-          "convAgent.blobStorage.secretAccessKey",
-        ),
+        endpoint: requireString(convAgentBlobStorage.endpoint, "convAgent.blobStorage.endpoint"),
+        bucket: requireString(convAgentBlobStorage.bucket, "convAgent.blobStorage.bucket"),
+        region: requireString(convAgentBlobStorage.region, "convAgent.blobStorage.region"),
+        folder: requireString(convAgentBlobStorage.folder, "convAgent.blobStorage.folder"),
+        accessKeyId: requireString(convAgentBlobStorage.accessKeyId ?? blobStorageCredentials.accessKeyId, "convAgent.blobStorage.accessKeyId"),
+        secretAccessKey: requireString(convAgentBlobStorage.secretAccessKey ?? blobStorageCredentials.secretAccessKey, "convAgent.blobStorage.secretAccessKey"),
       },
     },
     kbCurateAgent: {
@@ -133,10 +105,7 @@ function parseConfig(
   };
 }
 
-function requireObject(
-  value: unknown,
-  fieldName: string,
-): Record<string, unknown> {
+function requireObject(value: unknown, fieldName: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${fieldName} must be an object.`);
   }

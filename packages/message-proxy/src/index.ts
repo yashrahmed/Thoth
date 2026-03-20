@@ -30,12 +30,7 @@ export function createProxyFetchHandler() {
       );
     }
 
-    return withCors(
-      Response.json(
-        { error: `Route ${req.method} ${url.pathname} is not supported.` },
-        { status: 404 },
-      ),
-    );
+    return withCors(Response.json({ error: `Route ${req.method} ${url.pathname} is not supported.` }, { status: 404 }));
   };
 }
 

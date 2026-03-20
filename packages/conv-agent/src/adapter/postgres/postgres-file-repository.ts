@@ -1,14 +1,6 @@
-import type {
-  CreateFileRecord,
-  FileRepository,
-} from "../../domain/contracts/file-repository";
+import type { CreateFileRecord, FileRepository } from "../../domain/contracts/file-repository";
 import { File } from "../../domain/objects/file";
-import {
-  EntityType,
-  NotFoundError,
-  StoreError,
-  StoreOperation,
-} from "../../domain/objects/errors";
+import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 
@@ -56,15 +48,11 @@ export class PostgresFileRepository implements FileRepository {
 
       return mapRow(rows[0], StoreOperation.Persist);
     } catch (error) {
-      return failure(
-        new StoreError(EntityType.File, StoreOperation.Persist, getErrorMessage(error)),
-      );
+      return failure(new StoreError(EntityType.File, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
 
-  async selectFileRow(
-    id: string,
-  ): Promise<Result<File, NotFoundError | StoreError>> {
+  async selectFileRow(id: string): Promise<Result<File, NotFoundError | StoreError>> {
     try {
       const rows = await this.sql<FileRow[]>`
         select
@@ -87,15 +75,11 @@ export class PostgresFileRepository implements FileRepository {
 
       return mapRow(row, StoreOperation.Read);
     } catch (error) {
-      return failure(
-        new StoreError(EntityType.File, StoreOperation.Read, getErrorMessage(error)),
-      );
+      return failure(new StoreError(EntityType.File, StoreOperation.Read, getErrorMessage(error)));
     }
   }
 
-  async deleteFileRow(
-    id: string,
-  ): Promise<Result<void, StoreError>> {
+  async deleteFileRow(id: string): Promise<Result<void, StoreError>> {
     try {
       await this.sql`
         delete from thoth.files
@@ -104,21 +88,14 @@ export class PostgresFileRepository implements FileRepository {
 
       return success(undefined);
     } catch (error) {
-      return failure(
-        new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)),
-      );
+      return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
 }
 
-function mapRow(
-  row: FileRow | undefined,
-  operation: StoreOperation,
-): Result<File, StoreError> {
+function mapRow(row: FileRow | undefined, operation: StoreOperation): Result<File, StoreError> {
   if (!row) {
-    return failure(
-      new StoreError(EntityType.File, operation, "File row was not returned."),
-    );
+    return failure(new StoreError(EntityType.File, operation, "File row was not returned."));
   }
 
   try {
@@ -138,9 +115,7 @@ function mapRow(
       return failure(new StoreError(EntityType.File, operation, error.message));
     }
 
-    return failure(
-      new StoreError(EntityType.File, operation, "Unexpected file mapping error."),
-    );
+    return failure(new StoreError(EntityType.File, operation, "Unexpected file mapping error."));
   }
 }
 

@@ -27,20 +27,20 @@ thoth/
 
 ## Tech Stack
 
-| Concern | Choice |
-|---|---|
-| Runtime | Bun |
-| Language | TypeScript |
-| Web | React + Vite |
-| Mobile | React Native |
-| Architecture | Hexagonal + DDD |
-| Monorepo | Bun workspaces |
-| LLM layer | Vercel AI SDK (`ai`) |
-| LLM providers | Anthropic / OpenAI / Ollama / Gemini |
-| RAG / indexing | LlamaIndex TypeScript |
-| Vector store | Postgres + pgvector |
-| Queue | BullMQ + Redis |
-| Browser automation | Playwright |
+| Concern            | Choice                               |
+| ------------------ | ------------------------------------ |
+| Runtime            | Bun                                  |
+| Language           | TypeScript                           |
+| Web                | React + Vite                         |
+| Mobile             | React Native                         |
+| Architecture       | Hexagonal + DDD                      |
+| Monorepo           | Bun workspaces                       |
+| LLM layer          | Vercel AI SDK (`ai`)                 |
+| LLM providers      | Anthropic / OpenAI / Ollama / Gemini |
+| RAG / indexing     | LlamaIndex TypeScript                |
+| Vector store       | Postgres + pgvector                  |
+| Queue              | BullMQ + Redis                       |
+| Browser automation | Playwright                           |
 
 ## Configuration
 

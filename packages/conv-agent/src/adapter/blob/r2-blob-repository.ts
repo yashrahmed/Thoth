@@ -1,9 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import type {
-  BlobRepository,
-  BlobUploadRequest,
-} from "../../domain/contracts/blob-repository";
+import type { BlobRepository, BlobUploadRequest } from "../../domain/contracts/blob-repository";
 import { BlobStoreError, BlobStoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 
@@ -32,13 +29,8 @@ export class R2BlobRepository implements BlobRepository {
     private readonly credentials: R2BlobCredentials,
   ) {}
 
-  async putBlob(
-    request: BlobUploadRequest,
-  ): Promise<Result<string, BlobStoreError>> {
-    const canonicalPath = this.getCanonicalPath(
-      request.conversationId,
-      request.filename,
-    );
+  async putBlob(request: BlobUploadRequest): Promise<Result<string, BlobStoreError>> {
+    const canonicalPath = this.getCanonicalPath(request.conversationId, request.filename);
     const objectKey = this.getObjectKey(canonicalPath);
 
     try {
@@ -50,25 +42,16 @@ export class R2BlobRepository implements BlobRepository {
       });
 
       if (!response.ok) {
-        return failure(
-          new BlobStoreError(
-            BlobStoreOperation.Upload,
-            await getResponseMessage(response),
-          ),
-        );
+        return failure(new BlobStoreError(BlobStoreOperation.Upload, await getResponseMessage(response)));
       }
 
       return success(canonicalPath);
     } catch (error) {
-      return failure(
-        new BlobStoreError(BlobStoreOperation.Upload, getErrorMessage(error)),
-      );
+      return failure(new BlobStoreError(BlobStoreOperation.Upload, getErrorMessage(error)));
     }
   }
 
-  async removeBlob(
-    url: string,
-  ): Promise<Result<void, BlobStoreError>> {
+  async removeBlob(url: string): Promise<Result<void, BlobStoreError>> {
     const objectKey = this.getObjectKey(url);
 
     try {
@@ -78,19 +61,12 @@ export class R2BlobRepository implements BlobRepository {
       });
 
       if (!response.ok) {
-        return failure(
-          new BlobStoreError(
-            BlobStoreOperation.Delete,
-            await getResponseMessage(response),
-          ),
-        );
+        return failure(new BlobStoreError(BlobStoreOperation.Delete, await getResponseMessage(response)));
       }
 
       return success(undefined);
     } catch (error) {
-      return failure(
-        new BlobStoreError(BlobStoreOperation.Delete, getErrorMessage(error)),
-      );
+      return failure(new BlobStoreError(BlobStoreOperation.Delete, getErrorMessage(error)));
     }
   }
 
@@ -104,12 +80,8 @@ export class R2BlobRepository implements BlobRepository {
     const amzDate = toAmzDate(now);
     const dateStamp = toDateStamp(now);
     const endpointUrl = new URL(this.config.endpoint);
-    const canonicalUri = `/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(
-      input.objectKey,
-    )}`;
-    const bodyHash = input.body
-      ? sha256Hex(Buffer.from(input.body))
-      : "UNSIGNED-PAYLOAD";
+    const canonicalUri = `/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(input.objectKey)}`;
+    const bodyHash = input.body ? sha256Hex(Buffer.from(input.body)) : "UNSIGNED-PAYLOAD";
     const canonicalHeaders = [
       input.contentType ? `content-type:${input.contentType}` : null,
       `host:${endpointUrl.host}`,
@@ -118,41 +90,13 @@ export class R2BlobRepository implements BlobRepository {
     ]
       .filter((value): value is string => value !== null)
       .join("\n");
-    const signedHeaders = [
-      input.contentType ? "content-type" : null,
-      "host",
-      "x-amz-content-sha256",
-      "x-amz-date",
-    ]
-      .filter((value): value is string => value !== null)
-      .join(";");
-    const canonicalRequest = [
-      input.method,
-      canonicalUri,
-      "",
-      `${canonicalHeaders}\n`,
-      signedHeaders,
-      bodyHash,
-    ].join("\n");
+    const signedHeaders = [input.contentType ? "content-type" : null, "host", "x-amz-content-sha256", "x-amz-date"].filter((value): value is string => value !== null).join(";");
+    const canonicalRequest = [input.method, canonicalUri, "", `${canonicalHeaders}\n`, signedHeaders, bodyHash].join("\n");
     const credentialScope = `${dateStamp}/${this.config.region}/s3/aws4_request`;
-    const stringToSign = [
-      "AWS4-HMAC-SHA256",
-      amzDate,
-      credentialScope,
-      sha256Hex(canonicalRequest),
-    ].join("\n");
-    const signingKey = getSignatureKey(
-      this.credentials.secretAccessKey,
-      dateStamp,
-      this.config.region,
-      "s3",
-    );
+    const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
+    const signingKey = getSignatureKey(this.credentials.secretAccessKey, dateStamp, this.config.region, "s3");
     const signature = hmacSha256Hex(signingKey, stringToSign);
-    const authorization = [
-      `AWS4-HMAC-SHA256 Credential=${this.credentials.accessKeyId}/${credentialScope}`,
-      `SignedHeaders=${signedHeaders}`,
-      `Signature=${signature}`,
-    ].join(", ");
+    const authorization = [`AWS4-HMAC-SHA256 Credential=${this.credentials.accessKeyId}/${credentialScope}`, `SignedHeaders=${signedHeaders}`, `Signature=${signature}`].join(", ");
 
     return fetch(`${this.config.endpoint}${canonicalUri}`, {
       method: input.method,
@@ -168,16 +112,12 @@ export class R2BlobRepository implements BlobRepository {
   }
 
   private getCanonicalPath(conversationId: string, filename: string): string {
-    return `${CONVERSATIONS_CANONICAL_PATH_PREFIX}${encodePathSegment(
-      conversationId,
-    )}/${randomUUID()}-${sanitizeFilename(filename)}`;
+    return `${CONVERSATIONS_CANONICAL_PATH_PREFIX}${encodePathSegment(conversationId)}/${randomUUID()}-${sanitizeFilename(filename)}`;
   }
 
   private getObjectKey(canonicalPath: string): string {
     if (!canonicalPath.startsWith(CONVERSATIONS_CANONICAL_PATH_PREFIX)) {
-      throw new Error(
-        "Blob canonical path must start with /conversations/.",
-      );
+      throw new Error("Blob canonical path must start with /conversations/.");
     }
 
     const trimmedFolder = trimSlashes(this.config.folder);
@@ -246,12 +186,7 @@ function hmacSha256Hex(key: Uint8Array | string, data: string): string {
   return createHmac("sha256", key).update(data).digest("hex");
 }
 
-function getSignatureKey(
-  secretAccessKey: string,
-  dateStamp: string,
-  regionName: string,
-  serviceName: string,
-): Uint8Array {
+function getSignatureKey(secretAccessKey: string, dateStamp: string, regionName: string, serviceName: string): Uint8Array {
   const kDate = hmacSha256(`AWS4${secretAccessKey}`, dateStamp);
   const kRegion = hmacSha256(kDate, regionName);
   const kService = hmacSha256(kRegion, serviceName);

@@ -1,15 +1,6 @@
-import type {
-  CreateConversationRecord,
-  ConversationOffsetPageRequest,
-  ConversationRepository,
-} from "../../domain/contracts/conversation-repository";
+import type { CreateConversationRecord, ConversationOffsetPageRequest, ConversationRepository } from "../../domain/contracts/conversation-repository";
 import { Conversation } from "../../domain/objects/conversation";
-import {
-  EntityType,
-  NotFoundError,
-  StoreError,
-  StoreOperation,
-} from "../../domain/objects/errors";
+import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 
@@ -22,9 +13,7 @@ interface ConversationRow {
 export class PostgresConversationRepository implements ConversationRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async upsertConversationRow(
-    record: CreateConversationRecord,
-  ): Promise<Result<Conversation, StoreError>> {
+  async upsertConversationRow(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>> {
     try {
       const rows = await this.sql<ConversationRow[]>`
         insert into thoth.conversations (created_at, updated_at)
@@ -34,19 +23,11 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return mapRow(rows[0], StoreOperation.Persist);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Conversation,
-          StoreOperation.Persist,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Conversation, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
 
-  async selectConversationRow(
-    conversationId: string,
-  ): Promise<Result<Conversation, NotFoundError | StoreError>> {
+  async selectConversationRow(conversationId: string): Promise<Result<Conversation, NotFoundError | StoreError>> {
     try {
       const rows = await this.sql<ConversationRow[]>`
         select id, created_at, updated_at
@@ -62,19 +43,11 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return mapRow(row, StoreOperation.Read);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Conversation,
-          StoreOperation.Read,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Conversation, StoreOperation.Read, getErrorMessage(error)));
     }
   }
 
-  async selectConversationPage(
-    request: ConversationOffsetPageRequest,
-  ): Promise<Result<Conversation[], StoreError>> {
+  async selectConversationPage(request: ConversationOffsetPageRequest): Promise<Result<Conversation[], StoreError>> {
     try {
       const rows = await this.sql<ConversationRow[]>`
         select id, created_at, updated_at
@@ -98,19 +71,11 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return success(conversations);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Conversation,
-          StoreOperation.ReadPage,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Conversation, StoreOperation.ReadPage, getErrorMessage(error)));
     }
   }
 
-  async deleteConversationRow(
-    conversationId: string,
-  ): Promise<Result<void, StoreError>> {
+  async deleteConversationRow(conversationId: string): Promise<Result<void, StoreError>> {
     try {
       await this.sql`
         delete from thoth.conversations
@@ -119,29 +84,14 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return success(undefined);
     } catch (error) {
-      return failure(
-        new StoreError(
-          EntityType.Conversation,
-          StoreOperation.Remove,
-          getErrorMessage(error),
-        ),
-      );
+      return failure(new StoreError(EntityType.Conversation, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
 }
 
-function mapRow(
-  row: ConversationRow | undefined,
-  operation: StoreOperation,
-): Result<Conversation, StoreError> {
+function mapRow(row: ConversationRow | undefined, operation: StoreOperation): Result<Conversation, StoreError> {
   if (!row) {
-    return failure(
-      new StoreError(
-        EntityType.Conversation,
-        operation,
-        "Conversation row was not returned.",
-      ),
-    );
+    return failure(new StoreError(EntityType.Conversation, operation, "Conversation row was not returned."));
   }
 
   try {
@@ -154,18 +104,10 @@ function mapRow(
     );
   } catch (error) {
     if (error instanceof Error) {
-      return failure(
-        new StoreError(EntityType.Conversation, operation, error.message),
-      );
+      return failure(new StoreError(EntityType.Conversation, operation, error.message));
     }
 
-    return failure(
-      new StoreError(
-        EntityType.Conversation,
-        operation,
-        "Unexpected conversation mapping error.",
-      ),
-    );
+    return failure(new StoreError(EntityType.Conversation, operation, "Unexpected conversation mapping error."));
   }
 }
 

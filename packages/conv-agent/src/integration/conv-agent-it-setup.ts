@@ -56,9 +56,7 @@ export async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
   let database: PostgresDatabase | undefined;
   let postgresContainer: StartedPostgresContainer | undefined;
   let flywayContainer: StoppableContainer | undefined;
-  let s3MockContainer:
-    | Awaited<ReturnType<InstanceType<typeof S3MockContainer>["start"]>>
-    | undefined;
+  let s3MockContainer: Awaited<ReturnType<InstanceType<typeof S3MockContainer>["start"]>> | undefined;
   let s3Client: S3Client | undefined;
 
   try {
@@ -73,9 +71,7 @@ export async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
       .withExposedPorts(POSTGRES_PORT)
       .withNetwork(network)
       .withNetworkAliases(DATABASE_NETWORK_ALIAS)
-      .withWaitStrategy(
-        Wait.forLogMessage("database system is ready to accept connections"),
-      )
+      .withWaitStrategy(Wait.forLogMessage("database system is ready to accept connections"))
       .start();
 
     flywayContainer = await new GenericContainer(FLYWAY_IMAGE)
@@ -124,10 +120,7 @@ export async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
       throw error;
     }
 
-    const databaseUrl = buildDatabaseUrl(
-      postgresContainer.getHost(),
-      postgresContainer.getMappedPort(POSTGRES_PORT),
-    );
+    const databaseUrl = buildDatabaseUrl(postgresContainer.getHost(), postgresContainer.getMappedPort(POSTGRES_PORT));
 
     appSetup = await convSetup({
       port: 0,

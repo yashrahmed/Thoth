@@ -4,12 +4,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: [
-      "**/dist/**",
-      "**/node_modules/**",
-      "**/coverage/**",
-      "db/local/**",
-    ],
+    ignores: ["**/dist/**", "**/node_modules/**", "**/coverage/**", "db/local/**"],
   },
   {
     files: ["**/*.ts", "**/*.tsx"],
@@ -48,20 +43,17 @@ export default tseslint.config(
             {
               target: "./packages/conv-agent/src/application",
               from: "./packages/conv-agent/src/domain/contracts",
-              message:
-                "Flows must not import repository or storage contracts directly; depend on domain services instead.",
+              message: "Flows must not import repository or storage contracts directly; depend on domain services instead.",
             },
             {
               target: "./packages/conv-agent/src/application",
               from: "./packages/conv-agent/src/adapter/postgres",
-              message:
-                "Flows must not import repository implementations directly.",
+              message: "Flows must not import repository implementations directly.",
             },
             {
               target: "./packages/conv-agent/src/application",
               from: "./packages/conv-agent/src/adapter/blob",
-              message:
-                "Flows must not import storage adapter implementations directly.",
+              message: "Flows must not import storage adapter implementations directly.",
             },
           ],
         },
@@ -83,20 +75,17 @@ export default tseslint.config(
             {
               target: "./packages/conv-agent/src/domain/contracts",
               from: "./packages/conv-agent/src/application",
-              message:
-                "Repository and storage contracts must not import flows or other application code.",
+              message: "Repository and storage contracts must not import flows or other application code.",
             },
             {
               target: "./packages/conv-agent/src/adapter/postgres",
               from: "./packages/conv-agent/src/application",
-              message:
-                "Repository implementations must not import flows or other application code.",
+              message: "Repository implementations must not import flows or other application code.",
             },
             {
               target: "./packages/conv-agent/src/adapter/blob",
               from: "./packages/conv-agent/src/application",
-              message:
-                "Storage adapter implementations must not import flows or other application code.",
+              message: "Storage adapter implementations must not import flows or other application code.",
             },
           ],
         },

@@ -27,10 +27,7 @@ export class File {
     }
 
     if (props.canonicalUrl.trim().length === 0) {
-      throw new ConstructionError(
-        "File",
-        "File canonicalUrl must be a non-empty string.",
-      );
+      throw new ConstructionError("File", "File canonicalUrl must be a non-empty string.");
     }
 
     if (props.filename.trim().length === 0) {
@@ -42,10 +39,7 @@ export class File {
     }
 
     if (!Number.isInteger(props.sizeInBytes) || props.sizeInBytes < 0) {
-      throw new ConstructionError(
-        "File",
-        "File sizeInBytes must be a non-negative integer.",
-      );
+      throw new ConstructionError("File", "File sizeInBytes must be a non-negative integer.");
     }
 
     if (Number.isNaN(props.createdAt.getTime())) {

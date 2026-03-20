@@ -2,30 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
 import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
-import type {
-  ConversationOffsetPageRequest,
-  CreateConversationRecord,
-  ConversationRepository,
-} from "./domain/contracts/conversation-repository";
-import type {
-  CreateFileRecord,
-  FileRepository,
-} from "./domain/contracts/file-repository";
-import type {
-  CreateMessageRecord,
-  MessageRepository,
-  MessageSequencePageRequest,
-} from "./domain/contracts/message-repository";
+import type { ConversationOffsetPageRequest, CreateConversationRecord, ConversationRepository } from "./domain/contracts/conversation-repository";
+import type { CreateFileRecord, FileRepository } from "./domain/contracts/file-repository";
+import type { CreateMessageRecord, MessageRepository, MessageSequencePageRequest } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
 import { ContentPartType } from "./domain/objects/content-part-type";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
-import {
-  EntityType,
-  LlmError,
-  NotFoundError,
-  type StoreError,
-} from "./domain/objects/errors";
+import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/objects/errors";
 import type { ContentPart, ToolCall } from "./domain/objects/message-content";
 import { Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
@@ -56,21 +40,12 @@ describe("createConversationHttpHandler", () => {
 
   test("creates, gets, and lists conversations", async () => {
     const repository = new InMemoryConversationRepository();
-    repository.seed([
-      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
-      mustCreateConversation("conversation-2", "2026-03-16T13:00:00.000Z"),
-    ]);
+    repository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"), mustCreateConversation("conversation-2", "2026-03-16T13:00:00.000Z")]);
     const handler = buildHandler({ conversationRepository: repository });
 
-    const createResponse = await handler(
-      new Request("http://localhost/conversations", { method: "POST" }),
-    );
-    const getResponse = await handler(
-      new Request("http://localhost/conversations/conversation-1"),
-    );
-    const listResponse = await handler(
-      new Request("http://localhost/conversations?pageNum=1&pageSize=2"),
-    );
+    const createResponse = await handler(new Request("http://localhost/conversations", { method: "POST" }));
+    const getResponse = await handler(new Request("http://localhost/conversations/conversation-1"));
+    const listResponse = await handler(new Request("http://localhost/conversations?pageNum=1&pageSize=2"));
 
     expect(createResponse.status).toBe(201);
     expect(await createResponse.json()).toEqual({
@@ -106,9 +81,7 @@ describe("createConversationHttpHandler", () => {
   test("maps missing conversations to 404", async () => {
     const handler = buildHandler();
 
-    const response = await handler(
-      new Request("http://localhost/conversations/missing"),
-    );
+    const response = await handler(new Request("http://localhost/conversations/missing"));
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({
@@ -118,18 +91,13 @@ describe("createConversationHttpHandler", () => {
 
   test("appends a message with multipart rich-message fields", async () => {
     const conversationRepository = new InMemoryConversationRepository();
-    conversationRepository.seed([
-      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
-    ]);
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
     const handler = buildHandler({ conversationRepository });
     const formData = new FormData();
 
     formData.set("type", "assistant");
     formData.set("content", JSON.stringify([textPart("hello")]));
-    formData.set(
-      "attachment",
-      new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }),
-    );
+    formData.set("attachment", new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }));
 
     const response = await handler(
       new Request("http://localhost/conversations/conversation-1/chat", {
@@ -168,22 +136,10 @@ describe("createConversationHttpHandler", () => {
 
   test("lists messages for a conversation using the rich response shape", async () => {
     const conversationRepository = new InMemoryConversationRepository();
-    conversationRepository.seed([
-      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
-    ]);
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
     const messageRepository = new InMemoryMessageRepository();
     messageRepository.seed([
-      mustCreateMessage(
-        "message-1",
-        "conversation-1",
-        LLMMessageType.User,
-        1,
-        [textPart("one")],
-        [],
-        "",
-        ["file-1"],
-        "2026-03-16T12:00:00.000Z",
-      ),
+      mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, [textPart("one")], [], "", ["file-1"], "2026-03-16T12:00:00.000Z"),
       mustCreateMessage(
         "message-2",
         "conversation-1",
@@ -197,27 +153,14 @@ describe("createConversationHttpHandler", () => {
       ),
     ]);
     const fileRepository = new InMemoryFileRepository();
-    fileRepository.seed([
-      mustCreateFile(
-        "file-1",
-        "/conversations/conversation-1/file-1-one.txt",
-        "one.txt",
-        "text/plain",
-        3,
-        "2026-03-16T11:59:00.000Z",
-      ),
-    ]);
+    fileRepository.seed([mustCreateFile("file-1", "/conversations/conversation-1/file-1-one.txt", "one.txt", "text/plain", 3, "2026-03-16T11:59:00.000Z")]);
     const handler = buildHandler({
       conversationRepository,
       messageRepository,
       fileRepository,
     });
 
-    const response = await handler(
-      new Request(
-        "http://localhost/conversations/conversation-1/chat?pageNum=1&pageSize=2",
-      ),
-    );
+    const response = await handler(new Request("http://localhost/conversations/conversation-1/chat?pageNum=1&pageSize=2"));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -260,9 +203,7 @@ describe("createConversationHttpHandler", () => {
 
   test("deletes a conversation", async () => {
     const repository = new InMemoryConversationRepository();
-    repository.seed([
-      mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z"),
-    ]);
+    repository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
     const handler = buildHandler({ conversationRepository: repository });
 
     const response = await handler(
@@ -283,48 +224,25 @@ function buildHandler(overrides?: {
   readonly blobRepository?: InMemoryBlobRepository;
   readonly llmCompletionService?: InMemoryLlmCompletionService;
 }) {
-  const conversationRepository =
-    overrides?.conversationRepository ?? new InMemoryConversationRepository();
-  const messageRepository =
-    overrides?.messageRepository ?? new InMemoryMessageRepository();
+  const conversationRepository = overrides?.conversationRepository ?? new InMemoryConversationRepository();
+  const messageRepository = overrides?.messageRepository ?? new InMemoryMessageRepository();
   const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
-  const llmCompletionService =
-    overrides?.llmCompletionService ?? new InMemoryLlmCompletionService();
+  const llmCompletionService = overrides?.llmCompletionService ?? new InMemoryLlmCompletionService();
   const now = () => new Date("2026-03-16T12:00:00.000Z");
-  const conversationDomainService = new ConversationDomainService(
-    conversationRepository,
-    now,
-  );
+  const conversationDomainService = new ConversationDomainService(conversationRepository, now);
   const blobDomainService = new BlobDomainService(blobRepository);
   const messageDomainService = new MessageDomainService(messageRepository, now);
   const llmDomainService = new LlmDomainService(llmCompletionService);
-  const fileDomainService = new FileDomainService(
-    fileRepository,
-    blobDomainService,
-    now,
-  );
+  const fileDomainService = new FileDomainService(fileRepository, blobDomainService, now);
 
   return createConversationHttpHandler(
     new CreateConversationFlow(conversationDomainService),
     new GetConversationFlow(conversationDomainService),
     new ListConversationsFlow(conversationDomainService),
-    new DeleteConversationFlow(
-      conversationDomainService,
-      messageDomainService,
-      fileDomainService,
-    ),
-    new AppendMessageToConversationFlow(
-      conversationDomainService,
-      messageDomainService,
-      fileDomainService,
-      llmDomainService,
-    ),
-    new GetMessagesOnConversationFlow(
-      conversationDomainService,
-      messageDomainService,
-      fileDomainService,
-    ),
+    new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+    new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
+    new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
   );
 }
 
@@ -340,13 +258,8 @@ class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
-  async upsertConversationRow(
-    record: CreateConversationRecord,
-  ): Promise<Result<Conversation, StoreError>> {
-    const conversation = mustCreateConversation(
-      "conversation-created",
-      record.createdAt.toISOString(),
-    );
+  async upsertConversationRow(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>> {
+    const conversation = mustCreateConversation("conversation-created", record.createdAt.toISOString());
     this.conversations.set(conversation.id, conversation);
     return success(conversation);
   }
@@ -422,30 +335,18 @@ class InMemoryMessageRepository implements MessageRepository {
   async selectMessagePage(request: MessageSequencePageRequest) {
     return success(
       [...this.messages.values()]
-        .filter(
-          (message) =>
-            message.conversationId === request.conversationId &&
-            message.sequenceNumber >= request.fromSequence,
-        )
+        .filter((message) => message.conversationId === request.conversationId && message.sequenceNumber >= request.fromSequence)
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
         .slice(0, request.pageSize),
     );
   }
 
   async selectAllMessagesByConversation(conversationId: string) {
-    return success(
-      [...this.messages.values()].filter(
-        (message) => message.conversationId === conversationId,
-      ),
-    );
+    return success([...this.messages.values()].filter((message) => message.conversationId === conversationId));
   }
 
   async countMessagesByConversation(conversationId: string) {
-    return success(
-      [...this.messages.values()].filter(
-        (message) => message.conversationId === conversationId,
-      ).length,
-    );
+    return success([...this.messages.values()].filter((message) => message.conversationId === conversationId).length);
   }
 
   async deleteMessageRow(messageId: string) {
@@ -466,14 +367,7 @@ class InMemoryFileRepository implements FileRepository {
   }
 
   async upsertFileRow(record: CreateFileRecord) {
-    const file = mustCreateFile(
-      `file-${this.files.size + 1}`,
-      record.canonicalUrl,
-      record.filename,
-      record.mimeType,
-      record.sizeInBytes,
-      record.createdAt.toISOString(),
-    );
+    const file = mustCreateFile(`file-${this.files.size + 1}`, record.canonicalUrl, record.filename, record.mimeType, record.sizeInBytes, record.createdAt.toISOString());
     this.files.set(file.id, file);
     return success(file);
   }
@@ -495,12 +389,7 @@ class InMemoryFileRepository implements FileRepository {
 }
 
 class InMemoryBlobRepository implements BlobRepository {
-  async putBlob(request: {
-    readonly conversationId: string;
-    readonly content: ArrayBuffer;
-    readonly filename: string;
-    readonly mimeType: string;
-  }) {
+  async putBlob(request: { readonly conversationId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }) {
     const url = `/conversations/${request.conversationId}/file-1-${request.filename}`;
     return success(url);
   }
@@ -560,14 +449,7 @@ function mustCreateMessage(
   });
 }
 
-function mustCreateFile(
-  id: string,
-  canonicalUrl: string,
-  filename: string,
-  mimeType: string,
-  sizeInBytes: number,
-  isoTimestamp = "2026-03-16T12:00:00.000Z",
-): StoredFile {
+function mustCreateFile(id: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, isoTimestamp = "2026-03-16T12:00:00.000Z"): StoredFile {
   return new StoredFile({
     id,
     canonicalUrl,

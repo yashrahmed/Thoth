@@ -2,15 +2,9 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import {
-  convIntegrationSetup,
-  type ConvIntegrationSetup,
-} from "./conv-agent-it-setup";
+import { convIntegrationSetup, type ConvIntegrationSetup } from "./conv-agent-it-setup";
 
-const IMAGE_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "resources/lambo.jpg",
-);
+const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
 
 let setup: ConvIntegrationSetup | undefined;
 
@@ -30,12 +24,9 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
 
   try {
     // Create a fresh conversation for the pagination scenario.
-    const createResponse = await fetch(
-      new URL("/conversations", startedSetup.server.url),
-      {
-        method: "POST",
-      },
-    );
+    const createResponse = await fetch(new URL("/conversations", startedSetup.server.url), {
+      method: "POST",
+    });
 
     expect(createResponse.status).toBe(201);
 
@@ -46,25 +37,17 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
 
     // Append 10 image-backed user messages; each append also creates an assistant reply.
     for (let index = 1; index <= 10; index += 1) {
-      const appendResponse = await fetch(
-        new URL(`/conversations/${conversationId}/chat`, startedSetup.server.url),
-        {
-          method: "POST",
-          body: buildImageMessageFormData(
-            imageBytes,
-            `Manual lambo image upload ${index}`,
-          ),
-        },
-      );
+      const appendResponse = await fetch(new URL(`/conversations/${conversationId}/chat`, startedSetup.server.url), {
+        method: "POST",
+        body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`),
+      });
 
       expect(appendResponse.status).toBe(204);
       expect(await appendResponse.text()).toBe("");
     }
 
     // Confirm the conversation itself is still readable before paging messages.
-    const getConversationResponse = await fetch(
-      new URL(`/conversations/${conversationId}`, startedSetup.server.url),
-    );
+    const getConversationResponse = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url));
 
     expect(getConversationResponse.status).toBe(200);
 
@@ -73,12 +56,7 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
     expect(fetchedConversation.id).toBe(conversationId);
 
     // Read the first 5 visible messages and assert alternating user/assistant output.
-    const firstPageResponse = await fetch(
-      new URL(
-        `/conversations/${conversationId}/chat?pageNum=1&pageSize=5`,
-        startedSetup.server.url,
-      ),
-    );
+    const firstPageResponse = await fetch(new URL(`/conversations/${conversationId}/chat?pageNum=1&pageSize=5`, startedSetup.server.url));
 
     expect(firstPageResponse.status).toBe(200);
 
@@ -96,7 +74,10 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
       expect(firstPage.items[index]?.sequenceNumber).toBe(expectedSequence);
       expect(firstPage.items[index]?.type).toBe(expectedType);
       expect(firstPage.items[index]?.content).toEqual([
-        { type: "text", text: `Manual lambo image upload ${expectedMessageIndex}` },
+        {
+          type: "text",
+          text: `Manual lambo image upload ${expectedMessageIndex}`,
+        },
       ]);
       if (expectedType === "user") {
         expect(firstPage.items[index]?.files).toHaveLength(1);
@@ -111,12 +92,7 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
     }
 
     // Read the second 5 visible messages and assert the sequence continues.
-    const secondPageResponse = await fetch(
-      new URL(
-        `/conversations/${conversationId}/chat?pageNum=2&pageSize=5`,
-        startedSetup.server.url,
-      ),
-    );
+    const secondPageResponse = await fetch(new URL(`/conversations/${conversationId}/chat?pageNum=2&pageSize=5`, startedSetup.server.url));
 
     expect(secondPageResponse.status).toBe(200);
 
@@ -134,7 +110,10 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
       expect(secondPage.items[index]?.sequenceNumber).toBe(expectedSequence);
       expect(secondPage.items[index]?.type).toBe(expectedType);
       expect(secondPage.items[index]?.content).toEqual([
-        { type: "text", text: `Manual lambo image upload ${expectedMessageIndex}` },
+        {
+          type: "text",
+          text: `Manual lambo image upload ${expectedMessageIndex}`,
+        },
       ]);
       if (expectedType === "user") {
         expect(secondPage.items[index]?.files).toHaveLength(1);
@@ -149,19 +128,14 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
     }
 
     // Delete the conversation and verify the API reports it as gone.
-    const deleteResponse = await fetch(
-      new URL(`/conversations/${conversationId}`, startedSetup.server.url),
-      {
-        method: "DELETE",
-      },
-    );
+    const deleteResponse = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url), {
+      method: "DELETE",
+    });
 
     expect(deleteResponse.status).toBe(204);
     conversationId = undefined;
 
-    const missingConversationResponse = await fetch(
-      new URL(`/conversations/${createdConversation.id}`, startedSetup.server.url),
-    );
+    const missingConversationResponse = await fetch(new URL(`/conversations/${createdConversation.id}`, startedSetup.server.url));
 
     expect(missingConversationResponse.status).toBe(404);
     expect(await missingConversationResponse.json()).toEqual({
@@ -185,10 +159,7 @@ function requireSetup(): ConvIntegrationSetup {
   return setup;
 }
 
-async function deleteConversationIfPresent(
-  startedSetup: ConvIntegrationSetup,
-  conversationId: string | undefined,
-): Promise<void> {
+async function deleteConversationIfPresent(startedSetup: ConvIntegrationSetup, conversationId: string | undefined): Promise<void> {
   if (!conversationId) {
     return;
   }
@@ -198,17 +169,11 @@ async function deleteConversationIfPresent(
   });
 }
 
-function buildImageMessageFormData(
-  imageBytes: Uint8Array,
-  text: string,
-): FormData {
+function buildImageMessageFormData(imageBytes: Uint8Array, text: string): FormData {
   const formData = new FormData();
 
   formData.set("type", "user");
-  formData.set(
-    "content",
-    JSON.stringify([{ type: "text", text }]),
-  );
+  formData.set("content", JSON.stringify([{ type: "text", text }]));
   formData.set(
     "attachment",
     new File([toArrayBuffer(imageBytes)], "lambo.jpg", {
@@ -220,8 +185,5 @@ function buildImageMessageFormData(
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }

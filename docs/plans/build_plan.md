@@ -145,7 +145,10 @@ enum ContentPartType {
 
 type ContentPart =
   | { readonly type: ContentPartType.Text; readonly text: string }
-  | { readonly type: ContentPartType.ImageUrl; readonly imageUrl: { readonly url: string } }
+  | {
+      readonly type: ContentPartType.ImageUrl;
+      readonly imageUrl: { readonly url: string };
+    }
   | { readonly type: ContentPartType.File; readonly fileId: string }
   | { readonly type: ContentPartType.Audio; readonly data: string };
 
@@ -290,9 +293,7 @@ type LlmError = {
 
 ```ts
 interface LlmCompletionService {
-  complete(
-    messages: ReadonlyArray<Message>,
-  ): Promise<Result<LlmCompletionResult, LlmError>>;
+  complete(messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>>;
 }
 ```
 
@@ -424,7 +425,7 @@ interface LlmCompletionService {
 
 1. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
 2. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
-3. Compute offset = (pageNum - 1) * pageSize.
+3. Compute offset = (pageNum - 1) \* pageSize.
 4. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
 
 ### RemoveFromConversationDBStore (id: string): Result<void, ValidationError | StoreError>
@@ -458,7 +459,7 @@ interface LlmCompletionService {
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
 3. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
-4. Compute fromSequence = (pageNum - 1) * pageSize + 1.
+4. Compute fromSequence = (pageNum - 1) \* pageSize + 1.
 5. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
 
 ### ReadAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], ValidationError | StoreError>

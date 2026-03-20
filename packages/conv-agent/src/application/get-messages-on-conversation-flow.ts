@@ -40,14 +40,8 @@ export class GetMessagesOnConversationFlow {
     private readonly fileDomainService: FileDomainService,
   ) {}
 
-  async execute(
-    query: GetMessagesQuery,
-  ): Promise<
-    Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>
-  > {
-    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(
-      query.conversationId,
-    );
+  async execute(query: GetMessagesQuery): Promise<Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>> {
+    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(query.conversationId);
 
     if (!conversationResult.ok) {
       return conversationResult;
@@ -66,10 +60,7 @@ export class GetMessagesOnConversationFlow {
     const items: GetMessagesItem[] = [];
 
     for (const message of result.value) {
-      if (
-        message.type !== LLMMessageType.User &&
-        message.type !== LLMMessageType.Assistant
-      ) {
+      if (message.type !== LLMMessageType.User && message.type !== LLMMessageType.Assistant) {
         continue;
       }
 

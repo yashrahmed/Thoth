@@ -8,10 +8,7 @@ interface PlaceholderFetchHandlerOptions {
   cors?: boolean;
 }
 
-export function createPlaceholderFetchHandler(
-  service: string,
-  options: PlaceholderFetchHandlerOptions = {},
-): (req: Request) => Response {
+export function createPlaceholderFetchHandler(service: string, options: PlaceholderFetchHandlerOptions = {}): (req: Request) => Response {
   return (req: Request): Response => {
     const url = new URL(req.url);
 
@@ -42,20 +39,11 @@ export function createPlaceholderFetchHandler(
       );
     }
 
-    return withCors(
-      Response.json(
-        { error: `Route ${req.method} ${url.pathname} is not supported.` },
-        { status: 404 },
-      ),
-      options,
-    );
+    return withCors(Response.json({ error: `Route ${req.method} ${url.pathname} is not supported.` }, { status: 404 }), options);
   };
 }
 
-function withCors(
-  response: Response,
-  options: PlaceholderFetchHandlerOptions,
-): Response {
+function withCors(response: Response, options: PlaceholderFetchHandlerOptions): Response {
   if (!options.cors) {
     return response;
   }

@@ -8,6 +8,6 @@ export class LlmDomainService {
   constructor(private readonly llmCompletionService: LlmCompletionService) {}
 
   async sendToLLMChatService(messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>> {
-    return this.llmCompletionService.complete(messages);
+    return this.llmCompletionService.llmComplete(messages);
   }
 }

@@ -402,7 +402,7 @@ class InMemoryBlobRepository implements BlobRepository {
 class InMemoryLlmCompletionService implements LlmCompletionService {
   result: Result<LlmCompletionResult, LlmError> | null = null;
 
-  async complete(messages: ReadonlyArray<Message>) {
+  async llmComplete(messages: ReadonlyArray<Message>) {
     if (this.result) {
       return this.result;
     }

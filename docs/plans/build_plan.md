@@ -35,20 +35,16 @@ class File {
 
 ### Flow Input/Output Types
 
+Flow DTOs are type aliases of their corresponding domain types.
+No mapping is needed at the application boundary because the shapes
+are identical.
+
 ```ts
-type MessageType = "user" | "assistant" | "system" | "tool";
+type MessageType = LlmMessageType;
 
-type ContentPartDto =
-  | { readonly type: "text"; readonly text: string }
-  | { readonly type: "image_url"; readonly imageUrl: { readonly url: string } }
-  | { readonly type: "file"; readonly fileId: string }
-  | { readonly type: "audio"; readonly data: string };
+type ContentPartDto = ContentPart;
 
-type ToolCallDto = {
-  readonly id: string;
-  readonly name: string;
-  readonly args: Record<string, unknown>;
-};
+type ToolCallDto = ToolCall;
 
 type DeleteConversationCommand = {
   readonly conversationId: string;
@@ -127,13 +123,25 @@ type GetConversationResult = {
 ```ts
 type FileContent = ArrayBuffer;
 
-type LlmMessageType = "user" | "assistant" | "system" | "tool";
+enum LlmMessageType {
+  User = "user",
+  Assistant = "assistant",
+  System = "system",
+  Tool = "tool",
+}
+
+enum ContentPartType {
+  Text = "text",
+  ImageUrl = "image_url",
+  File = "file",
+  Audio = "audio",
+}
 
 type ContentPart =
-  | { readonly type: "text"; readonly text: string }
-  | { readonly type: "image_url"; readonly imageUrl: { readonly url: string } }
-  | { readonly type: "file"; readonly fileId: string }
-  | { readonly type: "audio"; readonly data: string };
+  | { readonly type: ContentPartType.Text; readonly text: string }
+  | { readonly type: ContentPartType.ImageUrl; readonly imageUrl: { readonly url: string } }
+  | { readonly type: ContentPartType.File; readonly fileId: string }
+  | { readonly type: ContentPartType.Audio; readonly data: string };
 
 type ToolCall = {
   readonly id: string;
@@ -228,22 +236,41 @@ type ValidationError = {
   readonly message: string;
 };
 
+enum EntityType {
+  Conversation = "Conversation",
+  Message = "Message",
+  File = "File",
+}
+
+enum StoreOperation {
+  Persist = "persist",
+  Read = "read",
+  Remove = "remove",
+  ReadPage = "readPage",
+}
+
+enum BlobStoreOperation {
+  Upload = "upload",
+  Fetch = "fetch",
+  Delete = "delete",
+}
+
 type NotFoundError = {
   readonly kind: "NotFoundError";
-  readonly entityType: "Conversation" | "Message" | "File";
+  readonly entityType: EntityType;
   readonly id: string;
 };
 
 type StoreError = {
   readonly kind: "StoreError";
-  readonly operation: "persist" | "read" | "remove" | "readPage";
-  readonly entityType: "Conversation" | "Message" | "File";
+  readonly operation: StoreOperation;
+  readonly entityType: EntityType;
   readonly message: string;
 };
 
 type BlobStoreError = {
   readonly kind: "BlobStoreError";
-  readonly operation: "upload" | "fetch" | "delete";
+  readonly operation: BlobStoreOperation;
   readonly message: string;
 };
 
@@ -279,16 +306,6 @@ interface LlmCompletionService {
 - RequirePositiveInteger(value: number, fieldName: string): Result<number, ValidationError>
 - RequirePresent(value: unknown, fieldName: string): Result<void, ValidationError>
 
-## Application Mapping Utilities
-
-These map between application-layer Dto types and domain types at the
-App action boundary. They live in the application layer.
-
-- MapContentPartDtosToDomain(dtos: ReadonlyArray\<ContentPartDto\>): ReadonlyArray\<ContentPart\>
-- MapToolCallDtosToDomain(dtos: ReadonlyArray\<ToolCallDto\>): ReadonlyArray\<ToolCall\>
-- MapContentPartsToDtos(parts: ReadonlyArray\<ContentPart\>): ReadonlyArray\<ContentPartDto\>
-- MapToolCallsToDtos(calls: ReadonlyArray\<ToolCall\>): ReadonlyArray\<ToolCallDto\>
-
 ## Actions
 
 ### App.DeleteConversation (command: DeleteConversationCommand): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
@@ -304,22 +321,20 @@ App action boundary. They live in the application layer.
 
 1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
 2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
-3. Map request Dto fields to domain types: MapContentPartDtosToDomain(request.content) → contentParts.
-4. CreateNextMessage({ conversationId, type: request.type, content: contentParts, toolCalls: [], toolCallId: "", fileIds from files }) → userMessage → if failure, return failure.
-5. ReadAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
-6. SendToLLMChatService(allMessages) → llmResult → if failure, return failure.
-7. CreateNextMessage({ conversationId, type: "assistant", content: llmResult.content, toolCalls: llmResult.toolCalls, toolCallId: "", fileIds: [] }) → assistantMessage → if failure, return failure.
-8. Return succeed(void).
+3. CreateNextMessage({ conversationId, type: request.type, content: request.content, toolCalls: [], toolCallId: "", fileIds from files }) → userMessage → if failure, return failure.
+4. ReadAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
+5. SendToLLMChatService(allMessages) → llmResult → if failure, return failure.
+6. CreateNextMessage({ conversationId, type: LlmMessageType.Assistant, content: llmResult.content, toolCalls: llmResult.toolCalls, toolCallId: "", fileIds: [] }) → assistantMessage → if failure, return failure.
+7. Return succeed(void).
 
 ### App.GetMessagesOnConversation (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
 1. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
 2. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
-3. Filter messages to only those with type "user" or "assistant" → visibleMessages.
+3. Filter messages to only those with type LlmMessageType.User or LlmMessageType.Assistant → visibleMessages.
 4. For each message: Message in visibleMessages:
    1. GetFiles({ fileIds: message.fileIds }) → files → if failure, return failure.
-   2. Map message domain fields to Dto types: MapContentPartsToDtos(message.content) → contentDtos.
-   3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: contentDtos, files mapped to GetMessagesFile[], createdAt, updatedAt }).
+   2. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: message.content, files mapped to GetMessagesFile[], createdAt, updatedAt }).
 5. Return succeed(items).
 
 ### App.ListConversations (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
@@ -419,7 +434,7 @@ App action boundary. They live in the application layer.
 1. RequireNonEmptyString(record.conversationId, "conversationId") → if failure, return failure.
 2. RequirePositiveInteger(record.sequenceNumber, "sequenceNumber") → if failure, return failure.
 3. RequirePresent(record.content, "content") → if failure, return failure.
-4. RequireNonEmptyString(record.type, "type") → if failure, return failure.
+4. RequirePresent(record.type, "type") → if failure, return failure.
 5. If record.toolCalls is non-empty:
    1. For each toolCall: ToolCall in record.toolCalls:
       1. RequireNonEmptyString(toolCall.id, "toolCall.id") → if failure, return failure.
@@ -611,12 +626,12 @@ App action boundary. They live in the application layer.
   repository or infrastructure names. They discriminate between the two kinds
   of store (relational vs object) while remaining in the domain layer. The
   `Infra.*` actions are the repository/adapter layer.
-- `ContentPartDto`/`ToolCallDto`/`MessageType` are application-layer types
-  exposed via Flow I/O Types. `ContentPart`/`ToolCall`/`LlmMessageType`
-  are domain-layer types used by entities and domain actions. `App.*` actions
-  sit at the boundary and map between the two using Application Mapping
-  Utilities. This ensures inbound adapters never import domain types directly
-  (per AGENTS.md layer dependency rules).
+- `ContentPartDto`/`ToolCallDto`/`MessageType` are application-layer type
+  aliases of their domain counterparts (`ContentPart`/`ToolCall`/`LlmMessageType`).
+  Because the shapes are identical, no mapping is needed at the application
+  boundary — `App.*` actions pass values through directly. Inbound adapters
+  import the flow-level aliases, not the domain types (per AGENTS.md layer
+  dependency rules).
 - Inbound adapters must define their own transport DTOs for request parsing
   and response serialization. Transport validation errors (e.g. malformed
   multipart fields) must use adapter-local error types, not domain

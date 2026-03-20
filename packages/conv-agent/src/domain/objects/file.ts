@@ -1,6 +1,8 @@
 import { ConstructionError } from "./errors";
 
-export interface FileProps {
+export type FileContent = ArrayBuffer;
+
+interface FileProps {
   readonly id: string;
   readonly canonicalUrl: string;
   readonly filename: string;

@@ -1,4 +1,4 @@
-import type { FileContent } from "../objects/file-content";
+import type { FileContent } from "../objects/file";
 import type {
   CreateFileRecord,
   FileRepository,
@@ -14,18 +14,18 @@ import type { Result } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
 import { requireNonEmptyString } from "../validation";
 
-export interface UploadFileInput {
+interface UploadFileInput {
   readonly conversationId: string;
   readonly content: FileContent;
   readonly filename: string;
   readonly mimeType: string;
 }
 
-export interface UploadFilesInput {
+interface UploadFilesInput {
   readonly files: ReadonlyArray<UploadFileInput>;
 }
 
-export interface GetFilesInput {
+interface GetFilesInput {
   readonly fileIds: ReadonlyArray<string>;
 }
 

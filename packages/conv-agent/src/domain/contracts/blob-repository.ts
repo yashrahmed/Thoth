@@ -1,4 +1,4 @@
-import type { FileContent } from "../objects/file-content";
+import type { FileContent } from "../objects/file";
 import type { BlobStoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 

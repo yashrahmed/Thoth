@@ -13,18 +13,25 @@ if [ -z "$COMMAND" ]; then
   exit 1
 fi
 
+start_database() {
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d postgres
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
+}
+
+stop_database() {
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
+}
+
 case "$COMMAND" in
-  start)
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d postgres
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
+  start|restart)
+    if [ "$COMMAND" = "restart" ]; then
+      stop_database
+    fi
+
+    start_database
     ;;
   stop)
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
-    ;;
-  restart)
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d postgres
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
+    stop_database
     ;;
   *)
     echo "Unsupported command: $COMMAND"

@@ -123,26 +123,25 @@ stop_all_services() {
   stop_service "planning-agent" "$(read_port planningAgent)"
 }
 
+require_config() {
+  if [ ! -f "$CONFIG_PATH" ]; then
+    echo "Missing local launch config: $CONFIG_PATH"
+    exit 1
+  fi
+}
+
 case "$COMMAND" in
-  start)
-    if [ ! -f "$CONFIG_PATH" ]; then
-      echo "Missing local launch config: $CONFIG_PATH"
-      exit 1
+  start|restart)
+    require_config
+
+    if [ "$COMMAND" = "restart" ]; then
+      stop_all_services
     fi
 
     start_all_services
     ;;
   stop)
     stop_all_services
-    ;;
-  restart)
-    if [ ! -f "$CONFIG_PATH" ]; then
-      echo "Missing local launch config: $CONFIG_PATH"
-      exit 1
-    fi
-
-    stop_all_services
-    start_all_services
     ;;
   *)
     echo "Unsupported command: $COMMAND"

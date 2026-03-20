@@ -4,7 +4,7 @@ import type {
   BlobRepository,
   BlobUploadRequest,
 } from "../../domain/contracts/blob-repository";
-import { BlobStoreError } from "../../domain/objects/errors";
+import { BlobStoreError, BlobStoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 
 export interface R2BlobConfig {
@@ -20,6 +20,11 @@ export interface R2BlobCredentials {
 }
 
 const CONVERSATIONS_CANONICAL_PATH_PREFIX = "/conversations/";
+
+enum BlobRequestMethod {
+  Put = "PUT",
+  Delete = "DELETE",
+}
 
 export class R2BlobRepository implements BlobRepository {
   constructor(
@@ -38,7 +43,7 @@ export class R2BlobRepository implements BlobRepository {
 
     try {
       const response = await this.signedFetch({
-        method: "PUT",
+        method: BlobRequestMethod.Put,
         objectKey,
         body: request.content,
         contentType: request.mimeType,
@@ -46,13 +51,18 @@ export class R2BlobRepository implements BlobRepository {
 
       if (!response.ok) {
         return failure(
-          new BlobStoreError("upload", await getResponseMessage(response)),
+          new BlobStoreError(
+            BlobStoreOperation.Upload,
+            await getResponseMessage(response),
+          ),
         );
       }
 
       return success(canonicalPath);
     } catch (error) {
-      return failure(new BlobStoreError("upload", getErrorMessage(error)));
+      return failure(
+        new BlobStoreError(BlobStoreOperation.Upload, getErrorMessage(error)),
+      );
     }
   }
 
@@ -63,24 +73,29 @@ export class R2BlobRepository implements BlobRepository {
 
     try {
       const response = await this.signedFetch({
-        method: "DELETE",
+        method: BlobRequestMethod.Delete,
         objectKey,
       });
 
       if (!response.ok) {
         return failure(
-          new BlobStoreError("delete", await getResponseMessage(response)),
+          new BlobStoreError(
+            BlobStoreOperation.Delete,
+            await getResponseMessage(response),
+          ),
         );
       }
 
       return success(undefined);
     } catch (error) {
-      return failure(new BlobStoreError("delete", getErrorMessage(error)));
+      return failure(
+        new BlobStoreError(BlobStoreOperation.Delete, getErrorMessage(error)),
+      );
     }
   }
 
   private async signedFetch(input: {
-    readonly method: "PUT" | "DELETE";
+    readonly method: BlobRequestMethod;
     readonly objectKey: string;
     readonly body?: ArrayBuffer;
     readonly contentType?: string;

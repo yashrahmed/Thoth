@@ -5,8 +5,10 @@ import type {
 } from "../../domain/contracts/conversation-repository";
 import { Conversation } from "../../domain/objects/conversation";
 import {
+  EntityType,
   NotFoundError,
   StoreError,
+  StoreOperation,
 } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
@@ -30,9 +32,15 @@ export class PostgresConversationRepository implements ConversationRepository {
         returning id, created_at, updated_at
       `;
 
-      return mapRow(rows[0], "persist");
+      return mapRow(rows[0], StoreOperation.Persist);
     } catch (error) {
-      return failure(new StoreError("Conversation", "persist", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Conversation,
+          StoreOperation.Persist,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 
@@ -49,12 +57,18 @@ export class PostgresConversationRepository implements ConversationRepository {
       const row = rows[0];
 
       if (!row) {
-        return failure(new NotFoundError("Conversation", conversationId));
+        return failure(new NotFoundError(EntityType.Conversation, conversationId));
       }
 
-      return mapRow(row, "read");
+      return mapRow(row, StoreOperation.Read);
     } catch (error) {
-      return failure(new StoreError("Conversation", "read", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Conversation,
+          StoreOperation.Read,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 
@@ -73,7 +87,7 @@ export class PostgresConversationRepository implements ConversationRepository {
       const conversations: Conversation[] = [];
 
       for (const row of rows) {
-        const conversationResult = mapRow(row, "readPage");
+        const conversationResult = mapRow(row, StoreOperation.ReadPage);
 
         if (!conversationResult.ok) {
           return conversationResult;
@@ -85,7 +99,11 @@ export class PostgresConversationRepository implements ConversationRepository {
       return success(conversations);
     } catch (error) {
       return failure(
-        new StoreError("Conversation", "readPage", getErrorMessage(error)),
+        new StoreError(
+          EntityType.Conversation,
+          StoreOperation.ReadPage,
+          getErrorMessage(error),
+        ),
       );
     }
   }
@@ -101,18 +119,28 @@ export class PostgresConversationRepository implements ConversationRepository {
 
       return success(undefined);
     } catch (error) {
-      return failure(new StoreError("Conversation", "remove", getErrorMessage(error)));
+      return failure(
+        new StoreError(
+          EntityType.Conversation,
+          StoreOperation.Remove,
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 }
 
 function mapRow(
   row: ConversationRow | undefined,
-  operation: StoreError["operation"],
+  operation: StoreOperation,
 ): Result<Conversation, StoreError> {
   if (!row) {
     return failure(
-      new StoreError("Conversation", operation, "Conversation row was not returned."),
+      new StoreError(
+        EntityType.Conversation,
+        operation,
+        "Conversation row was not returned.",
+      ),
     );
   }
 
@@ -126,12 +154,14 @@ function mapRow(
     );
   } catch (error) {
     if (error instanceof Error) {
-      return failure(new StoreError("Conversation", operation, error.message));
+      return failure(
+        new StoreError(EntityType.Conversation, operation, error.message),
+      );
     }
 
     return failure(
       new StoreError(
-        "Conversation",
+        EntityType.Conversation,
         operation,
         "Unexpected conversation mapping error.",
       ),

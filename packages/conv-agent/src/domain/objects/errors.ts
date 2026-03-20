@@ -1,4 +1,21 @@
-export type EntityType = "Conversation" | "Message" | "File";
+export enum EntityType {
+  Conversation = "Conversation",
+  Message = "Message",
+  File = "File",
+}
+
+export enum StoreOperation {
+  Persist = "persist",
+  Read = "read",
+  Remove = "remove",
+  ReadPage = "readPage",
+}
+
+export enum BlobStoreOperation {
+  Upload = "upload",
+  Fetch = "fetch",
+  Delete = "delete",
+}
 
 export class ValidationError {
   readonly kind = "ValidationError";
@@ -23,7 +40,7 @@ export class StoreError {
 
   constructor(
     readonly entityType: EntityType,
-    readonly operation: "persist" | "read" | "remove" | "readPage",
+    readonly operation: StoreOperation,
     readonly message: string,
   ) {}
 }
@@ -32,7 +49,7 @@ export class BlobStoreError {
   readonly kind = "BlobStoreError";
 
   constructor(
-    readonly operation: "upload" | "fetch" | "delete",
+    readonly operation: BlobStoreOperation,
     readonly message: string,
   ) {}
 }
@@ -41,7 +58,7 @@ export class ConstructionError {
   readonly kind = "ConstructionError";
 
   constructor(
-    readonly entityType: EntityType,
+    readonly entityType: string,
     readonly message: string,
   ) {}
 }

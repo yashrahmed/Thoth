@@ -107,6 +107,8 @@ I/O should live.
   - The service method should use the plan action name.
   - The repository/adapter method should use the corresponding `Infra.*`
     name in code form.
+- When checking compliance between `docs/plans/build_plan.md` and code
+  placement, use `bun run lint:placement` before doing manual inspection.
 
 ## Persistence
 

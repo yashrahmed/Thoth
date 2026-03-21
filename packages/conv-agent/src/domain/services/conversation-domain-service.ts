@@ -2,7 +2,7 @@ import type { ConversationPageRequest, ConversationOffsetPageRequest, Conversati
 import type { Conversation } from "../objects/conversation";
 import type { NotFoundError, StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { requireNonEmptyString, requirePositiveInteger } from "../validation";
+import { requireNonEmptyString } from "../validation";
 
 export class ConversationDomainService {
   constructor(
@@ -33,22 +33,10 @@ export class ConversationDomainService {
     return this.conversationRepository.selectConversationRow(conversationIdResult.value);
   }
 
-  async readPageFromConversationDBStore(request: ConversationPageRequest): Promise<Result<Conversation[], ValidationError | StoreError>> {
-    const pageNumResult = requirePositiveInteger(request.pageNum, "pageNum");
-
-    if (!pageNumResult.ok) {
-      return pageNumResult;
-    }
-
-    const pageSizeResult = requirePositiveInteger(request.pageSize, "pageSize");
-
-    if (!pageSizeResult.ok) {
-      return pageSizeResult;
-    }
-
+  async readPageFromConversationDBStore(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
     const pageRequest: ConversationOffsetPageRequest = {
-      offset: (pageNumResult.value - 1) * pageSizeResult.value,
-      pageSize: pageSizeResult.value,
+      offset: (request.pageNum - 1) * request.pageSize,
+      pageSize: request.pageSize,
     };
 
     return this.conversationRepository.selectConversationPage(pageRequest);

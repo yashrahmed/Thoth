@@ -78,6 +78,15 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
           type: "text",
           text: `Manual lambo image upload ${expectedMessageIndex}`,
         },
+        ...(expectedType === "user"
+          ? [
+              {
+                type: "image",
+                fileId: expect.any(String),
+                mediaType: "image/jpeg",
+              },
+            ]
+          : []),
       ]);
       if (expectedType === "user") {
         expect(firstPage.items[index]?.files).toHaveLength(1);
@@ -114,6 +123,15 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
           type: "text",
           text: `Manual lambo image upload ${expectedMessageIndex}`,
         },
+        ...(expectedType === "user"
+          ? [
+              {
+                type: "image",
+                fileId: expect.any(String),
+                mediaType: "image/jpeg",
+              },
+            ]
+          : []),
       ]);
       if (expectedType === "user") {
         expect(secondPage.items[index]?.files).toHaveLength(1);
@@ -173,7 +191,13 @@ function buildImageMessageFormData(imageBytes: Uint8Array, text: string): FormDa
   const formData = new FormData();
 
   formData.set("type", "user");
-  formData.set("content", JSON.stringify([{ type: "text", text }]));
+  formData.set(
+    "content",
+    JSON.stringify([
+      { type: "text", text },
+      { type: "image", fileId: "pending-image", mediaType: "image/jpeg" },
+    ]),
+  );
   formData.set(
     "attachment",
     new File([toArrayBuffer(imageBytes)], "lambo.jpg", {

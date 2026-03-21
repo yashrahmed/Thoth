@@ -1,34 +1,17 @@
-import type { BlobRepository, BlobUploadRequest } from "../contracts/blob-repository";
+import type { BlobRepository } from "../contracts/blob-repository";
 import type { BlobStoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { requireNonEmptyString, requirePresent } from "../validation";
+import { requireNonEmptyString } from "../validation";
+import { UploadFileInput } from "../objects/upload-file-input";
 
 export class BlobDomainService {
   constructor(private readonly blobRepository: BlobRepository) {}
 
-  async uploadToBlobStore(request: BlobUploadRequest): Promise<Result<string, ValidationError | BlobStoreError>> {
-    const contentResult = requirePresent(request.content, "content");
+  async uploadToBlobStore(request: UploadFileInput): Promise<Result<string, ValidationError | BlobStoreError>> {
+    const validationResult = request.isValid();
 
-    if (!contentResult.ok) {
-      return contentResult;
-    }
-
-    const conversationIdResult = requireNonEmptyString(request.conversationId, "conversationId");
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const filenameResult = requireNonEmptyString(request.filename, "filename");
-
-    if (!filenameResult.ok) {
-      return filenameResult;
-    }
-
-    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
-
-    if (!mimeTypeResult.ok) {
-      return mimeTypeResult;
+    if (!validationResult.ok) {
+      return validationResult;
     }
 
     return this.blobRepository.putBlob(request);

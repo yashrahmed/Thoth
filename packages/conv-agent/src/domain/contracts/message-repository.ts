@@ -1,19 +1,55 @@
 import type { Message } from "../objects/message";
 import type { NotFoundError, StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { type LLMMessageType } from "../objects/llm";
-import type { ContentPart, ToolCall } from "../objects/message-content";
+import { LLM_MESSAGE_TYPES, type LLMMessageType } from "../objects/llm";
+import { type MessagePart, validateMessageParts } from "../objects/message-content";
+import { ValidationError } from "../objects/errors";
+import { failure } from "../objects/result";
+import { requireNonEmptyString, requirePositiveInteger } from "../validation";
 
-export interface CreateMessageRecord {
+export class CreateMessageRecord {
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
-  readonly fileIds: ReadonlyArray<string>;
+  readonly content: ReadonlyArray<MessagePart>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+
+  constructor(props: {
+    readonly conversationId: string;
+    readonly type: LLMMessageType;
+    readonly sequenceNumber: number;
+    readonly content: ReadonlyArray<MessagePart>;
+    readonly createdAt: Date;
+    readonly updatedAt: Date;
+  }) {
+    this.conversationId = props.conversationId;
+    this.type = props.type;
+    this.sequenceNumber = props.sequenceNumber;
+    this.content = props.content;
+    this.createdAt = props.createdAt;
+    this.updatedAt = props.updatedAt;
+  }
+
+  isValid(): Result<void, ValidationError> {
+    const conversationIdResult = requireNonEmptyString(this.conversationId, "conversationId");
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const sequenceNumberResult = requirePositiveInteger(this.sequenceNumber, "sequenceNumber");
+
+    if (!sequenceNumberResult.ok) {
+      return sequenceNumberResult;
+    }
+
+    if (!LLM_MESSAGE_TYPES.includes(this.type)) {
+      return failure(new ValidationError("type", "type must be one of user, assistant, system, or tool."));
+    }
+
+    return validateMessageParts(this.type, this.content);
+  }
 }
 
 export interface MessagePageRequest {

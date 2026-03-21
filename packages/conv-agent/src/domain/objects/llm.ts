@@ -1,4 +1,4 @@
-import type { ContentPart, ToolCall } from "./message-content";
+import type { MessagePart } from "./message-content";
 
 export enum LLMMessageType {
   User = "user",
@@ -10,6 +10,5 @@ export enum LLMMessageType {
 export const LLM_MESSAGE_TYPES = Object.values(LLMMessageType);
 
 export interface LlmCompletionResult {
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly content: ReadonlyArray<MessagePart>;
 }

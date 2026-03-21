@@ -1,22 +1,19 @@
 import type { CreateMessageRecord, MessageRepository, MessageSequencePageRequest } from "../../domain/contracts/message-repository";
-import { Message } from "../../domain/objects/message";
+import type { Message } from "../../domain/objects/message";
 import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
-import { failure, type Result, success } from "../../domain/objects/result";
+import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import type { ContentPart, ToolCall } from "../../domain/objects/message-content";
+import type { MessagePart } from "../../domain/objects/message-content";
 
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
   readonly type: LLMMessageType;
   readonly sequence_number: number;
-  readonly content: ContentPart[];
-  readonly tool_calls: ToolCall[];
-  readonly tool_call_id: string;
+  readonly content: MessagePart[];
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
-  readonly file_ids: string[];
 }
 
 interface CountRow {
@@ -36,9 +33,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          tool_calls,
-          tool_call_id,
-          file_ids,
           created_at,
           updated_at
         )
@@ -47,9 +41,6 @@ export class PostgresMessageRepository implements MessageRepository {
           ${record.type},
           ${record.sequenceNumber},
           ${this.sql.json(toJsonValue(record.content))},
-          ${this.sql.json(toJsonValue(record.toolCalls))},
-          ${record.toolCallId},
-          ${record.fileIds},
           ${record.createdAt.toISOString()},
           ${record.updatedAt.toISOString()}
         )
@@ -59,9 +50,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          tool_calls,
-          tool_call_id,
-          file_ids,
           created_at,
           updated_at
       `;
@@ -87,9 +75,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          tool_calls,
-          tool_call_id,
-          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -117,9 +102,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          tool_calls,
-          tool_call_id,
-          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -145,9 +127,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          tool_calls,
-          tool_call_id,
-          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -217,20 +196,15 @@ function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<
   }
 
   try {
-    return success(
-      new Message({
-        id: row.id,
-        conversationId: row.conversation_id,
-        type: row.type,
-        sequenceNumber: row.sequence_number,
-        content: row.content,
-        toolCalls: row.tool_calls,
-        toolCallId: row.tool_call_id,
-        createdAt: toDate(row.created_at),
-        updatedAt: toDate(row.updated_at),
-        fileIds: row.file_ids,
-      }),
-    );
+    return success({
+      id: row.id,
+      conversationId: row.conversation_id,
+      type: row.type,
+      sequenceNumber: row.sequence_number,
+      content: row.content,
+      createdAt: toDate(row.created_at),
+      updatedAt: toDate(row.updated_at),
+    });
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, operation, error.message));

@@ -14,9 +14,11 @@ type ConversationListResponse = {
 
 type ContentPart =
   | { readonly type: "text"; readonly text: string }
-  | { readonly type: "image_url"; readonly imageUrl: { readonly url: string } }
-  | { readonly type: "file"; readonly fileId: string }
-  | { readonly type: "audio"; readonly data: string };
+  | { readonly type: "image"; readonly fileId: string; readonly mediaType?: string }
+  | { readonly type: "file"; readonly fileId: string; readonly mediaType?: string; readonly filename?: string }
+  | { readonly type: "audio"; readonly fileId: string; readonly mediaType?: string }
+  | { readonly type: "tool-call"; readonly toolCallId: string; readonly toolName: string; readonly input: Record<string, unknown> }
+  | { readonly type: "tool-result"; readonly toolCallId: string; readonly toolName: string; readonly output: unknown };
 
 type ChatFile = {
   readonly id: string;
@@ -272,7 +274,10 @@ export function App() {
 
     try {
       const formData = new FormData();
-      const content: ContentPart[] = trimmedDraft ? [{ type: "text", text: trimmedDraft }] : [];
+      const content: ContentPart[] = [
+        ...(trimmedDraft ? [{ type: "text", text: trimmedDraft } satisfies ContentPart] : []),
+        ...selectedFiles.map(toUploadPart),
+      ];
 
       formData.set("type", "user");
       formData.set("content", JSON.stringify(content));
@@ -421,7 +426,7 @@ export function App() {
                       <span>#{message.sequenceNumber}</span>
                     </div>
                     {message.content.map((part, index) => (
-                      <ContentPartView key={`${message.id}-${index}`} part={part} />
+                      <ContentPartView key={`${message.id}-${index}`} part={part} files={message.files} />
                     ))}
                     {message.files.length > 0 ? (
                       <div style={fileListStyle}>
@@ -509,24 +514,79 @@ function EmptyState(props: { readonly title: string; readonly body: string }) {
   );
 }
 
-function ContentPartView(props: { readonly part: ContentPart }) {
-  if (props.part.type === "text") {
-    return <p style={messageTextStyle}>{props.part.text}</p>;
+function ContentPartView(props: { readonly part: ContentPart; readonly files: ReadonlyArray<ChatFile> }) {
+  const { files, part } = props;
+
+  switch (part.type) {
+    case "text":
+      return <p style={messageTextStyle}>{part.text}</p>;
+    case "image": {
+      const file = files.find((item) => item.id === part.fileId);
+
+      if (file) {
+        return <img src={new URL(file.canonicalUrl, CONV_AGENT_URL).toString()} alt={file.filename} style={inlineImageStyle} />;
+      }
+
+      return <p style={messageTextStyle}>Image attachment: {part.fileId}</p>;
+    }
+    case "file": {
+      const file = files.find((item) => item.id === part.fileId);
+
+      if (file) {
+        return (
+          <a href={new URL(file.canonicalUrl, CONV_AGENT_URL).toString()} target="_blank" rel="noreferrer" style={inlineLinkStyle}>
+            {file.filename}
+          </a>
+        );
+      }
+
+      return <p style={messageTextStyle}>Attached file: {part.filename ?? part.fileId}</p>;
+    }
+    case "audio": {
+      const file = files.find((item) => item.id === part.fileId);
+
+      if (file) {
+        return (
+          <audio controls style={audioPlayerStyle}>
+            <source src={new URL(file.canonicalUrl, CONV_AGENT_URL).toString()} type={file.mimeType} />
+          </audio>
+        );
+      }
+
+      return <p style={messageTextStyle}>Audio attachment: {part.fileId}</p>;
+    }
+    case "tool-call":
+      return <p style={messageTextStyle}>Tool call: {part.toolName}</p>;
+    case "tool-result":
+      return <p style={messageTextStyle}>Tool result: {part.toolName}</p>;
+  }
+}
+
+function toUploadPart(file: File): ContentPart {
+  const placeholderFileId = `pending:${file.name}:${file.size}`;
+
+  if (file.type.startsWith("image/")) {
+    return {
+      type: "image",
+      fileId: placeholderFileId,
+      mediaType: file.type || undefined,
+    };
   }
 
-  if (props.part.type === "image_url") {
-    return (
-      <a href={props.part.imageUrl.url} target="_blank" rel="noreferrer" style={inlineLinkStyle}>
-        {props.part.imageUrl.url}
-      </a>
-    );
+  if (file.type.startsWith("audio/")) {
+    return {
+      type: "audio",
+      fileId: placeholderFileId,
+      mediaType: file.type || undefined,
+    };
   }
 
-  if (props.part.type === "file") {
-    return <p style={messageTextStyle}>Attached file: {props.part.fileId}</p>;
-  }
-
-  return <p style={messageTextStyle}>Audio payload attached.</p>;
+  return {
+    type: "file",
+    fileId: placeholderFileId,
+    mediaType: file.type || undefined,
+    filename: file.name,
+  };
 }
 
 function TrashIcon() {
@@ -905,6 +965,18 @@ const messageTextStyle: React.CSSProperties = {
   margin: 0,
   lineHeight: 1.6,
   whiteSpace: "pre-wrap",
+};
+
+const inlineImageStyle: React.CSSProperties = {
+  display: "block",
+  maxWidth: "100%",
+  borderRadius: "16px",
+  marginTop: "8px",
+};
+
+const audioPlayerStyle: React.CSSProperties = {
+  width: "100%",
+  marginTop: "8px",
 };
 
 const fileListStyle: React.CSSProperties = {

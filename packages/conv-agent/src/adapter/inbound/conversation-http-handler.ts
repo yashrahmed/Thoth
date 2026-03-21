@@ -7,8 +7,9 @@ import {
 import type { CreateConversationFlow, CreateConversationResult } from "../../application/create-conversation-flow";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow, GetConversationResult } from "../../application/get-conversation-flow";
-import type { GetMessagesOnConversationFlow, GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
-import type { ListConversationsFlow, ListConversationsItem } from "../../application/list-conversations-flow";
+import { GetMessagesQuery, type GetMessagesOnConversationFlow, type GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
+import { ListConversationsQuery, type ListConversationsFlow, type ListConversationsItem } from "../../application/list-conversations-flow";
+import { isBlobPart } from "../../domain/objects/message-content";
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -81,10 +82,12 @@ export function createConversationHttpHandler(
       if (req.method === "GET" && pathname === "/conversations") {
         const pageNum = Number(url.searchParams.get("pageNum"));
         const pageSize = Number(url.searchParams.get("pageSize"));
-        const result = await listConversations.execute({
-          pageNum,
-          pageSize,
-        });
+        const result = await listConversations.execute(
+          new ListConversationsQuery({
+            pageNum,
+            pageSize,
+          }),
+        );
 
         if (!result.ok) {
           return withCors(mapError(result.error));
@@ -116,11 +119,13 @@ export function createConversationHttpHandler(
       if (chatRoute && req.method === "GET") {
         const pageNum = Number(url.searchParams.get("pageNum"));
         const pageSize = Number(url.searchParams.get("pageSize"));
-        const result = await getMessagesOnConversation.execute({
-          conversationId: chatRoute.conversationId,
-          pageNum,
-          pageSize,
-        });
+        const result = await getMessagesOnConversation.execute(
+          new GetMessagesQuery({
+            conversationId: chatRoute.conversationId,
+            pageNum,
+            pageSize,
+          }),
+        );
 
         if (!result.ok) {
           return withCors(mapError(result.error));
@@ -324,6 +329,12 @@ async function parseAppendMessageRequest(req: Request, conversationId: string): 
       filename: fileValue.name,
       mimeType: fileValue.type || "application/octet-stream",
     });
+  }
+
+  const blobPartCount = contentResult.value.filter((part) => isBlobPart(part)).length;
+
+  if (blobPartCount !== attachments.length) {
+    return transportFailure("attachments", "attachments must match blob parts in content by order.");
   }
 
   return {

@@ -1,12 +1,14 @@
-import { type MessageDomainService } from "../domain/services/message-domain-service";
+import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { BlobStoreError, LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import { success, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
 import type { FileContent } from "../domain/objects/file";
-import type { DomainContentPart } from "../domain/objects/content-part-type";
+import { CreateNextMessageInput } from "../domain/objects/message-input";
+import { replaceBlobPartFileIds, type MessagePart } from "../domain/objects/message-content";
 import { type LlmDomainService } from "../domain/services/llm-domain-service";
+import { UploadFileInput } from "../domain/objects/upload-file-input";
 
 export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 
@@ -19,7 +21,7 @@ export interface Attachment {
 export interface AppendMessageRequest {
   readonly conversationId: string;
   readonly type: LLMMessageTypeValue;
-  readonly content: ReadonlyArray<DomainContentPart>;
+  readonly content: ReadonlyArray<MessagePart>;
   readonly attachments: ReadonlyArray<Attachment>;
 }
 
@@ -39,26 +41,37 @@ export class AppendMessageToConversationFlow {
     }
 
     const uploadFilesResult = await this.fileDomainService.uploadFiles({
-      files: request.attachments.map((attachment) => ({
-        conversationId: request.conversationId,
-        content: attachment.content,
-        filename: attachment.filename,
-        mimeType: attachment.mimeType,
-      })),
+      files: request.attachments.map(
+        (attachment) =>
+          new UploadFileInput({
+            conversationId: request.conversationId,
+            content: attachment.content,
+            filename: attachment.filename,
+            mimeType: attachment.mimeType,
+          }),
+      ),
     });
 
     if (!uploadFilesResult.ok) {
       return uploadFilesResult;
     }
 
-    const createUserMessageResult = await this.messageDomainService.createNextMessage({
-      conversationId: request.conversationId,
-      type: request.type,
-      content: request.content,
-      toolCalls: [],
-      toolCallId: "",
-      fileIds: uploadFilesResult.value.map((file) => file.id),
-    });
+    const userContentResult = replaceBlobPartFileIds(
+      request.content,
+      uploadFilesResult.value.map((file) => file.id),
+    );
+
+    if (!userContentResult.ok) {
+      return userContentResult;
+    }
+
+    const createUserMessageResult = await this.messageDomainService.createNextMessage(
+      new CreateNextMessageInput({
+        conversationId: request.conversationId,
+        type: request.type,
+        content: userContentResult.value,
+      }),
+    );
 
     if (!createUserMessageResult.ok) {
       return createUserMessageResult;
@@ -76,14 +89,13 @@ export class AppendMessageToConversationFlow {
       return llmResult;
     }
 
-    const createAssistantMessageResult = await this.messageDomainService.createNextMessage({
-      conversationId: request.conversationId,
-      type: LLMMessageType.Assistant,
-      content: llmResult.value.content,
-      toolCalls: llmResult.value.toolCalls,
-      toolCallId: "",
-      fileIds: [],
-    });
+    const createAssistantMessageResult = await this.messageDomainService.createNextMessage(
+      new CreateNextMessageInput({
+        conversationId: request.conversationId,
+        type: LLMMessageType.Assistant,
+        content: llmResult.value.content,
+      }),
+    );
 
     if (!createAssistantMessageResult.ok) {
       return createAssistantMessageResult;

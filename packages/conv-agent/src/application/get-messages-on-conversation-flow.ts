@@ -4,12 +4,48 @@ import type { ConversationDomainService } from "../domain/services/conversation-
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import { LLMMessageType, type LLMMessageType as MessageType } from "../domain/objects/llm";
-import type { DomainContentPart } from "../domain/objects/content-part-type";
+import { collectBlobPartFileIds, type MessagePart } from "../domain/objects/message-content";
+import { requireNonEmptyString, requirePositiveInteger } from "../domain/validation";
 
-export interface GetMessagesQuery {
+export class GetMessagesQuery {
   readonly conversationId: string;
   readonly pageNum: number;
   readonly pageSize: number;
+
+  constructor(props: {
+    readonly conversationId: string;
+    readonly pageNum: number;
+    readonly pageSize: number;
+  }) {
+    this.conversationId = props.conversationId;
+    this.pageNum = props.pageNum;
+    this.pageSize = props.pageSize;
+  }
+
+  isValid(): Result<void, ValidationError> {
+    const conversationIdResult = requireNonEmptyString(this.conversationId, "conversationId");
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const pageNumResult = requirePositiveInteger(this.pageNum, "pageNum");
+
+    if (!pageNumResult.ok) {
+      return pageNumResult;
+    }
+
+    const pageSizeResult = requirePositiveInteger(this.pageSize, "pageSize");
+
+    if (!pageSizeResult.ok) {
+      return pageSizeResult;
+    }
+
+    return {
+      ok: true,
+      value: undefined,
+    };
+  }
 }
 
 export interface GetMessagesFile {
@@ -27,7 +63,7 @@ export interface GetMessagesItem {
   readonly conversationId: string;
   readonly type: MessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<DomainContentPart>;
+  readonly content: ReadonlyArray<MessagePart>;
   readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -41,6 +77,12 @@ export class GetMessagesOnConversationFlow {
   ) {}
 
   async execute(query: GetMessagesQuery): Promise<Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>> {
+    const validationResult = query.isValid();
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
     const conversationResult = await this.conversationDomainService.readFromConversationDBStore(query.conversationId);
 
     if (!conversationResult.ok) {
@@ -65,7 +107,7 @@ export class GetMessagesOnConversationFlow {
       }
 
       const filesResult = await this.fileDomainService.getFiles({
-        fileIds: message.fileIds,
+        fileIds: collectBlobPartFileIds(message.content),
       });
 
       if (!filesResult.ok) {

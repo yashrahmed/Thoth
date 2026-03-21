@@ -7,18 +7,7 @@ class Conversation {
   readonly updatedAt: Date;
 }
 
-class Message {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly type: LlmMessageType;
-  readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-  readonly fileIds: ReadonlyArray<string>;
-}
+// Message — see Domain Types section below
 
 class File {
   readonly id: string;
@@ -42,24 +31,14 @@ adapters consume flow DTOs directly — there is no separate
 transport-DTO layer.
 
 ```ts
-type MessageType = LlmMessageType;
-
-type ContentPartDto = ContentPart;
-
-type ToolCallDto = {
-  readonly id: string;
-  readonly name: string;
-  readonly args: Record<string, unknown>;
-};
-
 type DeleteConversationCommand = {
   readonly conversationId: string;
 };
 
 type AppendMessageRequest = {
   readonly conversationId: string;
-  readonly type: MessageType;
-  readonly content: ReadonlyArray<ContentPartDto>;
+  readonly type: LLMMessageType;
+  readonly content: ReadonlyArray<MessagePart>;
   readonly attachments: ReadonlyArray<Attachment>;
 };
 
@@ -69,18 +48,24 @@ type Attachment = {
   readonly mimeType: string;
 };
 
-type GetMessagesQuery = {
+class GetMessagesQuery {
   readonly conversationId: string;
   readonly pageNum: number;
   readonly pageSize: number;
-};
+
+  isValid(): Result<void, ValidationError> {
+    // RequireNonEmptyString(conversationId)
+    // RequirePositiveInteger(pageNum)
+    // RequirePositiveInteger(pageSize)
+  }
+}
 
 type GetMessagesItem = {
   readonly id: string;
   readonly conversationId: string;
-  readonly type: MessageType;
+  readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPartDto>;
+  readonly content: ReadonlyArray<MessagePart>;
   readonly files: ReadonlyArray<GetMessagesFile>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -96,10 +81,15 @@ type GetMessagesFile = {
   readonly updatedAt: Date;
 };
 
-type ListConversationsQuery = {
+class ListConversationsQuery {
   readonly pageNum: number;
   readonly pageSize: number;
-};
+
+  isValid(): Result<void, ValidationError> {
+    // RequirePositiveInteger(pageNum)
+    // RequirePositiveInteger(pageSize)
+  }
+}
 
 type ListConversationsItem = {
   readonly id: string;
@@ -129,60 +119,116 @@ type GetConversationResult = {
 ```ts
 type FileContent = ArrayBuffer;
 
-enum LlmMessageType {
+enum LLMMessageType {
+  System = "system",
   User = "user",
   Assistant = "assistant",
-  System = "system",
   Tool = "tool",
 }
 
-enum ContentPartType {
-  Text = "text",
-  ImageUrl = "image_url",
-  File = "file",
-  Audio = "audio",
+interface TextPart {
+  readonly type: "text";
+  readonly text: string;
 }
 
-type ContentPart =
-  | { readonly type: ContentPartType.Text; readonly text: string }
-  | {
-      readonly type: ContentPartType.ImageUrl;
-      readonly imageUrl: { readonly url: string };
-    }
-  | { readonly type: ContentPartType.File; readonly fileId: string }
-  | { readonly type: ContentPartType.Audio; readonly data: string };
+interface ImagePart {
+  readonly type: "image";
+  readonly fileId: string;
+  readonly mediaType?: string;
+}
 
-type ToolCall = {
+interface FilePart {
+  readonly type: "file";
+  readonly fileId: string;
+  readonly mediaType?: string;
+  readonly filename?: string;
+}
+
+interface AudioPart {
+  readonly type: "audio";
+  readonly fileId: string;
+  readonly mediaType?: string;
+}
+
+interface ToolCallPart {
+  readonly type: "tool-call";
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly input: Record<string, unknown>;
+}
+
+interface ToolResultPart {
+  readonly type: "tool-result";
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly output: unknown;
+}
+
+type MessagePart = TextPart | ImagePart | FilePart | AudioPart | ToolCallPart | ToolResultPart;
+
+interface Message {
   readonly id: string;
-  readonly name: string;
-  readonly args: Record<string, unknown>;
-};
-
-type CreateMessageInput = {
   readonly conversationId: string;
-  readonly type: LlmMessageType;
+  readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
-  readonly fileIds: ReadonlyArray<string>;
-};
+  readonly content: ReadonlyArray<MessagePart>;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
 
-type CreateNextMessageInput = {
+class CreateMessageInput {
   readonly conversationId: string;
-  readonly type: LlmMessageType;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
-  readonly fileIds: ReadonlyArray<string>;
-};
+  readonly type: LLMMessageType;
+  readonly sequenceNumber: number;
+  readonly content: ReadonlyArray<MessagePart>;
 
-type UploadFileInput = {
+  isValid(): Result<void, ValidationError> {
+    // RequireNonEmptyString(conversationId)
+    // RequirePositiveInteger(sequenceNumber)
+    // RequirePresent(content)
+    // RequirePresent(type)
+    // Validate content parts match type constraints:
+    //   System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
+    //   Assistant: all parts must be TextPart or ToolCallPart
+    //   Tool: all parts must be ToolResultPart
+    // For each BlobPart: RequireNonEmptyString(fileId)
+    // For each ToolCallPart: RequireNonEmptyString(toolCallId, toolName)
+    // For each ToolResultPart: RequireNonEmptyString(toolCallId, toolName)
+  }
+}
+
+class CreateNextMessageInput {
+  readonly conversationId: string;
+  readonly type: LLMMessageType;
+  readonly content: ReadonlyArray<MessagePart>;
+
+  isValid(): Result<void, ValidationError> {
+    // RequireNonEmptyString(conversationId)
+    // RequirePresent(content)
+    // RequirePresent(type)
+    // Validate content parts match type constraints:
+    //   System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
+    //   Assistant: all parts must be TextPart or ToolCallPart
+    //   Tool: all parts must be ToolResultPart
+    // For each BlobPart: RequireNonEmptyString(fileId)
+    // For each ToolCallPart: RequireNonEmptyString(toolCallId, toolName)
+    // For each ToolResultPart: RequireNonEmptyString(toolCallId, toolName)
+  }
+}
+
+class UploadFileInput {
   readonly conversationId: string;
   readonly content: FileContent;
   readonly filename: string;
   readonly mimeType: string;
-};
+
+  isValid(): Result<void, ValidationError> {
+    // RequireNonEmptyString(conversationId)
+    // RequirePresent(content)
+    // RequireNonEmptyString(filename)
+    // RequireNonEmptyString(mimeType)
+  }
+}
 
 type UploadFilesInput = {
   readonly files: ReadonlyArray<UploadFileInput>;
@@ -197,17 +243,28 @@ type CreateConversationRecord = {
   readonly updatedAt: Date;
 };
 
-type CreateMessageRecord = {
+class CreateMessageRecord {
   readonly conversationId: string;
-  readonly type: LlmMessageType;
+  readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
-  readonly toolCallId: string;
-  readonly fileIds: ReadonlyArray<string>;
+  readonly content: ReadonlyArray<MessagePart>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
-};
+
+  isValid(): Result<void, ValidationError> {
+    // RequireNonEmptyString(conversationId)
+    // RequirePositiveInteger(sequenceNumber)
+    // RequirePresent(content)
+    // RequirePresent(type)
+    // Validate content parts match type constraints:
+    //   System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
+    //   Assistant: all parts must be TextPart or ToolCallPart
+    //   Tool: all parts must be ToolResultPart
+    // For each BlobPart: RequireNonEmptyString(fileId)
+    // For each ToolCallPart: RequireNonEmptyString(toolCallId, toolName)
+    // For each ToolResultPart: RequireNonEmptyString(toolCallId, toolName)
+  }
+}
 
 type CreateFileRecord = {
   readonly canonicalUrl: string;
@@ -219,9 +276,22 @@ type CreateFileRecord = {
 };
 
 type LlmCompletionResult = {
-  readonly content: ReadonlyArray<ContentPart>;
-  readonly toolCalls: ReadonlyArray<ToolCall>;
+  readonly content: ReadonlyArray<MessagePart>;
 };
+```
+
+### Persisted Types
+
+```ts
+interface MessageRow {
+  readonly id: string;
+  readonly conversation_id: string;
+  readonly type: LLMMessageType;
+  readonly sequence_number: number;
+  readonly content: MessagePart[];
+  readonly created_at: string | Date;
+  readonly updated_at: string | Date;
+}
 ```
 
 ## Result and Error Types
@@ -320,27 +390,31 @@ interface LlmCompletionService {
 
 1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
 2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
-3. CreateNextMessage({ conversationId, type: request.type, content: request.content, toolCalls: [], toolCallId: "", fileIds from files }) → userMessage → if failure, return failure.
-4. ReadAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
-5. SendToLLMChatService(allMessages) → llmResult → if failure, return failure.
-6. CreateNextMessage({ conversationId, type: LlmMessageType.Assistant, content: llmResult.content, toolCalls: llmResult.toolCalls, toolCallId: "", fileIds: [] }) → assistantMessage → if failure, return failure.
-7. Return succeed(void).
+3. Build userContentParts: replace each BlobPart in request.content with a part whose fileId is set to the corresponding uploaded file's id. TextParts pass through unchanged.
+4. CreateNextMessage({ conversationId, type: request.type, content: userContentParts }) → userMessage → if failure, return failure.
+5. ReadAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
+6. SendToLLMChatService(allMessages) → llmResult → if failure, return failure.
+7. CreateNextMessage({ conversationId, type: LLMMessageType.Assistant, content: llmResult.content }) → assistantMessage → if failure, return failure.
+8. Return succeed(void).
 
 ### App.GetMessagesOnConversation (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
-1. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
-2. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
-3. Filter messages to only those with type LlmMessageType.User or LlmMessageType.Assistant → visibleMessages.
-4. For each message: Message in visibleMessages:
-   1. GetFiles({ fileIds: message.fileIds }) → files → if failure, return failure.
-   2. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: message.content, files mapped to GetMessagesFile[], createdAt, updatedAt }).
-5. Return succeed(items).
+1. query.isValid() → if failure, return failure.
+2. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
+3. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
+4. Filter messages to only those with type LLMMessageType.User or LLMMessageType.Assistant → visibleMessages.
+5. For each message: Message in visibleMessages:
+   1. Collect all fileIds from BlobParts (ImagePart, FilePart, AudioPart) in message.content.
+   2. GetFiles({ fileIds }) → files → if failure, return failure.
+   3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: message.content, files mapped to GetMessagesFile[], createdAt, updatedAt }).
+6. Return succeed(items).
 
 ### App.ListConversations (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
 
-1. ReadPageFromConversationDBStore(query.pageNum, query.pageSize) → conversations → if failure, return failure.
-2. Map each conversation to ListConversationsItem({ id, createdAt, updatedAt }).
-3. Return succeed(items).
+1. query.isValid() → if failure, return failure.
+2. ReadPageFromConversationDBStore(query.pageNum, query.pageSize) → conversations → if failure, return failure.
+3. Map each conversation to ListConversationsItem({ id, createdAt, updatedAt }).
+4. Return succeed(items).
 
 ### App.CreateConversation (): Result<CreateConversationResult, StoreError>
 
@@ -362,15 +436,17 @@ interface LlmCompletionService {
 
 ### CreateMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
 
-1. Now() → timestamp.
-2. PersistToMessageDBStore({ conversationId, type: request.type, sequenceNumber, content: request.content, toolCalls: request.toolCalls, toolCallId: request.toolCallId, fileIds, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
-3. Return succeed(message).
+1. request.isValid() → if failure, return failure.
+2. Now() → timestamp.
+3. PersistToMessageDBStore({ conversationId, type: request.type, sequenceNumber, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
+4. Return succeed(message).
 
 ### CreateNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
 
-1. ReadMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
-2. CreateMessage({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content, toolCalls: request.toolCalls, toolCallId: request.toolCallId, fileIds }) → message → if failure, return failure.
-3. Return succeed(message).
+1. request.isValid() → if failure, return failure.
+2. ReadMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
+3. CreateMessage({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content }) → message → if failure, return failure.
+4. Return succeed(message).
 
 ### DeleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
 
@@ -381,10 +457,11 @@ interface LlmCompletionService {
 ### DeleteMessageWithFiles (messageId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
 1. ReadFromMessageDBStore(messageId) → message → if failure, return failure.
-2. For each fileId: string in message.fileIds:
+2. Collect all fileIds from BlobParts (ImagePart, FilePart, AudioPart) in message.content.
+3. For each fileId: string in fileIds:
    1. DeleteFile(fileId) → if failure, return failure.
-3. RemoveFromMessageDBStore(messageId) → if failure, return failure.
-4. Return succeed(void).
+4. RemoveFromMessageDBStore(messageId) → if failure, return failure.
+5. Return succeed(void).
 
 ### UploadFile (request: UploadFileInput): Result<File, ValidationError | BlobStoreError | StoreError>
 
@@ -421,12 +498,10 @@ interface LlmCompletionService {
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectConversationRow(id) → conversation → if failure, return failure.
 
-### ReadPageFromConversationDBStore (pageNum: number, pageSize: number): Result<Conversation[], ValidationError | StoreError>
+### ReadPageFromConversationDBStore (pageNum: number, pageSize: number): Result<Conversation[], StoreError>
 
-1. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
-2. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
-3. Compute offset = (pageNum - 1) \* pageSize.
-4. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
+1. Compute offset = (pageNum - 1) \* pageSize.
+2. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
 
 ### RemoveFromConversationDBStore (id: string): Result<void, ValidationError | StoreError>
 
@@ -435,32 +510,18 @@ interface LlmCompletionService {
 
 ### PersistToMessageDBStore (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
 
-1. RequireNonEmptyString(record.conversationId, "conversationId") → if failure, return failure.
-2. RequirePositiveInteger(record.sequenceNumber, "sequenceNumber") → if failure, return failure.
-3. RequirePresent(record.content, "content") → if failure, return failure.
-4. RequirePresent(record.type, "type") → if failure, return failure.
-5. If record.toolCalls is non-empty:
-   1. For each toolCall: ToolCall in record.toolCalls:
-      1. RequireNonEmptyString(toolCall.id, "toolCall.id") → if failure, return failure.
-      2. RequireNonEmptyString(toolCall.name, "toolCall.name") → if failure, return failure.
-6. If record.toolCallId is non-empty string:
-   1. RequireNonEmptyString(record.toolCallId, "toolCallId") → if failure, return failure.
-7. For each fileId: string in record.fileIds:
-   1. RequireNonEmptyString(fileId, "fileId") → if failure, return failure.
-8. Infra.UpsertMessageRow(record) → message → if failure, return failure.
+1. record.isValid() → if failure, return failure.
+2. Infra.UpsertMessageRow(record) → message → if failure, return failure.
 
 ### ReadFromMessageDBStore (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectMessageRow(id) → message → if failure, return failure.
 
-### ReadPageFromMessageDBStore (conversationId: string, pageNum: number, pageSize: number): Result<Message[], ValidationError | StoreError>
+### ReadPageFromMessageDBStore (conversationId: string, pageNum: number, pageSize: number): Result<Message[], StoreError>
 
-1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
-2. RequirePositiveInteger(pageNum, "pageNum") → if failure, return failure.
-3. RequirePositiveInteger(pageSize, "pageSize") → if failure, return failure.
-4. Compute fromSequence = (pageNum - 1) \* pageSize + 1.
-5. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
+1. Compute fromSequence = (pageNum - 1) \* pageSize + 1.
+2. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
 
 ### ReadAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], ValidationError | StoreError>
 
@@ -491,13 +552,10 @@ interface LlmCompletionService {
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteFileRow(id) → if failure, return failure.
 
-### UploadToBlobStore (request: { conversationId: string, content: FileContent, filename: string, mimeType: string }): Result<string, ValidationError | BlobStoreError>
+### UploadToBlobStore (request: UploadFileInput): Result<string, ValidationError | BlobStoreError>
 
-1. RequirePresent(request.content, "content") → if failure, return failure.
-2. RequireNonEmptyString(request.conversationId, "conversationId") → if failure, return failure.
-3. RequireNonEmptyString(request.filename, "filename") → if failure, return failure.
-4. RequireNonEmptyString(request.mimeType, "mimeType") → if failure, return failure.
-5. Infra.PutBlob(request) → url → if failure, return failure.
+1. request.isValid() → if failure, return failure.
+2. Infra.PutBlob(request) → url → if failure, return failure.
 
 ### DeleteFromBlobStore (canonicalUrl: string): Result<void, ValidationError | BlobStoreError>
 
@@ -538,7 +596,7 @@ interface LlmCompletionService {
 
 ### Infra.UpsertMessageRow (record: CreateMessageRecord): Result<Message, StoreError>
 
-1. MapToRow(record) → row.
+1. MapToRow(record) → row (produces MessageRow with conversation_id, type, sequence_number, content as JSONB, created_at, updated_at).
 2. PostgresClient.query(UpsertQuery("messages", row)) → resultRow → if error, return StoreError.
 3. MapFromRow(resultRow) → message.
 4. Return succeed(message).
@@ -558,13 +616,13 @@ interface LlmCompletionService {
 
 ### Infra.SelectAllMessagesByConversation (conversationId: string): Result<Message[], StoreError>
 
-1. PostgresClient.query(SelectByFieldQuery("messages", "conversationId", conversationId)) → rows → if error, return StoreError.
+1. PostgresClient.query(SelectByFieldQuery("messages", "conversation_id", conversationId)) → rows → if error, return StoreError.
 2. For each row in rows: MapFromRow(row) → message.
 3. Return succeed(messages).
 
 ### Infra.CountMessagesByConversation (conversationId: string): Result<number, StoreError>
 
-1. PostgresClient.query(CountByFieldQuery("messages", "conversationId", conversationId)) → count → if error, return StoreError.
+1. PostgresClient.query(CountByFieldQuery("messages", "conversation_id", conversationId)) → count → if error, return StoreError.
 2. Return succeed(count).
 
 ### Infra.DeleteMessageRow (id: string): Result<void, StoreError>
@@ -603,11 +661,16 @@ interface LlmCompletionService {
 
 ### Infra.LlmComplete (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
 
-1. Map domain Message[] to LangChain BaseMessage[] (user → HumanMessage, assistant → AIMessage, system → SystemMessage, tool → ToolMessage).
+1. Map domain Message[] to LangChain BaseMessage[] (user → HumanMessage, assistant → AIMessage, system → SystemMessage, tool → ToolMessage). Content parts map as follows:
+   - TextPart → string content or text content block.
+   - ImagePart/FilePart/AudioPart → media content blocks referencing file URLs resolved from fileIds.
+   - ToolCallPart → tool_calls array entries on AIMessage.
+   - ToolResultPart → ToolMessage content with toolCallId correlation.
 2. BaseChatModel.invoke(baseMessages) → aiMessage → if error, return LlmError.
-3. Map aiMessage content to LlmCompletionResult.content (ReadonlyArray\<ContentPart\>).
-4. Map aiMessage tool_calls to LlmCompletionResult.toolCalls (ReadonlyArray\<ToolCall\>).
-5. Return succeed(llmCompletionResult).
+3. Map aiMessage content to LlmCompletionResult.content (ReadonlyArray\<MessagePart\>):
+   - Text content → TextPart.
+   - Tool calls → ToolCallPart (with toolCallId, toolName, input).
+4. Return succeed(llmCompletionResult).
 
 ## Notes
 
@@ -630,17 +693,16 @@ interface LlmCompletionService {
   repository or infrastructure names. They discriminate between the two kinds
   of store (relational vs object) while remaining in the domain layer. The
   `Infra.*` actions are the repository/adapter layer.
-- `ContentPartDto`/`MessageType` are application-layer type aliases of their
-  domain counterparts (`ContentPart`/`LlmMessageType`). `ToolCallDto` is a
-  structurally identical interface. Because the shapes match, no mapping is
-  needed at the application boundary — `App.*` actions pass values through
-  directly.
 - Inbound adapters consume flow DTOs directly for request parsing and
   response serialization — there is no separate transport-DTO layer.
   Transport validation errors (e.g. malformed multipart fields) should use
   adapter-local error types, not domain `ValidationError`. The adapter maps
   transport errors to HTTP status codes independently of the domain error
   hierarchy.
+- The `MessageRow` persisted type stores `content` as a JSONB column
+  containing the `MessagePart[]` array. The `type` column stores the
+  `LLMMessageType` value. Column names use snake_case per PostgreSQL convention;
+  `MapToRow`/`MapFromRow` handle the camelCase ↔ snake_case conversion.
 
 ## Description
 
@@ -658,6 +720,14 @@ DeleteConversation, AppendMessage) and progressively decomposed them:
    metadata added.
 5. Pagination was added using sequence-number-based cursoring derived from
    page number and page size inputs.
+6. Message types were refactored to align with the Vercel AI SDK model:
+   `LlmMessageType` was renamed to `LLMMessageType`, `Message` was
+   simplified to a plain interface with `LLMMessageType` + `MessagePart[]`
+   (no generics), type-content constraints are enforced at runtime via
+   `isValid()` methods on input classes, and top-level
+   `toolCalls`/`toolCallId`/
+   `fileIds` fields were folded into typed content parts (`ToolCallPart`,
+   `ToolResultPart`, `ImagePart`, `FilePart`, `AudioPart`).
 
 Each iteration was checked in as a separate commit to preserve the
 decision history.

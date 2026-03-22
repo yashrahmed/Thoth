@@ -25,8 +25,31 @@ import { DeleteConversationFlow } from "./application/delete-conversation-flow";
 import { GetConversationFlow } from "./application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "./application/get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "./application/list-conversations-flow";
+import { PromptLlmFlow } from "./application/prompt-llm-flow";
 
 describe("message validation", () => {
+  test("PromptLlmFlow returns text for a prompt", async () => {
+    const flow = new PromptLlmFlow(new LlmDomainService(new InMemoryLlmCompletionService()), () => new Date("2026-03-16T12:00:00.000Z"));
+
+    expect(await flow.execute({ prompt: "hello world" })).toEqual({
+      ok: true,
+      value: "hello world",
+    });
+  });
+
+  test("PromptLlmFlow rejects an empty prompt", async () => {
+    const flow = new PromptLlmFlow(new LlmDomainService(new InMemoryLlmCompletionService()), () => new Date("2026-03-16T12:00:00.000Z"));
+
+    expect(await flow.execute({ prompt: "   " })).toEqual({
+      ok: false,
+      error: {
+        kind: "ValidationError",
+        fieldName: "prompt",
+        message: "prompt must be a non-empty string.",
+      },
+    });
+  });
+
   test("MessageContentDomainService validates message input by role", () => {
     const messageContentDomainService = new MessageContentDomainService();
     const validUserInput = new CreateMessageInput({

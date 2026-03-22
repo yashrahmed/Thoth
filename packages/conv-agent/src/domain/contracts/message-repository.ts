@@ -1,8 +1,7 @@
-import type { Message } from "../objects/message";
+import type { Message, MessagePart } from "../objects/message";
 import type { NotFoundError, StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import type { LLMMessageType } from "../objects/llm";
-import type { MessagePart } from "../objects/message";
 
 export class CreateMessageRecord {
   readonly conversationId: string;

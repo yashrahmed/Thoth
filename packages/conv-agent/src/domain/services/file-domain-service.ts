@@ -1,7 +1,7 @@
 import type { File as FileEntity } from "../objects/file";
 import type { CreateFileRecord, FileRepository } from "../contracts/file-repository";
 import type { BlobStoreError, NotFoundError, StoreError, ValidationError } from "../objects/errors";
-import { success, type Result } from "../objects/result";
+import type { Result } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
 import { requireNonEmptyString, requirePresent } from "../validation";
 import { UploadFileInput } from "../objects/upload-file-input";

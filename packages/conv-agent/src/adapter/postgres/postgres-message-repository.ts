@@ -1,10 +1,9 @@
 import type { CreateMessageRecord, MessageRepository, MessageSequencePageRequest } from "../../domain/contracts/message-repository";
-import type { Message } from "../../domain/objects/message";
 import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import type { MessagePart } from "../../domain/objects/message";
+import type { Message, MessagePart } from "../../domain/objects/message";
 
 interface MessageRow {
   readonly id: string;

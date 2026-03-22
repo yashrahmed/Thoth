@@ -704,9 +704,9 @@ DeleteConversation, AppendMessage) and progressively decomposed them:
    were folded into typed content parts (`ToolCallPart`, `ToolResultPart`,
    `ImagePart`, `FilePart`, `AudioPart`).
 7. Message content validation and blob-part operations were consolidated
-   into `MessageContentDomainService`. Input classes (`CreateMessageInput`,
-   `CreateNextMessageInput`, `CreateMessageRecord`) are plain data classes;
-   callers delegate validation and content manipulation to the service.
+   into `MessageContentDomainService`. Input classes (`CreateNextMessageInput`,
+   `CreateMessageRecord`) are plain data classes; callers delegate
+   validation and content manipulation to the service.
 8. `isValid()` methods were extracted from `GetMessagesQuery`,
    `ListConversationsQuery`, and `UploadFileInput` into a dedicated
    `ValidationDomainService`. Those types are now plain data types with no

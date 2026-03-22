@@ -2,13 +2,13 @@ import { requireNonEmptyString, requirePositiveInteger, requirePresent } from ".
 import { ValidationError } from "../objects/errors";
 import { LLM_MESSAGE_TYPES, type LLMMessageType } from "../objects/llm";
 import { type BlobPart, type MessagePart } from "../objects/message";
-import { CreateMessageInput, CreateNextMessageInput } from "../objects/message-input";
+import { CreateNextMessageInput } from "../objects/message-input";
 import { CreateMessageRecord } from "../contracts/message-repository";
 import { failure, success, type Result } from "../objects/result";
 
 export class MessageContentDomainService {
-  validateMessageInput(request: CreateMessageInput | CreateNextMessageInput): Result<void, ValidationError> {
-    return this.validateMessageInputLike(request.conversationId, request.type, request.content, "sequenceNumber" in request ? request.sequenceNumber : undefined);
+  validateMessageInput(request: CreateNextMessageInput): Result<void, ValidationError> {
+    return this.validateMessageInputLike(request.conversationId, request.type, request.content);
   }
 
   validateMessageRecord(record: CreateMessageRecord): Result<void, ValidationError> {

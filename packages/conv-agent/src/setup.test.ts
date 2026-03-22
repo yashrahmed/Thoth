@@ -10,7 +10,7 @@ import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/o
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
 import type { Message, MessagePart, TextPart, ToolCallPart } from "./domain/objects/message";
-import { CreateMessageInput, CreateNextMessageInput } from "./domain/objects/message-input";
+import { CreateNextMessageInput } from "./domain/objects/message-input";
 import { UploadFileInput } from "./domain/objects/upload-file-input";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
@@ -52,16 +52,14 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates message input by role", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const validUserInput = new CreateMessageInput({
+    const validUserInput = new CreateNextMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.User,
-      sequenceNumber: 1,
       content: [textPart("hello"), imagePart("file-1")],
     });
-    const invalidAssistantInput = new CreateMessageInput({
+    const invalidAssistantInput = new CreateNextMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
-      sequenceNumber: 1,
       content: [imagePart("file-1")],
     });
 

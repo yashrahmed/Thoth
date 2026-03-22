@@ -3,7 +3,7 @@ import type { Message } from "../objects/message";
 import { BlobStoreError, NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
-import { CreateMessageInput, CreateNextMessageInput } from "../objects/message-input";
+import { CreateNextMessageInput } from "../objects/message-input";
 import type { MessageContentDomainService } from "./message-content-domain-service";
 import { requireNonEmptyString } from "../validation";
 
@@ -13,16 +13,6 @@ export class MessageDomainService {
     private readonly messageContentDomainService: MessageContentDomainService,
     private readonly now: () => Date = () => new Date(),
   ) {}
-
-  async createMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
-    const validationResult = this.messageContentDomainService.validateMessageInput(request);
-
-    if (!validationResult.ok) {
-      return validationResult;
-    }
-
-    return this.persistToMessageDBStore(this.buildRecord(request));
-  }
 
   async persistToMessageDBStore(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
     const validationResult = this.messageContentDomainService.validateMessageRecord(record);
@@ -113,14 +103,7 @@ export class MessageDomainService {
   }
 
   async createNextMessage(request: CreateNextMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
-    const validationResult = this.messageContentDomainService.validateMessageInput(
-      new CreateMessageInput({
-        conversationId: request.conversationId,
-        type: request.type,
-        sequenceNumber: 1,
-        content: request.content,
-      }),
-    );
+    const validationResult = this.messageContentDomainService.validateMessageInput(request);
 
     if (!validationResult.ok) {
       return validationResult;
@@ -132,26 +115,17 @@ export class MessageDomainService {
       return countResult;
     }
 
-    return this.createMessage(
-      new CreateMessageInput({
+    const timestamp = this.now();
+
+    return this.persistToMessageDBStore(
+      new CreateMessageRecord({
         conversationId: request.conversationId,
         type: request.type,
         sequenceNumber: countResult.value + 1,
         content: request.content,
+        createdAt: timestamp,
+        updatedAt: timestamp,
       }),
     );
-  }
-
-  private buildRecord(request: CreateMessageInput): CreateMessageRecord {
-    const timestamp = this.now();
-
-    return new CreateMessageRecord({
-      conversationId: request.conversationId,
-      type: request.type,
-      sequenceNumber: request.sequenceNumber,
-      content: request.content,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
   }
 }

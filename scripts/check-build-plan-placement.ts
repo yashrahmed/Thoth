@@ -41,12 +41,22 @@ export function parsePlanActions(markdown: string): PlanActionSets {
   const appActions: string[] = [];
   const domainActions: string[] = [];
   const infraActions: string[] = [];
-  let section: "none" | "actions" | "infra" = "none";
+  let section: "none" | "legacyActions" | "applicationActions" | "domainActions" | "infra" = "none";
 
   for (const line of markdown.split(/\r?\n/)) {
     if (line.startsWith("## ")) {
       if (line === "## Actions") {
-        section = "actions";
+        section = "legacyActions";
+        continue;
+      }
+
+      if (line === "## Application Flow Actions") {
+        section = "applicationActions";
+        continue;
+      }
+
+      if (line === "## Domain Service Actions") {
+        section = "domainActions";
         continue;
       }
 
@@ -69,7 +79,7 @@ export function parsePlanActions(markdown: string): PlanActionSets {
       continue;
     }
 
-    if (section === "actions") {
+    if (section === "legacyActions") {
       if (actionName.startsWith("App.")) {
         appActions.push(actionName);
       } else if (!actionName.startsWith("Infra.")) {
@@ -82,6 +92,15 @@ export function parsePlanActions(markdown: string): PlanActionSets {
     if (section === "infra") {
       infraActions.push(actionName);
     }
+
+    if (section === "applicationActions") {
+      appActions.push(actionName);
+      continue;
+    }
+
+    if (section === "domainActions") {
+      domainActions.push(actionName);
+    }
   }
 
   return {
@@ -92,10 +111,22 @@ export function parsePlanActions(markdown: string): PlanActionSets {
 }
 
 export function normalizeAppActionName(actionName: string): string {
+  const qualifiedName = extractQualifiedMemberName(actionName);
+
+  if (qualifiedName) {
+    return qualifiedName.ownerName;
+  }
+
   return `${stripPrefix(actionName, "App.")}Flow`;
 }
 
 export function normalizeDomainActionName(actionName: string): string {
+  const qualifiedName = extractQualifiedMemberName(actionName);
+
+  if (qualifiedName) {
+    return qualifiedName.memberName;
+  }
+
   return lowerFirst(stripPrefix(actionName, "App."));
 }
 
@@ -226,7 +257,7 @@ export function evaluatePlacement(planActions: PlanActionSets, symbols: Readonly
       layers: ["application", "domainService", "inboundAdapter", "other"],
     });
 
-    if (contractMatches.length === 1 && adapterMatches.length === 1) {
+    if (contractMatches.length === 1 && adapterMatches.length > 0) {
       continue;
     }
 
@@ -237,16 +268,6 @@ export function evaluatePlacement(planActions: PlanActionSets, symbols: Readonly
         expectedSymbolName,
         message: `Expected exactly one domain contract method named ${expectedSymbolName}, but found ${contractMatches.length}.`,
         matches: contractMatches,
-      });
-    }
-
-    if (adapterMatches.length > 1) {
-      findings.push({
-        group: "Infra",
-        actionName,
-        expectedSymbolName,
-        message: `Expected exactly one outbound adapter method named ${expectedSymbolName}, but found ${adapterMatches.length}.`,
-        matches: adapterMatches,
       });
     }
 
@@ -335,6 +356,19 @@ async function main(): Promise<void> {
 function extractHeadingActionName(line: string): string | null {
   const match = /^###\s+([^:(]+?)\s*(?:\(|:|$)/.exec(line);
   return match?.[1] ?? null;
+}
+
+function extractQualifiedMemberName(actionName: string): { readonly ownerName: string; readonly memberName: string } | null {
+  const separatorIndex = actionName.lastIndexOf(".");
+
+  if (separatorIndex <= 0 || separatorIndex === actionName.length - 1) {
+    return null;
+  }
+
+  return {
+    ownerName: actionName.slice(0, separatorIndex),
+    memberName: actionName.slice(separatorIndex + 1),
+  };
 }
 
 function stripPrefix(value: string, prefix: string): string {

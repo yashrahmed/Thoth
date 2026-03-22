@@ -165,13 +165,6 @@ interface Message {
   readonly updatedAt: Date;
 }
 
-class CreateMessageInput {
-  readonly conversationId: string;
-  readonly type: LLMMessageType;
-  readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<MessagePart>;
-}
-
 class CreateNextMessageInput {
   readonly conversationId: string;
   readonly type: LLMMessageType;
@@ -337,7 +330,7 @@ class ValidationDomainService {
 
 ```ts
 class MessageContentDomainService {
-  validateMessageInput(request: CreateMessageInput | CreateNextMessageInput): Result<void, ValidationError>;
+  validateMessageInput(request: CreateNextMessageInput): Result<void, ValidationError>;
   validateMessageRecord(record: CreateMessageRecord): Result<void, ValidationError>;
   isBlobPart(part: MessagePart): part is BlobPart;
   collectBlobPartFileIds(parts: ReadonlyArray<MessagePart>): ReadonlyArray<string>;
@@ -443,19 +436,13 @@ class MessageContentDomainService {
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteConversationRow(id) → if failure, return failure.
 
-### MessageDomainService.createMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
-
-1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
-2. Now() → timestamp.
-3. MessageDomainService.persistToMessageDBStore({ conversationId, type: request.type, sequenceNumber, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
-4. Return succeed(message).
-
 ### MessageDomainService.createNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
 
 1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
 2. MessageDomainService.readMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
-3. MessageDomainService.createMessage({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content }) → message → if failure, return failure.
-4. Return succeed(message).
+3. Now() → timestamp.
+4. MessageDomainService.persistToMessageDBStore({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
+5. Return succeed(message).
 
 ### MessageDomainService.deleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
 

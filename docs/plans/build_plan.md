@@ -181,39 +181,12 @@ class CreateMessageInput {
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<MessagePart>;
-
-  isValid(): Result<void, ValidationError> {
-    // RequireNonEmptyString(conversationId)
-    // RequirePositiveInteger(sequenceNumber)
-    // RequirePresent(content)
-    // RequirePresent(type)
-    // Validate content parts match type constraints:
-    //   System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
-    //   Assistant: all parts must be TextPart or ToolCallPart
-    //   Tool: all parts must be ToolResultPart
-    // For each BlobPart: RequireNonEmptyString(fileId)
-    // For each ToolCallPart: RequireNonEmptyString(toolCallId, toolName)
-    // For each ToolResultPart: RequireNonEmptyString(toolCallId, toolName)
-  }
 }
 
 class CreateNextMessageInput {
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly content: ReadonlyArray<MessagePart>;
-
-  isValid(): Result<void, ValidationError> {
-    // RequireNonEmptyString(conversationId)
-    // RequirePresent(content)
-    // RequirePresent(type)
-    // Validate content parts match type constraints:
-    //   System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
-    //   Assistant: all parts must be TextPart or ToolCallPart
-    //   Tool: all parts must be ToolResultPart
-    // For each BlobPart: RequireNonEmptyString(fileId)
-    // For each ToolCallPart: RequireNonEmptyString(toolCallId, toolName)
-    // For each ToolResultPart: RequireNonEmptyString(toolCallId, toolName)
-  }
 }
 
 class UploadFileInput {
@@ -250,20 +223,6 @@ class CreateMessageRecord {
   readonly content: ReadonlyArray<MessagePart>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
-
-  isValid(): Result<void, ValidationError> {
-    // RequireNonEmptyString(conversationId)
-    // RequirePositiveInteger(sequenceNumber)
-    // RequirePresent(content)
-    // RequirePresent(type)
-    // Validate content parts match type constraints:
-    //   System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
-    //   Assistant: all parts must be TextPart or ToolCallPart
-    //   Tool: all parts must be ToolResultPart
-    // For each BlobPart: RequireNonEmptyString(fileId)
-    // For each ToolCallPart: RequireNonEmptyString(toolCallId, toolName)
-    // For each ToolResultPart: RequireNonEmptyString(toolCallId, toolName)
-  }
 }
 
 type CreateFileRecord = {
@@ -367,6 +326,28 @@ interface LlmCompletionService {
 }
 ```
 
+### MessageContentDomainService
+
+```ts
+class MessageContentDomainService {
+  validateMessageInput(request: CreateMessageInput | CreateNextMessageInput): Result<void, ValidationError>;
+  validateMessageRecord(record: CreateMessageRecord): Result<void, ValidationError>;
+  isBlobPart(part: MessagePart): part is BlobPart;
+  collectBlobPartFileIds(parts: ReadonlyArray<MessagePart>): ReadonlyArray<string>;
+  replaceBlobPartFileIds(parts: ReadonlyArray<MessagePart>, fileIds: ReadonlyArray<string>): Result<ReadonlyArray<MessagePart>, ValidationError>;
+}
+```
+
+`validateMessageInput` and `validateMessageRecord` validate:
+- RequireNonEmptyString(conversationId)
+- RequirePositiveInteger(sequenceNumber) (when present)
+- RequirePresent(content), RequirePresent(type)
+- Content part type constraints:
+  - System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
+  - Assistant: all parts must be TextPart or ToolCallPart
+  - Tool: all parts must be ToolResultPart
+- Per-part field validation (fileId, toolCallId, toolName, etc.)
+
 ## Atomic Operations
 
 - Now(): Date
@@ -390,7 +371,7 @@ interface LlmCompletionService {
 
 1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
 2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
-3. Build userContentParts: replace each BlobPart in request.content with a part whose fileId is set to the corresponding uploaded file's id. TextParts pass through unchanged.
+3. MessageContentDomainService.replaceBlobPartFileIds(request.content, files.map(f → f.id)) → userContentParts → if failure, return failure.
 4. CreateNextMessage({ conversationId, type: request.type, content: userContentParts }) → userMessage → if failure, return failure.
 5. ReadAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
 6. SendToLLMChatService(allMessages) → llmResult → if failure, return failure.
@@ -404,7 +385,7 @@ interface LlmCompletionService {
 3. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
 4. Filter messages to only those with type LLMMessageType.User or LLMMessageType.Assistant → visibleMessages.
 5. For each message: Message in visibleMessages:
-   1. Collect all fileIds from BlobParts (ImagePart, FilePart, AudioPart) in message.content.
+   1. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
    2. GetFiles({ fileIds }) → files → if failure, return failure.
    3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: message.content, files mapped to GetMessagesFile[], createdAt, updatedAt }).
 6. Return succeed(items).
@@ -436,14 +417,14 @@ interface LlmCompletionService {
 
 ### CreateMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
 
-1. request.isValid() → if failure, return failure.
+1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
 2. Now() → timestamp.
 3. PersistToMessageDBStore({ conversationId, type: request.type, sequenceNumber, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
 4. Return succeed(message).
 
 ### CreateNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
 
-1. request.isValid() → if failure, return failure.
+1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
 2. ReadMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
 3. CreateMessage({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content }) → message → if failure, return failure.
 4. Return succeed(message).
@@ -457,7 +438,7 @@ interface LlmCompletionService {
 ### DeleteMessageWithFiles (messageId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
 1. ReadFromMessageDBStore(messageId) → message → if failure, return failure.
-2. Collect all fileIds from BlobParts (ImagePart, FilePart, AudioPart) in message.content.
+2. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
 3. For each fileId: string in fileIds:
    1. DeleteFile(fileId) → if failure, return failure.
 4. RemoveFromMessageDBStore(messageId) → if failure, return failure.
@@ -510,7 +491,7 @@ interface LlmCompletionService {
 
 ### PersistToMessageDBStore (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
 
-1. record.isValid() → if failure, return failure.
+1. MessageContentDomainService.validateMessageRecord(record) → if failure, return failure.
 2. Infra.UpsertMessageRow(record) → message → if failure, return failure.
 
 ### ReadFromMessageDBStore (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
@@ -723,11 +704,13 @@ DeleteConversation, AppendMessage) and progressively decomposed them:
 6. Message types were refactored to align with the Vercel AI SDK model:
    `LlmMessageType` was renamed to `LLMMessageType`, `Message` was
    simplified to a plain interface with `LLMMessageType` + `MessagePart[]`
-   (no generics), type-content constraints are enforced at runtime via
-   `isValid()` methods on input classes, and top-level
-   `toolCalls`/`toolCallId`/
-   `fileIds` fields were folded into typed content parts (`ToolCallPart`,
-   `ToolResultPart`, `ImagePart`, `FilePart`, `AudioPart`).
+   (no generics), and top-level `toolCalls`/`toolCallId`/`fileIds` fields
+   were folded into typed content parts (`ToolCallPart`, `ToolResultPart`,
+   `ImagePart`, `FilePart`, `AudioPart`).
+7. Message content validation and blob-part operations were consolidated
+   into `MessageContentDomainService`. Input classes (`CreateMessageInput`,
+   `CreateNextMessageInput`, `CreateMessageRecord`) are plain data classes;
+   callers delegate validation and content manipulation to the service.
 
 Each iteration was checked in as a separate commit to preserve the
 decision history.

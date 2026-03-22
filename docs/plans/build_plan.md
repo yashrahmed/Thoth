@@ -48,17 +48,11 @@ type Attachment = {
   readonly mimeType: string;
 };
 
-class GetMessagesQuery {
+type GetMessagesQuery = {
   readonly conversationId: string;
   readonly pageNum: number;
   readonly pageSize: number;
-
-  isValid(): Result<void, ValidationError> {
-    // RequireNonEmptyString(conversationId)
-    // RequirePositiveInteger(pageNum)
-    // RequirePositiveInteger(pageSize)
-  }
-}
+};
 
 type GetMessagesItem = {
   readonly id: string;
@@ -81,15 +75,10 @@ type GetMessagesFile = {
   readonly updatedAt: Date;
 };
 
-class ListConversationsQuery {
+type ListConversationsQuery = {
   readonly pageNum: number;
   readonly pageSize: number;
-
-  isValid(): Result<void, ValidationError> {
-    // RequirePositiveInteger(pageNum)
-    // RequirePositiveInteger(pageSize)
-  }
-}
+};
 
 type ListConversationsItem = {
   readonly id: string;
@@ -189,19 +178,12 @@ class CreateNextMessageInput {
   readonly content: ReadonlyArray<MessagePart>;
 }
 
-class UploadFileInput {
+type UploadFileInput = {
   readonly conversationId: string;
   readonly content: FileContent;
   readonly filename: string;
   readonly mimeType: string;
-
-  isValid(): Result<void, ValidationError> {
-    // RequireNonEmptyString(conversationId)
-    // RequirePresent(content)
-    // RequireNonEmptyString(filename)
-    // RequireNonEmptyString(mimeType)
-  }
-}
+};
 
 type UploadFilesInput = {
   readonly files: ReadonlyArray<UploadFileInput>;
@@ -326,6 +308,31 @@ interface LlmCompletionService {
 }
 ```
 
+### ValidationDomainService
+
+```ts
+class ValidationDomainService {
+  validateGetMessagesQuery(query: GetMessagesQuery): Result<void, ValidationError>;
+  validateListConversationsQuery(query: ListConversationsQuery): Result<void, ValidationError>;
+  validateUploadFileInput(input: UploadFileInput): Result<void, ValidationError>;
+}
+```
+
+`validateGetMessagesQuery` validates:
+- RequireNonEmptyString(conversationId)
+- RequirePositiveInteger(pageNum)
+- RequirePositiveInteger(pageSize)
+
+`validateListConversationsQuery` validates:
+- RequirePositiveInteger(pageNum)
+- RequirePositiveInteger(pageSize)
+
+`validateUploadFileInput` validates:
+- RequireNonEmptyString(conversationId)
+- RequirePresent(content)
+- RequireNonEmptyString(filename)
+- RequireNonEmptyString(mimeType)
+
 ### MessageContentDomainService
 
 ```ts
@@ -356,194 +363,196 @@ class MessageContentDomainService {
 - RequirePositiveInteger(value: number, fieldName: string): Result<number, ValidationError>
 - RequirePresent(value: unknown, fieldName: string): Result<void, ValidationError>
 
-## Actions
+## Application Flow Actions
 
-### App.DeleteConversation (command: DeleteConversationCommand): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
+### DeleteConversationFlow.execute (command: DeleteConversationCommand): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
-1. ReadFromConversationDBStore(command.conversationId) → conversation → if failure, return failure.
-2. ReadAllMessagesFromMessageDBStore(command.conversationId) → messages → if failure, return failure.
+1. ConversationDomainService.readFromConversationDBStore(command.conversationId) → conversation → if failure, return failure.
+2. MessageDomainService.readAllMessagesFromMessageDBStore(command.conversationId) → messages → if failure, return failure.
 3. For each message: Message in messages:
-   1. DeleteMessageWithFiles(message.id) → if failure, return failure.
-4. RemoveFromConversationDBStore(command.conversationId) → if failure, return failure.
+   1. MessageDomainService.deleteMessageWithFiles(message.id) → if failure, return failure.
+4. ConversationDomainService.removeFromConversationDBStore(command.conversationId) → if failure, return failure.
 5. Return succeed(void).
 
-### App.AppendMessageToConversation (request: AppendMessageRequest): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>
+### AppendMessageToConversationFlow.execute (request: AppendMessageRequest): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>
 
-1. ReadFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
-2. UploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
+1. ConversationDomainService.readFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
+2. FileDomainService.uploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
 3. MessageContentDomainService.replaceBlobPartFileIds(request.content, files.map(f → f.id)) → userContentParts → if failure, return failure.
-4. CreateNextMessage({ conversationId, type: request.type, content: userContentParts }) → userMessage → if failure, return failure.
-5. ReadAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
-6. SendToLLMChatService(allMessages) → llmResult → if failure, return failure.
-7. CreateNextMessage({ conversationId, type: LLMMessageType.Assistant, content: llmResult.content }) → assistantMessage → if failure, return failure.
+4. MessageDomainService.createNextMessage({ conversationId, type: request.type, content: userContentParts }) → userMessage → if failure, return failure.
+5. MessageDomainService.readAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
+6. LlmDomainService.sendToLLMChatService(allMessages) → llmResult → if failure, return failure.
+7. MessageDomainService.createNextMessage({ conversationId, type: LLMMessageType.Assistant, content: llmResult.content }) → assistantMessage → if failure, return failure.
 8. Return succeed(void).
 
-### App.GetMessagesOnConversation (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
+### GetMessagesOnConversationFlow.execute (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
-1. query.isValid() → if failure, return failure.
-2. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
-3. ReadPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
+1. ValidationDomainService.validateGetMessagesQuery(query) → if failure, return failure.
+2. ConversationDomainService.readFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
+3. MessageDomainService.readPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
 4. Filter messages to only those with type LLMMessageType.User or LLMMessageType.Assistant → visibleMessages.
 5. For each message: Message in visibleMessages:
    1. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
-   2. GetFiles({ fileIds }) → files → if failure, return failure.
+   2. FileDomainService.getFiles({ fileIds }) → files → if failure, return failure.
    3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: message.content, files mapped to GetMessagesFile[], createdAt, updatedAt }).
 6. Return succeed(items).
 
-### App.ListConversations (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
+### ListConversationsFlow.execute (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
 
-1. query.isValid() → if failure, return failure.
-2. ReadPageFromConversationDBStore(query.pageNum, query.pageSize) → conversations → if failure, return failure.
+1. ValidationDomainService.validateListConversationsQuery(query) → if failure, return failure.
+2. ConversationDomainService.readPageFromConversationDBStore(query.pageNum, query.pageSize) → conversations → if failure, return failure.
 3. Map each conversation to ListConversationsItem({ id, createdAt, updatedAt }).
 4. Return succeed(items).
 
-### App.CreateConversation (): Result<CreateConversationResult, StoreError>
+### CreateConversationFlow.execute (): Result<CreateConversationResult, StoreError>
 
-1. CreateConversation() → conversation → if failure, return failure.
+1. ConversationDomainService.createConversation() → conversation → if failure, return failure.
 2. Map conversation to CreateConversationResult({ id, createdAt, updatedAt }).
 3. Return succeed(createConversationResult).
 
-### App.GetConversation (query: GetConversationQuery): Result<GetConversationResult, ValidationError | NotFoundError | StoreError>
+### GetConversationFlow.execute (query: GetConversationQuery): Result<GetConversationResult, ValidationError | NotFoundError | StoreError>
 
-1. ReadFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
+1. ConversationDomainService.readFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
 2. Map conversation to GetConversationResult({ id, createdAt, updatedAt }).
 3. Return succeed(getConversationResult).
 
-### CreateConversation (): Result<Conversation, StoreError>
+## Domain Service Actions
+
+### ConversationDomainService.createConversation (): Result<Conversation, StoreError>
 
 1. Now() → timestamp.
-2. PersistToConversationDBStore({ createdAt: timestamp, updatedAt: timestamp }) → conversation → if failure, return failure.
+2. ConversationDomainService.persistToConversationDBStore({ createdAt: timestamp, updatedAt: timestamp }) → conversation → if failure, return failure.
 3. Return succeed(conversation).
 
-### CreateMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
-
-1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
-2. Now() → timestamp.
-3. PersistToMessageDBStore({ conversationId, type: request.type, sequenceNumber, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
-4. Return succeed(message).
-
-### CreateNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
-
-1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
-2. ReadMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
-3. CreateMessage({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content }) → message → if failure, return failure.
-4. Return succeed(message).
-
-### DeleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
-
-1. ReadFromMessageDBStore(messageId) → if failure, return failure.
-2. RemoveFromMessageDBStore(messageId) → if failure, return failure.
-3. Return succeed(void).
-
-### DeleteMessageWithFiles (messageId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
-
-1. ReadFromMessageDBStore(messageId) → message → if failure, return failure.
-2. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
-3. For each fileId: string in fileIds:
-   1. DeleteFile(fileId) → if failure, return failure.
-4. RemoveFromMessageDBStore(messageId) → if failure, return failure.
-5. Return succeed(void).
-
-### UploadFile (request: UploadFileInput): Result<File, ValidationError | BlobStoreError | StoreError>
-
-1. UploadToBlobStore({ conversationId, content, filename, mimeType }) → canonicalUrl → if failure, return failure.
-2. Now() → timestamp.
-3. PersistToFileDBStore({ canonicalUrl, filename, mimeType, sizeInBytes: content.byteLength, createdAt: timestamp, updatedAt: timestamp }) → file → if failure, return failure.
-4. Return succeed(file).
-
-### UploadFiles (request: UploadFilesInput): Result<File[], ValidationError | BlobStoreError | StoreError>
-
-1. For each file: UploadFileInput in request.files:
-   1. UploadFile(file) → uploadedFile → if failure, return failure.
-2. Return succeed(uploadedFiles).
-
-### GetFiles (request: GetFilesInput): Result<File[], NotFoundError | StoreError>
-
-1. For each fileId: string in request.fileIds:
-   1. ReadFromFileDBStore(fileId) → file → if failure, return failure.
-2. Return succeed(files).
-
-### DeleteFile (fileId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
-
-1. ReadFromFileDBStore(fileId) → file → if failure, return failure.
-2. DeleteFromBlobStore(file.canonicalUrl) → if failure, return failure.
-3. RemoveFromFileDBStore(fileId) → if failure, return failure.
-4. Return succeed(void).
-
-### PersistToConversationDBStore (record: CreateConversationRecord): Result<Conversation, StoreError>
+### ConversationDomainService.persistToConversationDBStore (record: CreateConversationRecord): Result<Conversation, StoreError>
 
 1. Infra.UpsertConversationRow(record) → conversation → if failure, return failure.
 
-### ReadFromConversationDBStore (id: string): Result<Conversation, ValidationError | NotFoundError | StoreError>
+### ConversationDomainService.readFromConversationDBStore (id: string): Result<Conversation, ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectConversationRow(id) → conversation → if failure, return failure.
 
-### ReadPageFromConversationDBStore (pageNum: number, pageSize: number): Result<Conversation[], StoreError>
+### ConversationDomainService.readPageFromConversationDBStore (pageNum: number, pageSize: number): Result<Conversation[], StoreError>
 
 1. Compute offset = (pageNum - 1) \* pageSize.
 2. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
 
-### RemoveFromConversationDBStore (id: string): Result<void, ValidationError | StoreError>
+### ConversationDomainService.removeFromConversationDBStore (id: string): Result<void, ValidationError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteConversationRow(id) → if failure, return failure.
 
-### PersistToMessageDBStore (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
+### MessageDomainService.createMessage (request: CreateMessageInput): Result<Message, ValidationError | StoreError>
+
+1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
+2. Now() → timestamp.
+3. MessageDomainService.persistToMessageDBStore({ conversationId, type: request.type, sequenceNumber, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
+4. Return succeed(message).
+
+### MessageDomainService.createNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
+
+1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
+2. MessageDomainService.readMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
+3. MessageDomainService.createMessage({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content }) → message → if failure, return failure.
+4. Return succeed(message).
+
+### MessageDomainService.deleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
+
+1. MessageDomainService.readFromMessageDBStore(messageId) → if failure, return failure.
+2. MessageDomainService.removeFromMessageDBStore(messageId) → if failure, return failure.
+3. Return succeed(void).
+
+### MessageDomainService.deleteMessageWithFiles (messageId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
+
+1. MessageDomainService.readFromMessageDBStore(messageId) → message → if failure, return failure.
+2. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
+3. For each fileId: string in fileIds:
+   1. FileDomainService.deleteFile(fileId) → if failure, return failure.
+4. MessageDomainService.removeFromMessageDBStore(messageId) → if failure, return failure.
+5. Return succeed(void).
+
+### MessageDomainService.persistToMessageDBStore (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
 
 1. MessageContentDomainService.validateMessageRecord(record) → if failure, return failure.
 2. Infra.UpsertMessageRow(record) → message → if failure, return failure.
 
-### ReadFromMessageDBStore (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
+### MessageDomainService.readFromMessageDBStore (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectMessageRow(id) → message → if failure, return failure.
 
-### ReadPageFromMessageDBStore (conversationId: string, pageNum: number, pageSize: number): Result<Message[], StoreError>
+### MessageDomainService.readPageFromMessageDBStore (conversationId: string, pageNum: number, pageSize: number): Result<Message[], StoreError>
 
 1. Compute fromSequence = (pageNum - 1) \* pageSize + 1.
 2. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
 
-### ReadAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], ValidationError | StoreError>
+### MessageDomainService.readAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], ValidationError | StoreError>
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. Infra.SelectAllMessagesByConversation(conversationId) → messages → if failure, return failure.
 
-### ReadMessageCountFromMessageDBStore (conversationId: string): Result<number, ValidationError | StoreError>
+### MessageDomainService.readMessageCountFromMessageDBStore (conversationId: string): Result<number, ValidationError | StoreError>
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. Infra.CountMessagesByConversation(conversationId) → count → if failure, return failure.
 
-### RemoveFromMessageDBStore (id: string): Result<void, ValidationError | StoreError>
+### MessageDomainService.removeFromMessageDBStore (id: string): Result<void, ValidationError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteMessageRow(id) → if failure, return failure.
 
-### PersistToFileDBStore (record: CreateFileRecord): Result<File, StoreError>
+### FileDomainService.uploadFile (request: UploadFileInput): Result<File, ValidationError | BlobStoreError | StoreError>
+
+1. BlobDomainService.uploadToBlobStore({ conversationId, content, filename, mimeType }) → canonicalUrl → if failure, return failure.
+2. Now() → timestamp.
+3. FileDomainService.persistToFileDBStore({ canonicalUrl, filename, mimeType, sizeInBytes: content.byteLength, createdAt: timestamp, updatedAt: timestamp }) → file → if failure, return failure.
+4. Return succeed(file).
+
+### FileDomainService.uploadFiles (request: UploadFilesInput): Result<File[], ValidationError | BlobStoreError | StoreError>
+
+1. For each file: UploadFileInput in request.files:
+   1. FileDomainService.uploadFile(file) → uploadedFile → if failure, return failure.
+2. Return succeed(uploadedFiles).
+
+### FileDomainService.getFiles (request: GetFilesInput): Result<File[], NotFoundError | StoreError>
+
+1. For each fileId: string in request.fileIds:
+   1. FileDomainService.readFromFileDBStore(fileId) → file → if failure, return failure.
+2. Return succeed(files).
+
+### FileDomainService.deleteFile (fileId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
+
+1. FileDomainService.readFromFileDBStore(fileId) → file → if failure, return failure.
+2. BlobDomainService.deleteFromBlobStore(file.canonicalUrl) → if failure, return failure.
+3. FileDomainService.removeFromFileDBStore(fileId) → if failure, return failure.
+4. Return succeed(void).
+
+### FileDomainService.persistToFileDBStore (record: CreateFileRecord): Result<File, StoreError>
 
 1. Infra.UpsertFileRow(record) → file → if failure, return failure.
 
-### ReadFromFileDBStore (id: string): Result<File, ValidationError | NotFoundError | StoreError>
+### FileDomainService.readFromFileDBStore (id: string): Result<File, ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectFileRow(id) → file → if failure, return failure.
 
-### RemoveFromFileDBStore (id: string): Result<void, ValidationError | StoreError>
+### FileDomainService.removeFromFileDBStore (id: string): Result<void, ValidationError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteFileRow(id) → if failure, return failure.
 
-### UploadToBlobStore (request: UploadFileInput): Result<string, ValidationError | BlobStoreError>
+### BlobDomainService.uploadToBlobStore (request: UploadFileInput): Result<string, ValidationError | BlobStoreError>
 
-1. request.isValid() → if failure, return failure.
+1. ValidationDomainService.validateUploadFileInput(request) → if failure, return failure.
 2. Infra.PutBlob(request) → url → if failure, return failure.
 
-### DeleteFromBlobStore (canonicalUrl: string): Result<void, ValidationError | BlobStoreError>
+### BlobDomainService.deleteFromBlobStore (canonicalUrl: string): Result<void, ValidationError | BlobStoreError>
 
 1. RequireNonEmptyString(canonicalUrl, "canonicalUrl") → if failure, return failure.
 2. Infra.RemoveBlob(canonicalUrl) → if failure, return failure.
 
-### SendToLLMChatService (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
+### LlmDomainService.sendToLLMChatService (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
 
 1. Infra.LlmComplete(messages) → llmResult → if failure, return failure.
 2. Return succeed(llmResult).
@@ -711,6 +720,16 @@ DeleteConversation, AppendMessage) and progressively decomposed them:
    into `MessageContentDomainService`. Input classes (`CreateMessageInput`,
    `CreateNextMessageInput`, `CreateMessageRecord`) are plain data classes;
    callers delegate validation and content manipulation to the service.
+8. `isValid()` methods were extracted from `GetMessagesQuery`,
+   `ListConversationsQuery`, and `UploadFileInput` into a dedicated
+   `ValidationDomainService`. Those types are now plain data types with no
+   behaviour; callers invoke the domain service for validation.
+9. Action headings were qualified with their owning class to mirror code
+   placement: application flows use `*Flow.execute`, domain actions use
+   `ConversationDomainService.*`, `MessageDomainService.*`,
+   `FileDomainService.*`, `BlobDomainService.*`, and
+   `LlmDomainService.*`. Internal step references were updated
+   accordingly.
 
 Each iteration was checked in as a separate commit to preserve the
 decision history.

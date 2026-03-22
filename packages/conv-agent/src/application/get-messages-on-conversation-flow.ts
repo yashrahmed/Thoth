@@ -1,10 +1,11 @@
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
+import type { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import { LLMMessageType, type LLMMessageType as MessageType } from "../domain/objects/llm";
-import { collectBlobPartFileIds, type MessagePart } from "../domain/objects/message-content";
+import type { MessagePart } from "../domain/objects/message";
 import { requireNonEmptyString, requirePositiveInteger } from "../domain/validation";
 
 export class GetMessagesQuery {
@@ -73,6 +74,7 @@ export class GetMessagesOnConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
+    private readonly messageContentDomainService: MessageContentDomainService,
     private readonly fileDomainService: FileDomainService,
   ) {}
 
@@ -107,7 +109,7 @@ export class GetMessagesOnConversationFlow {
       }
 
       const filesResult = await this.fileDomainService.getFiles({
-        fileIds: collectBlobPartFileIds(message.content),
+        fileIds: this.messageContentDomainService.collectBlobPartFileIds(message.content),
       });
 
       if (!filesResult.ok) {

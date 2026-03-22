@@ -15,6 +15,7 @@ import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
+import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 
 interface ConvSetupBlobStorage {
@@ -52,7 +53,8 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const blobDomainService = new BlobDomainService(blobRepository);
     const llmDomainService = new LlmDomainService(new PlaceholderLlmRepository());
     const fileDomainService = new FileDomainService(fileRepository, blobDomainService);
-    const messageDomainService = new MessageDomainService(messageRepository);
+    const messageContentDomainService = new MessageContentDomainService();
+    const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService);
     const server = Bun.serve({
       port: input.port,
       fetch: createConversationHttpHandler(
@@ -60,8 +62,9 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         new GetConversationFlow(conversationDomainService),
         new ListConversationsFlow(conversationDomainService),
         new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
-        new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
-        new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+        new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
+        new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
+        messageContentDomainService,
       ),
     });
     let stopped = false;

@@ -9,7 +9,7 @@ import type { DeleteConversationFlow } from "../../application/delete-conversati
 import type { GetConversationFlow, GetConversationResult } from "../../application/get-conversation-flow";
 import { GetMessagesQuery, type GetMessagesOnConversationFlow, type GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
 import { ListConversationsQuery, type ListConversationsFlow, type ListConversationsItem } from "../../application/list-conversations-flow";
-import { isBlobPart } from "../../domain/objects/message-content";
+import type { MessageContentDomainService } from "../../domain/services/message-content-domain-service";
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -46,6 +46,7 @@ export function createConversationHttpHandler(
   deleteConversation: DeleteConversationFlow,
   appendMessageToConversation: AppendMessageToConversationFlow,
   getMessagesOnConversation: GetMessagesOnConversationFlow,
+  messageContentDomainService: MessageContentDomainService,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     try {
@@ -105,7 +106,7 @@ export function createConversationHttpHandler(
       const chatRoute = getConversationChatRoute(pathname);
 
       if (chatRoute && req.method === "POST") {
-        const appendRequestResult = await parseAppendMessageRequest(req, chatRoute.conversationId);
+        const appendRequestResult = await parseAppendMessageRequest(req, chatRoute.conversationId, messageContentDomainService);
 
         if (!appendRequestResult.ok) {
           return withCors(mapError(appendRequestResult.error));
@@ -284,7 +285,11 @@ function withCors(response: Response): Response {
   });
 }
 
-async function parseAppendMessageRequest(req: Request, conversationId: string): Promise<TransportResult<ApplicationAppendMessageRequest>> {
+async function parseAppendMessageRequest(
+  req: Request,
+  conversationId: string,
+  messageContentDomainService: MessageContentDomainService,
+): Promise<TransportResult<ApplicationAppendMessageRequest>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("multipart/form-data")) {
@@ -331,7 +336,7 @@ async function parseAppendMessageRequest(req: Request, conversationId: string): 
     });
   }
 
-  const blobPartCount = contentResult.value.filter((part) => isBlobPart(part)).length;
+  const blobPartCount = contentResult.value.filter((part) => messageContentDomainService.isBlobPart(part)).length;
 
   if (blobPartCount !== attachments.length) {
     return transportFailure("attachments", "attachments must match blob parts in content by order.");

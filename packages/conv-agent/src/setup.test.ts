@@ -9,16 +9,16 @@ import { Conversation } from "./domain/objects/conversation";
 import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
-import type { Message } from "./domain/objects/message";
+import type { Message, MessagePart, TextPart, ToolCallPart } from "./domain/objects/message";
 import { CreateMessageInput, CreateNextMessageInput } from "./domain/objects/message-input";
-import type { MessagePart, TextPart, ToolCallPart } from "./domain/objects/message-content";
 import { UploadFileInput } from "./domain/objects/upload-file-input";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
-import { MessageDomainService } from "./domain/services/message-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
+import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
+import { MessageDomainService } from "./domain/services/message-domain-service";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
 import { DeleteConversationFlow } from "./application/delete-conversation-flow";
@@ -27,7 +27,8 @@ import { GetMessagesOnConversationFlow } from "./application/get-messages-on-con
 import { ListConversationsFlow } from "./application/list-conversations-flow";
 
 describe("message validation", () => {
-  test("CreateMessageInput validates role-part constraints", () => {
+  test("MessageContentDomainService validates message input by role", () => {
+    const messageContentDomainService = new MessageContentDomainService();
     const validUserInput = new CreateMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.User,
@@ -41,11 +42,11 @@ describe("message validation", () => {
       content: [imagePart("file-1")],
     });
 
-    expect(validUserInput.isValid()).toEqual({
+    expect(messageContentDomainService.validateMessageInput(validUserInput)).toEqual({
       ok: true,
       value: undefined,
     });
-    expect(invalidAssistantInput.isValid()).toEqual({
+    expect(messageContentDomainService.validateMessageInput(invalidAssistantInput)).toEqual({
       ok: false,
       error: {
         kind: "ValidationError",
@@ -55,7 +56,8 @@ describe("message validation", () => {
     });
   });
 
-  test("CreateNextMessageInput validates tool messages", () => {
+  test("MessageContentDomainService validates next message input", () => {
+    const messageContentDomainService = new MessageContentDomainService();
     const validToolInput = new CreateNextMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
@@ -67,8 +69,8 @@ describe("message validation", () => {
       content: [textPart("bad")],
     });
 
-    expect(validToolInput.isValid().ok).toBe(true);
-    expect(invalidToolInput.isValid()).toEqual({
+    expect(messageContentDomainService.validateMessageInput(validToolInput).ok).toBe(true);
+    expect(messageContentDomainService.validateMessageInput(invalidToolInput)).toEqual({
       ok: false,
       error: {
         kind: "ValidationError",
@@ -78,7 +80,8 @@ describe("message validation", () => {
     });
   });
 
-  test("CreateMessageRecord validates persisted content", () => {
+  test("MessageContentDomainService validates persisted content", () => {
+    const messageContentDomainService = new MessageContentDomainService();
     const validRecord = new CreateMessageRecord({
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
@@ -96,8 +99,8 @@ describe("message validation", () => {
       updatedAt: new Date("2026-03-16T12:00:00.000Z"),
     });
 
-    expect(validRecord.isValid().ok).toBe(true);
-    expect(invalidRecord.isValid()).toEqual({
+    expect(messageContentDomainService.validateMessageRecord(validRecord).ok).toBe(true);
+    expect(messageContentDomainService.validateMessageRecord(invalidRecord)).toEqual({
       ok: false,
       error: {
         kind: "ValidationError",
@@ -107,7 +110,8 @@ describe("message validation", () => {
     });
   });
 
-  test("UploadFileInput validates required fields", () => {
+  test("FileDomainService validates required upload fields", async () => {
+    const fileDomainService = new FileDomainService(new InMemoryFileRepository(), new BlobDomainService(new InMemoryBlobRepository()), () => new Date("2026-03-16T12:00:00.000Z"));
     const validInput = new UploadFileInput({
       conversationId: "conversation-1",
       content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
@@ -121,8 +125,8 @@ describe("message validation", () => {
       mimeType: "text/plain",
     });
 
-    expect(validInput.isValid().ok).toBe(true);
-    expect(invalidInput.isValid()).toEqual({
+    expect((await fileDomainService.uploadFile(validInput)).ok).toBe(true);
+    expect(await fileDomainService.uploadFile(invalidInput)).toEqual({
       ok: false,
       error: {
         kind: "ValidationError",
@@ -132,11 +136,31 @@ describe("message validation", () => {
     });
   });
 
+  test("MessageContentDomainService collects and replaces blob part file ids", () => {
+    const messageContentDomainService = new MessageContentDomainService();
+    const parts: ReadonlyArray<MessagePart> = [textPart("hello"), imagePart("pending-1"), imagePart("pending-2")];
+
+    expect(messageContentDomainService.collectBlobPartFileIds(parts)).toEqual(["pending-1", "pending-2"]);
+    expect(messageContentDomainService.replaceBlobPartFileIds(parts, ["file-1", "file-2"])).toEqual({
+      ok: true,
+      value: [textPart("hello"), imagePart("file-1"), imagePart("file-2")],
+    });
+    expect(messageContentDomainService.replaceBlobPartFileIds(parts, ["file-1"])).toEqual({
+      ok: false,
+      error: {
+        kind: "ValidationError",
+        fieldName: "attachments",
+        message: "attachments must match blob parts in content by order.",
+      },
+    });
+  });
+
   test("deleteMessageWithFiles removes files referenced by blob parts", async () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
-    const messageDomainService = new MessageDomainService(messageRepository, () => new Date("2026-03-16T12:00:00.000Z"));
+    const messageContentDomainService = new MessageContentDomainService();
+    const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, () => new Date("2026-03-16T12:00:00.000Z"));
     const fileDomainService = new FileDomainService(fileRepository, new BlobDomainService(blobRepository), () => new Date("2026-03-16T12:00:00.000Z"));
 
     messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, [imagePart("file-1")], "2026-03-16T12:00:00.000Z")]);
@@ -367,7 +391,8 @@ function buildHandler(overrides?: {
   const now = () => new Date("2026-03-16T12:00:00.000Z");
   const conversationDomainService = new ConversationDomainService(conversationRepository, now);
   const blobDomainService = new BlobDomainService(blobRepository);
-  const messageDomainService = new MessageDomainService(messageRepository, now);
+  const messageContentDomainService = new MessageContentDomainService();
+  const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, now);
   const llmDomainService = new LlmDomainService(llmCompletionService);
   const fileDomainService = new FileDomainService(fileRepository, blobDomainService, now);
 
@@ -376,8 +401,9 @@ function buildHandler(overrides?: {
     new GetConversationFlow(conversationDomainService),
     new ListConversationsFlow(conversationDomainService),
     new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
-    new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
-    new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+    new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
+    new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
+    messageContentDomainService,
   );
 }
 

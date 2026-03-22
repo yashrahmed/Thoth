@@ -1,9 +1,9 @@
 import type { File as FileEntity } from "../objects/file";
 import type { CreateFileRecord, FileRepository } from "../contracts/file-repository";
 import type { BlobStoreError, NotFoundError, StoreError, ValidationError } from "../objects/errors";
-import type { Result } from "../objects/result";
+import { success, type Result } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
-import { requireNonEmptyString } from "../validation";
+import { requireNonEmptyString, requirePresent } from "../validation";
 import { UploadFileInput } from "../objects/upload-file-input";
 
 export class FileDomainService {
@@ -38,7 +38,7 @@ export class FileDomainService {
   }
 
   async uploadFile(request: UploadFileInput): Promise<Result<FileEntity, ValidationError | BlobStoreError | StoreError>> {
-    const validationResult = request.isValid();
+    const validationResult = this.validateUploadFileInput(request);
 
     if (!validationResult.ok) {
       return validationResult;
@@ -123,4 +123,39 @@ export class FileDomainService {
       updatedAt: timestamp,
     };
   }
+
+  private validateUploadFileInput(request: UploadFileInput): Result<void, ValidationError> {
+    const contentResult = requirePresent(request.content, "content");
+
+    if (!contentResult.ok) {
+      return contentResult;
+    }
+
+    const conversationIdResult = requireNonEmptyString(request.conversationId, "conversationId");
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const filenameResult = requireNonEmptyString(request.filename, "filename");
+
+    if (!filenameResult.ok) {
+      return filenameResult;
+    }
+
+    const mimeTypeResult = requireNonEmptyString(request.mimeType, "mimeType");
+
+    if (!mimeTypeResult.ok) {
+      return mimeTypeResult;
+    }
+
+    return failureOrSuccess();
+  }
+}
+
+function failureOrSuccess(): Result<void, ValidationError> {
+  return {
+    ok: true,
+    value: undefined,
+  };
 }

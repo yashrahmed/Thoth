@@ -4,7 +4,7 @@ import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import type { MessagePart } from "../../domain/objects/message-content";
+import type { MessagePart } from "../../domain/objects/message";
 
 interface MessageRow {
   readonly id: string;

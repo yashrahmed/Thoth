@@ -8,12 +8,6 @@ export class BlobDomainService {
   constructor(private readonly blobRepository: BlobRepository) {}
 
   async uploadToBlobStore(request: UploadFileInput): Promise<Result<string, ValidationError | BlobStoreError>> {
-    const validationResult = request.isValid();
-
-    if (!validationResult.ok) {
-      return validationResult;
-    }
-
     return this.blobRepository.putBlob(request);
   }
 

@@ -2,7 +2,7 @@ import type { NotFoundError, StoreError, ValidationError } from "../domain/objec
 import type { Result } from "../domain/objects/result";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 
-export interface GetConversationQuery {
+interface GetConversationQuery {
   readonly conversationId: string;
 }
 

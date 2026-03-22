@@ -1,11 +1,8 @@
 import type { Message } from "../objects/message";
 import type { NotFoundError, StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { LLM_MESSAGE_TYPES, type LLMMessageType } from "../objects/llm";
-import { type MessagePart, validateMessageParts } from "../objects/message-content";
-import { ValidationError } from "../objects/errors";
-import { failure } from "../objects/result";
-import { requireNonEmptyString, requirePositiveInteger } from "../validation";
+import type { LLMMessageType } from "../objects/llm";
+import type { MessagePart } from "../objects/message";
 
 export class CreateMessageRecord {
   readonly conversationId: string;
@@ -29,26 +26,6 @@ export class CreateMessageRecord {
     this.content = props.content;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
-  }
-
-  isValid(): Result<void, ValidationError> {
-    const conversationIdResult = requireNonEmptyString(this.conversationId, "conversationId");
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const sequenceNumberResult = requirePositiveInteger(this.sequenceNumber, "sequenceNumber");
-
-    if (!sequenceNumberResult.ok) {
-      return sequenceNumberResult;
-    }
-
-    if (!LLM_MESSAGE_TYPES.includes(this.type)) {
-      return failure(new ValidationError("type", "type must be one of user, assistant, system, or tool."));
-    }
-
-    return validateMessageParts(this.type, this.content);
   }
 }
 

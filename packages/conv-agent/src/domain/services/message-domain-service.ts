@@ -3,18 +3,19 @@ import type { Message } from "../objects/message";
 import { BlobStoreError, NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
-import { collectBlobPartFileIds } from "../objects/message-content";
 import { CreateMessageInput, CreateNextMessageInput } from "../objects/message-input";
+import type { MessageContentDomainService } from "./message-content-domain-service";
 import { requireNonEmptyString } from "../validation";
 
 export class MessageDomainService {
   constructor(
     private readonly messageRepository: MessageRepository,
+    private readonly messageContentDomainService: MessageContentDomainService,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
   async createMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
-    const validationResult = request.isValid();
+    const validationResult = this.messageContentDomainService.validateMessageInput(request);
 
     if (!validationResult.ok) {
       return validationResult;
@@ -24,7 +25,7 @@ export class MessageDomainService {
   }
 
   async persistToMessageDBStore(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
-    const validationResult = record.isValid();
+    const validationResult = this.messageContentDomainService.validateMessageRecord(record);
 
     if (!validationResult.ok) {
       return validationResult;
@@ -100,7 +101,7 @@ export class MessageDomainService {
       return messageResult;
     }
 
-    for (const fileId of collectBlobPartFileIds(messageResult.value.content)) {
+    for (const fileId of this.messageContentDomainService.collectBlobPartFileIds(messageResult.value.content)) {
       const deleteFileResult = await fileDomainService.deleteFile(fileId);
 
       if (!deleteFileResult.ok) {
@@ -112,7 +113,14 @@ export class MessageDomainService {
   }
 
   async createNextMessage(request: CreateNextMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
-    const validationResult = request.isValid();
+    const validationResult = this.messageContentDomainService.validateMessageInput(
+      new CreateMessageInput({
+        conversationId: request.conversationId,
+        type: request.type,
+        sequenceNumber: 1,
+        content: request.content,
+      }),
+    );
 
     if (!validationResult.ok) {
       return validationResult;

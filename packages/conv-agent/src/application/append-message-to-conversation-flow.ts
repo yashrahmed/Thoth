@@ -6,9 +6,10 @@ import { success, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
 import type { FileContent } from "../domain/objects/file";
 import { CreateNextMessageInput } from "../domain/objects/message-input";
-import { replaceBlobPartFileIds, type MessagePart } from "../domain/objects/message-content";
+import type { MessagePart } from "../domain/objects/message";
 import { type LlmDomainService } from "../domain/services/llm-domain-service";
 import { UploadFileInput } from "../domain/objects/upload-file-input";
+import type { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 
 export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 
@@ -29,6 +30,7 @@ export class AppendMessageToConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
+    private readonly messageContentDomainService: MessageContentDomainService,
     private readonly fileDomainService: FileDomainService,
     private readonly llmDomainService: LlmDomainService,
   ) {}
@@ -56,7 +58,7 @@ export class AppendMessageToConversationFlow {
       return uploadFilesResult;
     }
 
-    const userContentResult = replaceBlobPartFileIds(
+    const userContentResult = this.messageContentDomainService.replaceBlobPartFileIds(
       request.content,
       uploadFilesResult.value.map((file) => file.id),
     );

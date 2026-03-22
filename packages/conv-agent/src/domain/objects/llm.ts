@@ -1,4 +1,4 @@
-import type { MessagePart } from "./message-content";
+import type { MessagePart } from "./message";
 
 export enum LLMMessageType {
   User = "user",

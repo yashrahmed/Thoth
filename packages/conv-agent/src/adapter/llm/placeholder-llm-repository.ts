@@ -1,7 +1,6 @@
 import type { LlmCompletionService } from "../../domain/contracts/llm-completion-service";
 import type { LlmCompletionResult } from "../../domain/objects/llm";
-import type { Message } from "../../domain/objects/message";
-import type { MessagePart, TextPart } from "../../domain/objects/message-content";
+import type { Message, MessagePart, TextPart } from "../../domain/objects/message";
 import { success, type Result } from "../../domain/objects/result";
 import type { LlmError } from "../../domain/objects/errors";
 

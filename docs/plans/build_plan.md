@@ -48,6 +48,8 @@ type Attachment = {
   readonly mimeType: string;
 };
 
+// File type is inferred from File.mimeType at read time, not stored on Message.
+
 type GetMessagesQuery = {
   readonly conversationId: string;
   readonly pageNum: number;
@@ -61,6 +63,7 @@ type GetMessagesItem = {
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<MessagePart>;
   readonly files: ReadonlyArray<GetMessagesFile>;
+  readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
@@ -120,25 +123,6 @@ interface TextPart {
   readonly text: string;
 }
 
-interface ImagePart {
-  readonly type: "image";
-  readonly fileId: string;
-  readonly mediaType?: string;
-}
-
-interface FilePart {
-  readonly type: "file";
-  readonly fileId: string;
-  readonly mediaType?: string;
-  readonly filename?: string;
-}
-
-interface AudioPart {
-  readonly type: "audio";
-  readonly fileId: string;
-  readonly mediaType?: string;
-}
-
 interface ToolCallPart {
   readonly type: "tool-call";
   readonly toolCallId: string;
@@ -153,7 +137,7 @@ interface ToolResultPart {
   readonly output: unknown;
 }
 
-type MessagePart = TextPart | ImagePart | FilePart | AudioPart | ToolCallPart | ToolResultPart;
+type MessagePart = TextPart | ToolCallPart | ToolResultPart;
 
 interface Message {
   readonly id: string;
@@ -161,6 +145,7 @@ interface Message {
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<MessagePart>;
+  readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -169,6 +154,7 @@ class CreateNextMessageInput {
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly content: ReadonlyArray<MessagePart>;
+  readonly fileIds: ReadonlyArray<string>;
 }
 
 type UploadFileInput = {
@@ -196,6 +182,7 @@ class CreateMessageRecord {
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: ReadonlyArray<MessagePart>;
+  readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -223,6 +210,7 @@ interface MessageRow {
   readonly type: LLMMessageType;
   readonly sequence_number: number;
   readonly content: MessagePart[];
+  readonly file_ids: string[];
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
 }
@@ -339,9 +327,6 @@ class ValidationDomainService {
 class MessageContentDomainService {
   validateMessageInput(request: CreateNextMessageInput): Result<void, ValidationError>;
   validateMessageRecord(record: CreateMessageRecord): Result<void, ValidationError>;
-  isBlobPart(part: MessagePart): part is BlobPart;
-  collectBlobPartFileIds(parts: ReadonlyArray<MessagePart>): ReadonlyArray<string>;
-  replaceBlobPartFileIds(parts: ReadonlyArray<MessagePart>, fileIds: ReadonlyArray<string>): Result<ReadonlyArray<MessagePart>, ValidationError>;
 }
 ```
 
@@ -350,10 +335,11 @@ class MessageContentDomainService {
 - RequirePositiveInteger(sequenceNumber) (when present)
 - RequirePresent(content), RequirePresent(type)
 - Content part type constraints:
-  - System/User: all parts must be TextPart, ImagePart, FilePart, or AudioPart
+  - System/User: all parts must be TextPart
   - Assistant: all parts must be TextPart or ToolCallPart
   - Tool: all parts must be ToolResultPart
-- Per-part field validation (fileId, toolCallId, toolName, etc.)
+- Per-part field validation (toolCallId, toolName, etc.)
+- All fileIds (when present) must be non-empty strings
 
 ## Atomic Operations
 
@@ -369,7 +355,7 @@ class MessageContentDomainService {
 
 1. ConversationDomainService.findById(command.conversationId) → conversation → if failure, return failure.
 2. MessageDomainService.findAll(command.conversationId) → messages → if failure, return failure.
-3. Collect all unique file IDs from all messages via MessageContentDomainService.collectBlobPartFileIds → allFileIds.
+3. Collect all unique file IDs from all messages by flat-mapping message.fileIds → allFileIds.
 4. FileDomainService.deleteFiles({ fileIds: allFileIds }) → if failure, return failure.
 5. MessageDomainService.deleteAll(command.conversationId) → if failure, return failure.
 6. ConversationDomainService.delete(command.conversationId) → if failure, return failure.
@@ -378,12 +364,11 @@ class MessageContentDomainService {
 
 1. ConversationDomainService.findById(request.conversationId) → conversation → if failure, return failure.
 2. FileDomainService.uploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
-3. MessageContentDomainService.replaceBlobPartFileIds(request.content, files.map(f → f.id)) → userContentParts → if failure, return failure.
-4. MessageDomainService.createNextMessage({ conversationId, type: request.type, content: userContentParts }) → userMessage → if failure, return failure.
-5. MessageDomainService.findAll(request.conversationId) → allMessages → if failure, return failure.
-6. LlmDomainService.complete(allMessages) → llmResult → if failure, return failure.
-7. MessageDomainService.createNextMessage({ conversationId, type: LLMMessageType.Assistant, content: llmResult.content }) → assistantMessage → if failure, return failure.
-8. Return succeed(void).
+3. MessageDomainService.createNextMessage({ conversationId, type: request.type, content: request.content, fileIds: files.map(f → f.id) }) → userMessage → if failure, return failure.
+4. MessageDomainService.findAll(request.conversationId) → allMessages → if failure, return failure.
+5. LlmDomainService.complete(allMessages) → llmResult → if failure, return failure.
+6. MessageDomainService.createNextMessage({ conversationId, type: LLMMessageType.Assistant, content: llmResult.content, fileIds: [] }) → assistantMessage → if failure, return failure.
+7. Return succeed(void).
 
 ### GetMessagesOnConversationFlow.execute (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
@@ -391,9 +376,9 @@ class MessageContentDomainService {
 2. ConversationDomainService.findById(query.conversationId) → conversation → if failure, return failure.
 3. MessageDomainService.findPage(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
 4. Filter messages to only those with type LLMMessageType.User or LLMMessageType.Assistant → visibleMessages.
-5. Collect all unique file IDs from all visibleMessages via MessageContentDomainService.collectBlobPartFileIds → allFileIds.
+5. Collect all unique file IDs from all visibleMessages by flat-mapping message.fileIds → allFileIds.
 6. FileDomainService.getFiles({ fileIds: allFileIds }) → allFiles → if failure, return failure. Build Map<fileId, File> from allFiles.
-7. For each message: Message in visibleMessages: look up message's file IDs in the Map → map message and files to GetMessagesItem.
+7. For each message: Message in visibleMessages: look up message.fileIds in the Map → map message and files to GetMessagesItem. File type (image, audio, document, etc.) is inferred from File.mimeType.
 8. Return succeed(items).
 
 ### ListConversationsFlow.execute (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
@@ -447,7 +432,7 @@ class MessageContentDomainService {
 1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
 2. MessageDomainService.count(request.conversationId) → count → if failure, return failure.
 3. Now() → timestamp.
-4. MessageDomainService.save({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
+4. MessageDomainService.save({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content, fileIds: request.fileIds, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
 5. Return succeed(message).
 
 ### MessageDomainService.deleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
@@ -459,11 +444,10 @@ class MessageContentDomainService {
 ### MessageDomainService.deleteMessageWithFiles (messageId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
 1. MessageDomainService.findById(messageId) → message → if failure, return failure.
-2. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
-3. For each fileId: string in fileIds:
+2. For each fileId: string in message.fileIds:
    1. FileDomainService.deleteFile(fileId) → if failure, return failure.
-4. MessageDomainService.delete(messageId) → if failure, return failure.
-5. Return succeed(void).
+3. MessageDomainService.delete(messageId) → if failure, return failure.
+4. Return succeed(void).
 
 ### MessageDomainService.save (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
 
@@ -594,7 +578,7 @@ class MessageContentDomainService {
 
 ### Infra.UpsertMessageRow (record: CreateMessageRecord): Result<Message, StoreError>
 
-1. MapToRow(record) → row (produces MessageRow with conversation_id, type, sequence_number, content as JSONB, created_at, updated_at).
+1. MapToRow(record) → row (produces MessageRow with conversation_id, type, sequence_number, content as JSONB, file_ids as text[], created_at, updated_at).
 2. PostgresClient.query(UpsertQuery("messages", row)) → resultRow → if error, return StoreError.
 3. MapFromRow(resultRow) → message.
 4. Return succeed(message).
@@ -677,9 +661,9 @@ class MessageContentDomainService {
 
 ### Infra.LlmComplete (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
 
-1. Map domain Message[] to LangChain BaseMessage[] (user → HumanMessage, assistant → AIMessage, system → SystemMessage, tool → ToolMessage). Content parts map as follows:
+1. Map domain Message[] to LangChain BaseMessage[] (user → HumanMessage, assistant → AIMessage, system → SystemMessage, tool → ToolMessage). Content parts and file references map as follows:
    - TextPart → string content or text content block.
-   - ImagePart/FilePart/AudioPart → media content blocks referencing file URLs resolved from fileIds.
+   - message.fileIds → resolve each fileId to its File entity; use File.mimeType to build the appropriate media content block (image, audio, or file). File type is inferred from mimeType, not stored on the Message.
    - ToolCallPart → tool_calls array entries on AIMessage.
    - ToolResultPart → ToolMessage content with toolCallId correlation.
 2. BaseChatModel.invoke(baseMessages) → aiMessage → if error, return LlmError.
@@ -715,9 +699,13 @@ class MessageContentDomainService {
   transport errors to HTTP status codes independently of the domain error
   hierarchy.
 - The `MessageRow` persisted type stores `content` as a JSONB column
-  containing the `MessagePart[]` array. The `type` column stores the
+  containing the `MessagePart[]` array and `file_ids` as a `text[]` column
+  containing the referenced File IDs. The `type` column stores the
   `LLMMessageType` value. Column names use snake_case per PostgreSQL convention;
   `MapToRow`/`MapFromRow` handle the camelCase ↔ snake_case conversion.
+- File type (image, audio, document, etc.) is not stored on the Message.
+  It is inferred from `File.mimeType` at read time when constructing
+  response DTOs (e.g. `GetMessagesItem`).
 
 ## Description
 

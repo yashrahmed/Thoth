@@ -417,15 +417,15 @@ function buildHandler(overrides?: {
   const llmDomainService = new LlmDomainService(llmCompletionService);
   const fileDomainService = new FileDomainService(fileRepository, blobDomainService, now);
 
-  return createConversationHttpHandler(
-    new CreateConversationFlow(conversationDomainService),
-    new GetConversationFlow(conversationDomainService),
-    new ListConversationsFlow(conversationDomainService),
-    new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
-    new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
-    new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
+  return createConversationHttpHandler({
+    createConversation: new CreateConversationFlow(conversationDomainService),
+    getConversation: new GetConversationFlow(conversationDomainService),
+    listConversations: new ListConversationsFlow(conversationDomainService),
+    deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
+    appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
+    getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
     messageContentDomainService,
-  );
+  });
 }
 
 class InMemoryConversationRepository implements ConversationRepository {

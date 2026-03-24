@@ -57,15 +57,15 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService);
     const server = Bun.serve({
       port: input.port,
-      fetch: createConversationHttpHandler(
-        new CreateConversationFlow(conversationDomainService),
-        new GetConversationFlow(conversationDomainService),
-        new ListConversationsFlow(conversationDomainService),
-        new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
-        new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
-        new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
+      fetch: createConversationHttpHandler({
+        createConversation: new CreateConversationFlow(conversationDomainService),
+        getConversation: new GetConversationFlow(conversationDomainService),
+        listConversations: new ListConversationsFlow(conversationDomainService),
+        deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
+        appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
+        getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
         messageContentDomainService,
-      ),
+      }),
     });
     let stopped = false;
 

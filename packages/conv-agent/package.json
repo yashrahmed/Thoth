@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@thoth/config": "workspace:*",
+    "hono": "^4.12.9",
     "openai": "^6.32.0",
     "postgres": "^3.4.7"
   },

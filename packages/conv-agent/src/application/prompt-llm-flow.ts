@@ -22,7 +22,7 @@ export class PromptLlmFlow {
     }
 
     const timestamp = this.now();
-    const llmResult = await this.llmDomainService.sendToLLMChatService([
+    const llmResult = await this.llmDomainService.complete([
       {
         id: crypto.randomUUID(),
         conversationId: crypto.randomUUID(),

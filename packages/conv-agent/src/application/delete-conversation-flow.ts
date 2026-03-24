@@ -18,13 +18,13 @@ export class DeleteConversationFlow {
   ) {}
 
   async execute(command: DeleteConversationCommand): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
-    const getResult = await this.conversationDomainService.readFromConversationDBStore(command.conversationId);
+    const getResult = await this.conversationDomainService.findById(command.conversationId);
 
     if (!getResult.ok) {
       return getResult;
     }
 
-    const messagesResult = await this.messageDomainService.readAllMessagesFromMessageDBStore(command.conversationId);
+    const messagesResult = await this.messageDomainService.findAll(command.conversationId);
 
     if (!messagesResult.ok) {
       return messagesResult;
@@ -40,12 +40,12 @@ export class DeleteConversationFlow {
       return deleteFilesResult;
     }
 
-    const deleteMessagesResult = await this.messageDomainService.removeAllMessagesFromMessageDBStore(command.conversationId);
+    const deleteMessagesResult = await this.messageDomainService.deleteAll(command.conversationId);
 
     if (!deleteMessagesResult.ok) {
       return deleteMessagesResult;
     }
 
-    return this.conversationDomainService.removeFromConversationDBStore(command.conversationId);
+    return this.conversationDomainService.delete(command.conversationId);
   }
 }

@@ -367,29 +367,29 @@ class MessageContentDomainService {
 
 ### DeleteConversationFlow.execute (command: DeleteConversationCommand): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
-1. ConversationDomainService.readFromConversationDBStore(command.conversationId) → conversation → if failure, return failure.
-2. MessageDomainService.readAllMessagesFromMessageDBStore(command.conversationId) → messages → if failure, return failure.
+1. ConversationDomainService.findById(command.conversationId) → conversation → if failure, return failure.
+2. MessageDomainService.findAll(command.conversationId) → messages → if failure, return failure.
 3. Collect all unique file IDs from all messages via MessageContentDomainService.collectBlobPartFileIds → allFileIds.
 4. FileDomainService.deleteFiles({ fileIds: allFileIds }) → if failure, return failure.
-5. MessageDomainService.removeAllMessagesFromMessageDBStore(command.conversationId) → if failure, return failure.
-6. ConversationDomainService.removeFromConversationDBStore(command.conversationId) → if failure, return failure.
+5. MessageDomainService.deleteAll(command.conversationId) → if failure, return failure.
+6. ConversationDomainService.delete(command.conversationId) → if failure, return failure.
 
 ### AppendMessageToConversationFlow.execute (request: AppendMessageRequest): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>
 
-1. ConversationDomainService.readFromConversationDBStore(request.conversationId) → conversation → if failure, return failure.
+1. ConversationDomainService.findById(request.conversationId) → conversation → if failure, return failure.
 2. FileDomainService.uploadFiles({ files: request.attachments mapped to UploadFileInput[] }) → files → if failure, return failure.
 3. MessageContentDomainService.replaceBlobPartFileIds(request.content, files.map(f → f.id)) → userContentParts → if failure, return failure.
 4. MessageDomainService.createNextMessage({ conversationId, type: request.type, content: userContentParts }) → userMessage → if failure, return failure.
-5. MessageDomainService.readAllMessagesFromMessageDBStore(request.conversationId) → allMessages → if failure, return failure.
-6. LlmDomainService.sendToLLMChatService(allMessages) → llmResult → if failure, return failure.
+5. MessageDomainService.findAll(request.conversationId) → allMessages → if failure, return failure.
+6. LlmDomainService.complete(allMessages) → llmResult → if failure, return failure.
 7. MessageDomainService.createNextMessage({ conversationId, type: LLMMessageType.Assistant, content: llmResult.content }) → assistantMessage → if failure, return failure.
 8. Return succeed(void).
 
 ### GetMessagesOnConversationFlow.execute (query: GetMessagesQuery): Result<GetMessagesItem[], ValidationError | NotFoundError | StoreError>
 
 1. ValidationDomainService.validateGetMessagesQuery(query) → if failure, return failure.
-2. ConversationDomainService.readFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
-3. MessageDomainService.readPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
+2. ConversationDomainService.findById(query.conversationId) → conversation → if failure, return failure.
+3. MessageDomainService.findPage(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
 4. Filter messages to only those with type LLMMessageType.User or LLMMessageType.Assistant → visibleMessages.
 5. Collect all unique file IDs from all visibleMessages via MessageContentDomainService.collectBlobPartFileIds → allFileIds.
 6. FileDomainService.getFiles({ fileIds: allFileIds }) → allFiles → if failure, return failure. Build Map<fileId, File> from allFiles.
@@ -399,7 +399,7 @@ class MessageContentDomainService {
 ### ListConversationsFlow.execute (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
 
 1. ValidationDomainService.validateListConversationsQuery(query) → if failure, return failure.
-2. ConversationDomainService.readPageFromConversationDBStore(query.pageNum, query.pageSize) → conversations → if failure, return failure.
+2. ConversationDomainService.findPage(query.pageNum, query.pageSize) → conversations → if failure, return failure.
 3. Map each conversation to ListConversationsItem({ id, createdAt, updatedAt }).
 4. Return succeed(items).
 
@@ -411,7 +411,7 @@ class MessageContentDomainService {
 
 ### GetConversationFlow.execute (query: GetConversationQuery): Result<GetConversationResult, ValidationError | NotFoundError | StoreError>
 
-1. ConversationDomainService.readFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
+1. ConversationDomainService.findById(query.conversationId) → conversation → if failure, return failure.
 2. Map conversation to GetConversationResult({ id, createdAt, updatedAt }).
 3. Return succeed(getConversationResult).
 
@@ -420,24 +420,24 @@ class MessageContentDomainService {
 ### ConversationDomainService.createConversation (): Result<Conversation, StoreError>
 
 1. Now() → timestamp.
-2. ConversationDomainService.persistToConversationDBStore({ createdAt: timestamp, updatedAt: timestamp }) → conversation → if failure, return failure.
+2. ConversationDomainService.save({ createdAt: timestamp, updatedAt: timestamp }) → conversation → if failure, return failure.
 3. Return succeed(conversation).
 
-### ConversationDomainService.persistToConversationDBStore (record: CreateConversationRecord): Result<Conversation, StoreError>
+### ConversationDomainService.save (record: CreateConversationRecord): Result<Conversation, StoreError>
 
 1. Infra.UpsertConversationRow(record) → conversation → if failure, return failure.
 
-### ConversationDomainService.readFromConversationDBStore (id: string): Result<Conversation, ValidationError | NotFoundError | StoreError>
+### ConversationDomainService.findById (id: string): Result<Conversation, ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectConversationRow(id) → conversation → if failure, return failure.
 
-### ConversationDomainService.readPageFromConversationDBStore (pageNum: number, pageSize: number): Result<Conversation[], StoreError>
+### ConversationDomainService.findPage (pageNum: number, pageSize: number): Result<Conversation[], StoreError>
 
 1. Compute offset = (pageNum - 1) \* pageSize.
 2. Infra.SelectConversationPage(offset, pageSize) → conversations → if failure, return failure.
 
-### ConversationDomainService.removeFromConversationDBStore (id: string): Result<void, ValidationError | StoreError>
+### ConversationDomainService.delete (id: string): Result<void, ValidationError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteConversationRow(id) → if failure, return failure.
@@ -445,66 +445,66 @@ class MessageContentDomainService {
 ### MessageDomainService.createNextMessage (request: CreateNextMessageInput): Result<Message, ValidationError | StoreError>
 
 1. MessageContentDomainService.validateMessageInput(request) → if failure, return failure.
-2. MessageDomainService.readMessageCountFromMessageDBStore(request.conversationId) → count → if failure, return failure.
+2. MessageDomainService.count(request.conversationId) → count → if failure, return failure.
 3. Now() → timestamp.
-4. MessageDomainService.persistToMessageDBStore({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
+4. MessageDomainService.save({ conversationId, type: request.type, sequenceNumber: count + 1, content: request.content, createdAt: timestamp, updatedAt: timestamp }) → message → if failure, return failure.
 5. Return succeed(message).
 
 ### MessageDomainService.deleteMessage (messageId: string): Result<void, ValidationError | NotFoundError | StoreError>
 
-1. MessageDomainService.readFromMessageDBStore(messageId) → if failure, return failure.
-2. MessageDomainService.removeFromMessageDBStore(messageId) → if failure, return failure.
+1. MessageDomainService.findById(messageId) → if failure, return failure.
+2. MessageDomainService.delete(messageId) → if failure, return failure.
 3. Return succeed(void).
 
 ### MessageDomainService.deleteMessageWithFiles (messageId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
-1. MessageDomainService.readFromMessageDBStore(messageId) → message → if failure, return failure.
+1. MessageDomainService.findById(messageId) → message → if failure, return failure.
 2. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
 3. For each fileId: string in fileIds:
    1. FileDomainService.deleteFile(fileId) → if failure, return failure.
-4. MessageDomainService.removeFromMessageDBStore(messageId) → if failure, return failure.
+4. MessageDomainService.delete(messageId) → if failure, return failure.
 5. Return succeed(void).
 
-### MessageDomainService.persistToMessageDBStore (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
+### MessageDomainService.save (record: CreateMessageRecord): Result<Message, ValidationError | StoreError>
 
 1. MessageContentDomainService.validateMessageRecord(record) → if failure, return failure.
 2. Infra.UpsertMessageRow(record) → message → if failure, return failure.
 
-### MessageDomainService.readFromMessageDBStore (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
+### MessageDomainService.findById (id: string): Result<Message, ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectMessageRow(id) → message → if failure, return failure.
 
-### MessageDomainService.readPageFromMessageDBStore (conversationId: string, pageNum: number, pageSize: number): Result<Message[], StoreError>
+### MessageDomainService.findPage (conversationId: string, pageNum: number, pageSize: number): Result<Message[], StoreError>
 
 1. Compute fromSequence = (pageNum - 1) \* pageSize + 1.
 2. Infra.SelectMessagePage(conversationId, fromSequence, pageSize) → messages → if failure, return failure.
 
-### MessageDomainService.readAllMessagesFromMessageDBStore (conversationId: string): Result<Message[], ValidationError | StoreError>
+### MessageDomainService.findAll (conversationId: string): Result<Message[], ValidationError | StoreError>
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. Infra.SelectAllMessagesByConversation(conversationId) → messages → if failure, return failure.
 
-### MessageDomainService.readMessageCountFromMessageDBStore (conversationId: string): Result<number, ValidationError | StoreError>
+### MessageDomainService.count (conversationId: string): Result<number, ValidationError | StoreError>
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. Infra.CountMessagesByConversation(conversationId) → count → if failure, return failure.
 
-### MessageDomainService.removeFromMessageDBStore (id: string): Result<void, ValidationError | StoreError>
+### MessageDomainService.delete (id: string): Result<void, ValidationError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteMessageRow(id) → if failure, return failure.
 
-### MessageDomainService.removeAllMessagesFromMessageDBStore (conversationId: string): Result<void, ValidationError | StoreError>
+### MessageDomainService.deleteAll (conversationId: string): Result<void, ValidationError | StoreError>
 
 1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
 2. Infra.DeleteMessagesByConversation(conversationId) → if failure, return failure.
 
 ### FileDomainService.uploadFile (request: UploadFileInput): Result<File, ValidationError | BlobStoreError | StoreError>
 
-1. BlobDomainService.uploadToBlobStore({ conversationId, content, filename, mimeType }) → canonicalUrl → if failure, return failure.
+1. BlobDomainService.upload({ conversationId, content, filename, mimeType }) → canonicalUrl → if failure, return failure.
 2. Now() → timestamp.
-3. FileDomainService.persistToFileDBStore({ canonicalUrl, filename, mimeType, sizeInBytes: content.byteLength, createdAt: timestamp, updatedAt: timestamp }) → file → if failure, return failure.
+3. FileDomainService.save({ canonicalUrl, filename, mimeType, sizeInBytes: content.byteLength, createdAt: timestamp, updatedAt: timestamp }) → file → if failure, return failure.
 4. Return succeed(file).
 
 ### FileDomainService.uploadFiles (request: UploadFilesInput): Result<File[], ValidationError | BlobStoreError | StoreError>
@@ -525,42 +525,42 @@ class MessageContentDomainService {
 
 1. If request.fileIds is empty → return succeed(void).
 2. FileDomainService.getFiles(request) → files → if failure, return failure.
-3. For each file: File in files: BlobDomainService.deleteFromBlobStore(file.canonicalUrl) → if failure, return failure.
+3. For each file: File in files: BlobDomainService.delete(file.canonicalUrl) → if failure, return failure.
 4. Infra.DeleteFileRows(request.fileIds) → if failure, return failure.
 5. Return succeed(void).
 
 ### FileDomainService.deleteFile (fileId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
-1. FileDomainService.readFromFileDBStore(fileId) → file → if failure, return failure.
-2. BlobDomainService.deleteFromBlobStore(file.canonicalUrl) → if failure, return failure.
-3. FileDomainService.removeFromFileDBStore(fileId) → if failure, return failure.
+1. FileDomainService.findById(fileId) → file → if failure, return failure.
+2. BlobDomainService.delete(file.canonicalUrl) → if failure, return failure.
+3. FileDomainService.delete(fileId) → if failure, return failure.
 4. Return succeed(void).
 
-### FileDomainService.persistToFileDBStore (record: CreateFileRecord): Result<File, StoreError>
+### FileDomainService.save (record: CreateFileRecord): Result<File, StoreError>
 
 1. Infra.UpsertFileRow(record) → file → if failure, return failure.
 
-### FileDomainService.readFromFileDBStore (id: string): Result<File, ValidationError | NotFoundError | StoreError>
+### FileDomainService.findById (id: string): Result<File, ValidationError | NotFoundError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.SelectFileRow(id) → file → if failure, return failure.
 
-### FileDomainService.removeFromFileDBStore (id: string): Result<void, ValidationError | StoreError>
+### FileDomainService.delete (id: string): Result<void, ValidationError | StoreError>
 
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteFileRow(id) → if failure, return failure.
 
-### BlobDomainService.uploadToBlobStore (request: UploadFileInput): Result<string, ValidationError | BlobStoreError>
+### BlobDomainService.upload (request: UploadFileInput): Result<string, ValidationError | BlobStoreError>
 
 1. ValidationDomainService.validateUploadFileInput(request) → if failure, return failure.
 2. Infra.PutBlob(request) → url → if failure, return failure.
 
-### BlobDomainService.deleteFromBlobStore (canonicalUrl: string): Result<void, ValidationError | BlobStoreError>
+### BlobDomainService.delete (canonicalUrl: string): Result<void, ValidationError | BlobStoreError>
 
 1. RequireNonEmptyString(canonicalUrl, "canonicalUrl") → if failure, return failure.
 2. Infra.RemoveBlob(canonicalUrl) → if failure, return failure.
 
-### LlmDomainService.sendToLLMChatService (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
+### LlmDomainService.complete (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
 
 1. Infra.LlmComplete(messages) → llmResult → if failure, return failure.
 2. Return succeed(llmResult).
@@ -694,21 +694,20 @@ class MessageContentDomainService {
   the action. Loops also short-circuit on the first failure.
 - `Now()` is infallible — not wrapped in `Result`.
 - Entity IDs are auto-generated by the database during insert. The
-  `PersistTo*DBStore` operations return the entity with its generated ID.
+  `save` operations return the entity with its generated ID.
 - `NotFoundError` is separate from `StoreError` so callers can map to different
   HTTP status codes (404 vs 500).
 - `FileContent` is opaque in the domain layer — the domain never inspects or
-  transforms it. The implementation of `UploadToBlobStore` is responsible for
-  checking and casting to the actual runtime representation (e.g. `Buffer`,
+  transforms it. The implementation of `BlobDomainService.upload` is responsible
+  for checking and casting to the actual runtime representation (e.g. `Buffer`,
   `ReadableStream`).
 - Message ordering and pagination are derived from `sequenceNumber` on `Message`
   combined with `conversationId`. `DeleteConversation` and
   `AppendMessageToConversation` query the message store by `conversationId`
   directly.
-- `*DBStore` and `*BlobStore` actions are domain-level abstractions, not
-  repository or infrastructure names. They discriminate between the two kinds
-  of store (relational vs object) while remaining in the domain layer. The
-  `Infra.*` actions are the repository/adapter layer.
+- Domain service methods use intent-based names (`findById`, `save`, `delete`,
+  `findPage`, `findAll`, `count`, `upload`, `complete`). The `Infra.*` actions
+  are the repository/adapter layer.
 - Inbound adapters consume flow DTOs directly for request parsing and
   response serialization — there is no separate transport-DTO layer.
   Transport validation errors (e.g. malformed multipart fields) should use

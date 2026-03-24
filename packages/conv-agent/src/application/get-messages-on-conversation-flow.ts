@@ -69,13 +69,13 @@ export class GetMessagesOnConversationFlow {
       return validationResult;
     }
 
-    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(query.conversationId);
+    const conversationResult = await this.conversationDomainService.findById(query.conversationId);
 
     if (!conversationResult.ok) {
       return conversationResult;
     }
 
-    const messagesResult = await this.messageDomainService.readPageFromMessageDBStore({
+    const messagesResult = await this.messageDomainService.findPage({
       conversationId: query.conversationId,
       pageNum: query.pageNum,
       pageSize: query.pageSize,

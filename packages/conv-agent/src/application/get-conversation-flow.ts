@@ -17,7 +17,7 @@ export class GetConversationFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
   async execute(query: GetConversationQuery): Promise<Result<GetConversationResult, NotFoundError | StoreError | ValidationError>> {
-    return map(await this.conversationDomainService.readFromConversationDBStore(query.conversationId), (conv) => ({
+    return map(await this.conversationDomainService.findById(query.conversationId), (conv) => ({
       id: conv.id,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,

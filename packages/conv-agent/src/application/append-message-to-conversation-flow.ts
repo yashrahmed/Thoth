@@ -36,7 +36,7 @@ export class AppendMessageToConversationFlow {
   ) {}
 
   async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>> {
-    const conversationResult = await this.conversationDomainService.readFromConversationDBStore(request.conversationId);
+    const conversationResult = await this.conversationDomainService.findById(request.conversationId);
 
     if (!conversationResult.ok) {
       return conversationResult;
@@ -79,13 +79,13 @@ export class AppendMessageToConversationFlow {
       return createUserMessageResult;
     }
 
-    const allMessagesResult = await this.messageDomainService.readAllMessagesFromMessageDBStore(request.conversationId);
+    const allMessagesResult = await this.messageDomainService.findAll(request.conversationId);
 
     if (!allMessagesResult.ok) {
       return allMessagesResult;
     }
 
-    const llmResult = await this.llmDomainService.sendToLLMChatService(allMessagesResult.value);
+    const llmResult = await this.llmDomainService.complete(allMessagesResult.value);
 
     if (!llmResult.ok) {
       return llmResult;

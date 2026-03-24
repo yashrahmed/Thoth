@@ -15,17 +15,17 @@ export class MessageDomainService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async persistToMessageDBStore(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
+  async save(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
     return andThenAsync(this.messageContentDomainService.validateMessageRecord(record), () =>
       this.messageRepository.upsertMessageRow(record),
     );
   }
 
-  async readFromMessageDBStore(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
+  async findById(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
     return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.selectMessageRow(id));
   }
 
-  async readPageFromMessageDBStore(request: MessagePageRequest): Promise<Result<Message[], StoreError>> {
+  async findPage(request: MessagePageRequest): Promise<Result<Message[], StoreError>> {
     const pageRequest: MessageSequencePageRequest = {
       conversationId: request.conversationId,
       fromSequence: (request.pageNum - 1) * request.pageSize + 1,
@@ -35,40 +35,40 @@ export class MessageDomainService {
     return this.messageRepository.selectMessagePage(pageRequest);
   }
 
-  async readAllMessagesFromMessageDBStore(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
+  async findAll(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
     return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
       this.messageRepository.selectAllMessagesByConversation(id),
     );
   }
 
-  async readMessageCountFromMessageDBStore(conversationId: string): Promise<Result<number, ValidationError | StoreError>> {
+  async count(conversationId: string): Promise<Result<number, ValidationError | StoreError>> {
     return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
       this.messageRepository.countMessagesByConversation(id),
     );
   }
 
-  async removeFromMessageDBStore(messageId: string): Promise<Result<void, ValidationError | StoreError>> {
+  async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {
     return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.deleteMessageRow(id));
   }
 
-  async removeAllMessagesFromMessageDBStore(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
+  async deleteAll(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
     return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
       this.messageRepository.deleteMessagesByConversation(id),
     );
   }
 
   async deleteMessage(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
-    const messageResult = await this.readFromMessageDBStore(messageId);
+    const messageResult = await this.findById(messageId);
 
     if (!messageResult.ok) {
       return messageResult;
     }
 
-    return this.removeFromMessageDBStore(messageId);
+    return this.delete(messageId);
   }
 
   async deleteMessageWithFiles(messageId: string, fileDomainService: FileDomainService): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
-    const messageResult = await this.readFromMessageDBStore(messageId);
+    const messageResult = await this.findById(messageId);
 
     if (!messageResult.ok) {
       return messageResult;
@@ -78,7 +78,7 @@ export class MessageDomainService {
 
     return andThenAsync(
       await traverseAsync(fileIds, (fileId) => fileDomainService.deleteFile(fileId)),
-      () => this.removeFromMessageDBStore(messageId),
+      () => this.delete(messageId),
     );
   }
 
@@ -89,12 +89,12 @@ export class MessageDomainService {
       return validationResult;
     }
 
-    const countResult = await this.readMessageCountFromMessageDBStore(request.conversationId);
+    const countResult = await this.count(request.conversationId);
 
     return andThenAsync(countResult, (count) => {
       const timestamp = this.now();
 
-      return this.persistToMessageDBStore(
+      return this.save(
         new CreateMessageRecord({
           conversationId: request.conversationId,
           type: request.type,

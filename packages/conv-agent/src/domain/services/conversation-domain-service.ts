@@ -14,23 +14,23 @@ export class ConversationDomainService {
   async createConversation(): Promise<Result<Conversation, StoreError>> {
     const timestamp = this.now();
 
-    return this.persistToConversationDBStore({
+    return this.save({
       createdAt: timestamp,
       updatedAt: timestamp,
     });
   }
 
-  async persistToConversationDBStore(record: { readonly createdAt: Date; readonly updatedAt: Date }): Promise<Result<Conversation, StoreError>> {
+  async save(record: { readonly createdAt: Date; readonly updatedAt: Date }): Promise<Result<Conversation, StoreError>> {
     return this.conversationRepository.upsertConversationRow(record);
   }
 
-  async readFromConversationDBStore(conversationId: string): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
+  async findById(conversationId: string): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
     return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
       this.conversationRepository.selectConversationRow(id),
     );
   }
 
-  async readPageFromConversationDBStore(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
+  async findPage(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
     const pageRequest: ConversationOffsetPageRequest = {
       offset: (request.pageNum - 1) * request.pageSize,
       pageSize: request.pageSize,
@@ -39,7 +39,7 @@ export class ConversationDomainService {
     return this.conversationRepository.selectConversationPage(pageRequest);
   }
 
-  async removeFromConversationDBStore(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
+  async delete(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
     return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
       this.conversationRepository.deleteConversationRow(id),
     );

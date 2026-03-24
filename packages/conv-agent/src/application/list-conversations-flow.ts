@@ -38,7 +38,7 @@ export class ListConversationsFlow {
     }
 
     return map(
-      await this.conversationDomainService.readPageFromConversationDBStore({
+      await this.conversationDomainService.findPage({
         pageNum: query.pageNum,
         pageSize: query.pageSize,
       }),

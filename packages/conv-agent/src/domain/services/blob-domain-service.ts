@@ -8,11 +8,11 @@ import { UploadFileInput } from "../objects/upload-file-input";
 export class BlobDomainService {
   constructor(private readonly blobRepository: BlobRepository) {}
 
-  async uploadToBlobStore(request: UploadFileInput): Promise<Result<string, ValidationError | BlobStoreError>> {
+  async upload(request: UploadFileInput): Promise<Result<string, ValidationError | BlobStoreError>> {
     return this.blobRepository.putBlob(request);
   }
 
-  async deleteFromBlobStore(url: string): Promise<Result<void, ValidationError | BlobStoreError>> {
+  async delete(url: string): Promise<Result<void, ValidationError | BlobStoreError>> {
     return andThenAsync(requireNonEmptyString(url, "canonicalUrl"), () => this.blobRepository.removeBlob(url));
   }
 }

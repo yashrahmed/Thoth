@@ -15,15 +15,15 @@ export class FileDomainService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async persistToFileDBStore(record: CreateFileRecord): Promise<Result<FileEntity, StoreError>> {
+  async save(record: CreateFileRecord): Promise<Result<FileEntity, StoreError>> {
     return this.fileRepository.upsertFileRow(record);
   }
 
-  async readFromFileDBStore(fileId: string): Promise<Result<FileEntity, ValidationError | NotFoundError | StoreError>> {
+  async findById(fileId: string): Promise<Result<FileEntity, ValidationError | NotFoundError | StoreError>> {
     return andThenAsync(requireNonEmptyString(fileId, "id"), (id) => this.fileRepository.selectFileRow(id));
   }
 
-  async removeFromFileDBStore(fileId: string): Promise<Result<void, ValidationError | StoreError>> {
+  async delete(fileId: string): Promise<Result<void, ValidationError | StoreError>> {
     return andThenAsync(requireNonEmptyString(fileId, "id"), (id) => this.fileRepository.deleteFileRow(id));
   }
 
@@ -34,8 +34,8 @@ export class FileDomainService {
       return validationResult;
     }
 
-    return andThenAsync(await this.blobDomainService.uploadToBlobStore(request), (canonicalUrl) =>
-      this.persistToFileDBStore(this.buildRecord(request, canonicalUrl)),
+    return andThenAsync(await this.blobDomainService.upload(request), (canonicalUrl) =>
+      this.save(this.buildRecord(request, canonicalUrl)),
     );
   }
 
@@ -46,14 +46,14 @@ export class FileDomainService {
   }
 
   async deleteFile(fileId: string): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
-    const fileResult = await this.readFromFileDBStore(fileId);
+    const fileResult = await this.findById(fileId);
 
     if (!fileResult.ok) {
       return fileResult;
     }
 
-    return andThenAsync(await this.blobDomainService.deleteFromBlobStore(fileResult.value.canonicalUrl), () =>
-      this.removeFromFileDBStore(fileId),
+    return andThenAsync(await this.blobDomainService.delete(fileResult.value.canonicalUrl), () =>
+      this.delete(fileId),
     );
   }
 
@@ -100,7 +100,7 @@ export class FileDomainService {
     }
 
     const blobDeleteResult = await traverseAsync(filesResult.value, (file) =>
-      this.blobDomainService.deleteFromBlobStore(file.canonicalUrl),
+      this.blobDomainService.delete(file.canonicalUrl),
     );
 
     if (!blobDeleteResult.ok) {

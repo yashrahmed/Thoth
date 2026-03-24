@@ -7,7 +7,7 @@ import type { Result } from "../objects/result";
 export class LlmDomainService {
   constructor(private readonly llmCompletionService: LlmCompletionService) {}
 
-  async sendToLLMChatService(messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>> {
+  async complete(messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>> {
     return this.llmCompletionService.llmComplete(messages);
   }
 }

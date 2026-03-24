@@ -4,6 +4,7 @@ import type { MessageContentDomainService } from "../domain/services/message-con
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
+import { firstFailure, map, traverseAsync } from "../domain/objects/result";
 import { LLMMessageType, type LLMMessageType as MessageType } from "../domain/objects/llm";
 import type { MessagePart } from "../domain/objects/message";
 import { requireNonEmptyString, requirePositiveInteger } from "../domain/validation";
@@ -24,28 +25,11 @@ export class GetMessagesQuery {
   }
 
   isValid(): Result<void, ValidationError> {
-    const conversationIdResult = requireNonEmptyString(this.conversationId, "conversationId");
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    const pageNumResult = requirePositiveInteger(this.pageNum, "pageNum");
-
-    if (!pageNumResult.ok) {
-      return pageNumResult;
-    }
-
-    const pageSizeResult = requirePositiveInteger(this.pageSize, "pageSize");
-
-    if (!pageSizeResult.ok) {
-      return pageSizeResult;
-    }
-
-    return {
-      ok: true,
-      value: undefined,
-    };
+    return firstFailure(
+      requireNonEmptyString(this.conversationId, "conversationId"),
+      requirePositiveInteger(this.pageNum, "pageNum"),
+      requirePositiveInteger(this.pageSize, "pageSize"),
+    );
   }
 }
 
@@ -91,38 +75,32 @@ export class GetMessagesOnConversationFlow {
       return conversationResult;
     }
 
-    const result = await this.messageDomainService.readPageFromMessageDBStore({
+    const messagesResult = await this.messageDomainService.readPageFromMessageDBStore({
       conversationId: query.conversationId,
       pageNum: query.pageNum,
       pageSize: query.pageSize,
     });
 
-    if (!result.ok) {
-      return result;
+    if (!messagesResult.ok) {
+      return messagesResult;
     }
 
-    const items: GetMessagesItem[] = [];
+    const relevantMessages = messagesResult.value.filter(
+      (m) => m.type === LLMMessageType.User || m.type === LLMMessageType.Assistant,
+    );
 
-    for (const message of result.value) {
-      if (message.type !== LLMMessageType.User && message.type !== LLMMessageType.Assistant) {
-        continue;
-      }
-
+    return traverseAsync(relevantMessages, async (message) => {
       const filesResult = await this.fileDomainService.getFiles({
         fileIds: this.messageContentDomainService.collectBlobPartFileIds(message.content),
       });
 
-      if (!filesResult.ok) {
-        return filesResult;
-      }
-
-      items.push({
+      return map(filesResult, (files) => ({
         id: message.id,
         conversationId: message.conversationId,
         type: message.type,
         sequenceNumber: message.sequenceNumber,
         content: message.content,
-        files: filesResult.value.map((file) => ({
+        files: files.map((file) => ({
           id: file.id,
           canonicalUrl: file.canonicalUrl,
           filename: file.filename,
@@ -133,12 +111,7 @@ export class GetMessagesOnConversationFlow {
         })),
         createdAt: message.createdAt,
         updatedAt: message.updatedAt,
-      });
-    }
-
-    return {
-      ok: true,
-      value: items,
-    };
+      }));
+    });
   }
 }

@@ -2,7 +2,7 @@ import type { MessageDomainService } from "../domain/services/message-domain-ser
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { BlobStoreError, LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
-import { success, type Result } from "../domain/objects/result";
+import { map, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
 import type { FileContent } from "../domain/objects/file";
 import { CreateNextMessageInput } from "../domain/objects/message-input";
@@ -91,18 +91,15 @@ export class AppendMessageToConversationFlow {
       return llmResult;
     }
 
-    const createAssistantMessageResult = await this.messageDomainService.createNextMessage(
-      new CreateNextMessageInput({
-        conversationId: request.conversationId,
-        type: LLMMessageType.Assistant,
-        content: llmResult.value.content,
-      }),
+    return map(
+      await this.messageDomainService.createNextMessage(
+        new CreateNextMessageInput({
+          conversationId: request.conversationId,
+          type: LLMMessageType.Assistant,
+          content: llmResult.value.content,
+        }),
+      ),
+      () => undefined,
     );
-
-    if (!createAssistantMessageResult.ok) {
-      return createAssistantMessageResult;
-    }
-
-    return success(undefined);
   }
 }

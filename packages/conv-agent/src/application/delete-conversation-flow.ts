@@ -2,7 +2,8 @@ import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { BlobStoreError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
-import { type Result, success } from "../domain/objects/result";
+import type { Result } from "../domain/objects/result";
+import { andThenAsync, traverseAsync } from "../domain/objects/result";
 
 interface DeleteConversationCommand {
   readonly conversationId: string;
@@ -28,20 +29,11 @@ export class DeleteConversationFlow {
       return messagesResult;
     }
 
-    for (const message of messagesResult.value) {
-      const deleteMessageResult = await this.messageDomainService.deleteMessageWithFiles(message.id, this.fileDomainService);
-
-      if (!deleteMessageResult.ok) {
-        return deleteMessageResult;
-      }
-    }
-
-    const deleteResult = await this.conversationDomainService.removeFromConversationDBStore(command.conversationId);
-
-    if (!deleteResult.ok) {
-      return deleteResult;
-    }
-
-    return success(undefined);
+    return andThenAsync(
+      await traverseAsync(messagesResult.value, (message) =>
+        this.messageDomainService.deleteMessageWithFiles(message.id, this.fileDomainService),
+      ),
+      () => this.conversationDomainService.removeFromConversationDBStore(command.conversationId),
+    );
   }
 }

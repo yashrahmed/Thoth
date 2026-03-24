@@ -2,6 +2,7 @@ import { CreateMessageRecord, type MessagePageRequest, type MessageRepository, t
 import type { Message } from "../objects/message";
 import { BlobStoreError, NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
+import { andThenAsync, traverseAsync } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
 import { CreateNextMessageInput } from "../objects/message-input";
 import type { MessageContentDomainService } from "./message-content-domain-service";
@@ -15,23 +16,13 @@ export class MessageDomainService {
   ) {}
 
   async persistToMessageDBStore(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
-    const validationResult = this.messageContentDomainService.validateMessageRecord(record);
-
-    if (!validationResult.ok) {
-      return validationResult;
-    }
-
-    return this.messageRepository.upsertMessageRow(record);
+    return andThenAsync(this.messageContentDomainService.validateMessageRecord(record), () =>
+      this.messageRepository.upsertMessageRow(record),
+    );
   }
 
   async readFromMessageDBStore(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
-    const messageIdResult = requireNonEmptyString(messageId, "messageId");
-
-    if (!messageIdResult.ok) {
-      return messageIdResult;
-    }
-
-    return this.messageRepository.selectMessageRow(messageIdResult.value);
+    return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.selectMessageRow(id));
   }
 
   async readPageFromMessageDBStore(request: MessagePageRequest): Promise<Result<Message[], StoreError>> {
@@ -45,33 +36,19 @@ export class MessageDomainService {
   }
 
   async readAllMessagesFromMessageDBStore(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(conversationId, "conversationId");
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    return this.messageRepository.selectAllMessagesByConversation(conversationIdResult.value);
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
+      this.messageRepository.selectAllMessagesByConversation(id),
+    );
   }
 
   async readMessageCountFromMessageDBStore(conversationId: string): Promise<Result<number, ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(conversationId, "conversationId");
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    return this.messageRepository.countMessagesByConversation(conversationIdResult.value);
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
+      this.messageRepository.countMessagesByConversation(id),
+    );
   }
 
   async removeFromMessageDBStore(messageId: string): Promise<Result<void, ValidationError | StoreError>> {
-    const messageIdResult = requireNonEmptyString(messageId, "messageId");
-
-    if (!messageIdResult.ok) {
-      return messageIdResult;
-    }
-
-    return this.messageRepository.deleteMessageRow(messageIdResult.value);
+    return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.deleteMessageRow(id));
   }
 
   async deleteMessage(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
@@ -91,15 +68,12 @@ export class MessageDomainService {
       return messageResult;
     }
 
-    for (const fileId of this.messageContentDomainService.collectBlobPartFileIds(messageResult.value.content)) {
-      const deleteFileResult = await fileDomainService.deleteFile(fileId);
+    const fileIds = this.messageContentDomainService.collectBlobPartFileIds(messageResult.value.content);
 
-      if (!deleteFileResult.ok) {
-        return deleteFileResult;
-      }
-    }
-
-    return this.removeFromMessageDBStore(messageId);
+    return andThenAsync(
+      await traverseAsync(fileIds, (fileId) => fileDomainService.deleteFile(fileId)),
+      () => this.removeFromMessageDBStore(messageId),
+    );
   }
 
   async createNextMessage(request: CreateNextMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
@@ -111,21 +85,19 @@ export class MessageDomainService {
 
     const countResult = await this.readMessageCountFromMessageDBStore(request.conversationId);
 
-    if (!countResult.ok) {
-      return countResult;
-    }
+    return andThenAsync(countResult, (count) => {
+      const timestamp = this.now();
 
-    const timestamp = this.now();
-
-    return this.persistToMessageDBStore(
-      new CreateMessageRecord({
-        conversationId: request.conversationId,
-        type: request.type,
-        sequenceNumber: countResult.value + 1,
-        content: request.content,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }),
-    );
+      return this.persistToMessageDBStore(
+        new CreateMessageRecord({
+          conversationId: request.conversationId,
+          type: request.type,
+          sequenceNumber: count + 1,
+          content: request.content,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+      );
+    });
   }
 }

@@ -1,5 +1,6 @@
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
+import { map } from "../domain/objects/result";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 
 interface GetConversationQuery {
@@ -16,19 +17,10 @@ export class GetConversationFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
   async execute(query: GetConversationQuery): Promise<Result<GetConversationResult, NotFoundError | StoreError | ValidationError>> {
-    const result = await this.conversationDomainService.readFromConversationDBStore(query.conversationId);
-
-    if (!result.ok) {
-      return result;
-    }
-
-    return {
-      ok: true,
-      value: {
-        id: result.value.id,
-        createdAt: result.value.createdAt,
-        updatedAt: result.value.updatedAt,
-      },
-    };
+    return map(await this.conversationDomainService.readFromConversationDBStore(query.conversationId), (conv) => ({
+      id: conv.id,
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+    }));
   }
 }

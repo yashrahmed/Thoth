@@ -2,6 +2,7 @@ import type { ConversationPageRequest, ConversationOffsetPageRequest, Conversati
 import type { Conversation } from "../objects/conversation";
 import type { NotFoundError, StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
+import { andThenAsync } from "../objects/result";
 import { requireNonEmptyString } from "../validation";
 
 export class ConversationDomainService {
@@ -24,13 +25,9 @@ export class ConversationDomainService {
   }
 
   async readFromConversationDBStore(conversationId: string): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(conversationId, "conversationId");
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    return this.conversationRepository.selectConversationRow(conversationIdResult.value);
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
+      this.conversationRepository.selectConversationRow(id),
+    );
   }
 
   async readPageFromConversationDBStore(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
@@ -43,12 +40,8 @@ export class ConversationDomainService {
   }
 
   async removeFromConversationDBStore(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
-    const conversationIdResult = requireNonEmptyString(conversationId, "conversationId");
-
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
-    }
-
-    return this.conversationRepository.deleteConversationRow(conversationIdResult.value);
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
+      this.conversationRepository.deleteConversationRow(id),
+    );
   }
 }

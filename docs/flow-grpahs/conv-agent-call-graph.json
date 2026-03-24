@@ -1,0 +1,232 @@
+{
+  "generatedAt": "2026-03-24T01:06:10.237Z",
+  "roots": [
+    "AppendMessageToConversationFlow",
+    "CreateConversationFlow",
+    "DeleteConversationFlow",
+    "GetConversationFlow",
+    "GetMessagesOnConversationFlow",
+    "ListConversationsFlow"
+  ],
+  "nodes": [
+    {
+      "name": "AppendMessageToConversationFlow",
+      "filePath": "packages/conv-agent/src/application/append-message-to-conversation-flow.ts",
+      "layer": "flow",
+      "level": 0
+    },
+    {
+      "name": "BlobDomainService",
+      "filePath": "packages/conv-agent/src/domain/services/blob-domain-service.ts",
+      "layer": "domainService",
+      "level": 3
+    },
+    {
+      "name": "ConversationDomainService",
+      "filePath": "packages/conv-agent/src/domain/services/conversation-domain-service.ts",
+      "layer": "domainService",
+      "level": 1
+    },
+    {
+      "name": "CreateConversationFlow",
+      "filePath": "packages/conv-agent/src/application/create-conversation-flow.ts",
+      "layer": "flow",
+      "level": 0
+    },
+    {
+      "name": "DeleteConversationFlow",
+      "filePath": "packages/conv-agent/src/application/delete-conversation-flow.ts",
+      "layer": "flow",
+      "level": 0
+    },
+    {
+      "name": "FileDomainService",
+      "filePath": "packages/conv-agent/src/domain/services/file-domain-service.ts",
+      "layer": "domainService",
+      "level": 2
+    },
+    {
+      "name": "GetConversationFlow",
+      "filePath": "packages/conv-agent/src/application/get-conversation-flow.ts",
+      "layer": "flow",
+      "level": 0
+    },
+    {
+      "name": "GetMessagesOnConversationFlow",
+      "filePath": "packages/conv-agent/src/application/get-messages-on-conversation-flow.ts",
+      "layer": "flow",
+      "level": 0
+    },
+    {
+      "name": "ListConversationsFlow",
+      "filePath": "packages/conv-agent/src/application/list-conversations-flow.ts",
+      "layer": "flow",
+      "level": 0
+    },
+    {
+      "name": "LlmDomainService",
+      "filePath": "packages/conv-agent/src/domain/services/llm-domain-service.ts",
+      "layer": "domainService",
+      "level": 1
+    },
+    {
+      "name": "MessageContentDomainService",
+      "filePath": "packages/conv-agent/src/domain/services/message-content-domain-service.ts",
+      "layer": "domainService",
+      "level": 2
+    },
+    {
+      "name": "MessageDomainService",
+      "filePath": "packages/conv-agent/src/domain/services/message-domain-service.ts",
+      "layer": "domainService",
+      "level": 1
+    },
+    {
+      "name": "PlaceholderLlmRepository",
+      "filePath": "packages/conv-agent/src/adapter/llm/placeholder-llm-repository.ts",
+      "layer": "adapter",
+      "level": 2
+    },
+    {
+      "name": "PostgresConversationRepository",
+      "filePath": "packages/conv-agent/src/adapter/postgres/postgres-conversation-repository.ts",
+      "layer": "adapter",
+      "level": 2
+    },
+    {
+      "name": "PostgresFileRepository",
+      "filePath": "packages/conv-agent/src/adapter/postgres/postgres-file-repository.ts",
+      "layer": "adapter",
+      "level": 3
+    },
+    {
+      "name": "PostgresMessageRepository",
+      "filePath": "packages/conv-agent/src/adapter/postgres/postgres-message-repository.ts",
+      "layer": "adapter",
+      "level": 2
+    },
+    {
+      "name": "R2BlobRepository",
+      "filePath": "packages/conv-agent/src/adapter/blob/r2-blob-repository.ts",
+      "layer": "adapter",
+      "level": 4
+    }
+  ],
+  "edges": [
+    {
+      "from": "AppendMessageToConversationFlow",
+      "to": "ConversationDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "AppendMessageToConversationFlow",
+      "to": "FileDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "AppendMessageToConversationFlow",
+      "to": "LlmDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "AppendMessageToConversationFlow",
+      "to": "MessageContentDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "AppendMessageToConversationFlow",
+      "to": "MessageDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "BlobDomainService",
+      "to": "R2BlobRepository",
+      "reason": "runtime"
+    },
+    {
+      "from": "ConversationDomainService",
+      "to": "PostgresConversationRepository",
+      "reason": "runtime"
+    },
+    {
+      "from": "CreateConversationFlow",
+      "to": "ConversationDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "DeleteConversationFlow",
+      "to": "ConversationDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "DeleteConversationFlow",
+      "to": "FileDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "DeleteConversationFlow",
+      "to": "MessageDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "FileDomainService",
+      "to": "BlobDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "FileDomainService",
+      "to": "PostgresFileRepository",
+      "reason": "runtime"
+    },
+    {
+      "from": "GetConversationFlow",
+      "to": "ConversationDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "GetMessagesOnConversationFlow",
+      "to": "ConversationDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "GetMessagesOnConversationFlow",
+      "to": "FileDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "GetMessagesOnConversationFlow",
+      "to": "MessageContentDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "GetMessagesOnConversationFlow",
+      "to": "MessageDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "ListConversationsFlow",
+      "to": "ConversationDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "LlmDomainService",
+      "to": "PlaceholderLlmRepository",
+      "reason": "runtime"
+    },
+    {
+      "from": "MessageDomainService",
+      "to": "FileDomainService",
+      "reason": "methodParameter"
+    },
+    {
+      "from": "MessageDomainService",
+      "to": "MessageContentDomainService",
+      "reason": "runtime"
+    },
+    {
+      "from": "MessageDomainService",
+      "to": "PostgresMessageRepository",
+      "reason": "runtime"
+    }
+  ]
+}

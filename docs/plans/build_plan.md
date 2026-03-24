@@ -38,7 +38,7 @@ type DeleteConversationCommand = {
 type AppendMessageRequest = {
   readonly conversationId: string;
   readonly type: LLMMessageType;
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
   readonly attachments: ReadonlyArray<Attachment>;
 };
 
@@ -61,7 +61,7 @@ type GetMessagesItem = {
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
   readonly files: ReadonlyArray<GetMessagesFile>;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
@@ -118,33 +118,12 @@ enum LLMMessageType {
   Tool = "tool",
 }
 
-interface TextPart {
-  readonly type: "text";
-  readonly text: string;
-}
-
-interface ToolCallPart {
-  readonly type: "tool-call";
-  readonly toolCallId: string;
-  readonly toolName: string;
-  readonly input: Record<string, unknown>;
-}
-
-interface ToolResultPart {
-  readonly type: "tool-result";
-  readonly toolCallId: string;
-  readonly toolName: string;
-  readonly output: unknown;
-}
-
-type MessagePart = TextPart | ToolCallPart | ToolResultPart;
-
 interface Message {
   readonly id: string;
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -153,7 +132,7 @@ interface Message {
 class CreateNextMessageInput {
   readonly conversationId: string;
   readonly type: LLMMessageType;
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
   readonly fileIds: ReadonlyArray<string>;
 }
 
@@ -181,7 +160,7 @@ class CreateMessageRecord {
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
   readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -197,7 +176,7 @@ type CreateFileRecord = {
 };
 
 type LlmCompletionResult = {
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
 };
 ```
 
@@ -209,7 +188,7 @@ interface MessageRow {
   readonly conversation_id: string;
   readonly type: LLMMessageType;
   readonly sequence_number: number;
-  readonly content: MessagePart[];
+  readonly content: string;
   readonly file_ids: string[];
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
@@ -222,13 +201,6 @@ interface MessageRow {
 type Result<T, E> = Success<T> | Failure<E>;
 type Success<T> = { readonly ok: true; readonly value: T };
 type Failure<E> = { readonly ok: false; readonly error: E };
-
-// Result combinators — standalone functions, not methods.
-function andThen<T, E, U, F>(result: Result<T, E>, fn: (value: T) => Result<U, F>): Result<U, E | F>;
-function andThenAsync<T, E, U, F>(result: Result<T, E>, fn: (value: T) => Promise<Result<U, F>>): Promise<Result<U, E | F>>;
-function map<T, E, U>(result: Result<T, E>, fn: (value: T) => U): Result<U, E>;
-function traverseAsync<T, U, E>(items: ReadonlyArray<T>, fn: (item: T) => Promise<Result<U, E>>): Promise<Result<U[], E>>;
-function firstFailure<E>(...results: ReadonlyArray<Result<unknown, E>>): Result<void, E>;
 
 type ValidationError = {
   readonly kind: "ValidationError";
@@ -334,11 +306,8 @@ class MessageContentDomainService {
 - RequireNonEmptyString(conversationId)
 - RequirePositiveInteger(sequenceNumber) (when present)
 - RequirePresent(content), RequirePresent(type)
-- Content part type constraints:
-  - System/User: all parts must be TextPart
-  - Assistant: all parts must be TextPart or ToolCallPart
-  - Tool: all parts must be ToolResultPart
-- Per-part field validation (toolCallId, toolName, etc.)
+- Content must be a string
+- At least one of trimmed content or fileIds must be present
 - All fileIds (when present) must be non-empty strings
 
 ## Atomic Operations
@@ -578,7 +547,7 @@ class MessageContentDomainService {
 
 ### Infra.UpsertMessageRow (record: CreateMessageRecord): Result<Message, StoreError>
 
-1. MapToRow(record) → row (produces MessageRow with conversation_id, type, sequence_number, content as JSONB, file_ids as text[], created_at, updated_at).
+1. MapToRow(record) → row (produces MessageRow with conversation_id, type, sequence_number, content as text, file_ids as text[], created_at, updated_at).
 2. PostgresClient.query(UpsertQuery("messages", row)) → resultRow → if error, return StoreError.
 3. MapFromRow(resultRow) → message.
 4. Return succeed(message).
@@ -661,15 +630,11 @@ class MessageContentDomainService {
 
 ### Infra.LlmComplete (messages: ReadonlyArray<Message>): Result<LlmCompletionResult, LlmError>
 
-1. Map domain Message[] to LangChain BaseMessage[] (user → HumanMessage, assistant → AIMessage, system → SystemMessage, tool → ToolMessage). Content parts and file references map as follows:
-   - TextPart → string content or text content block.
+1. Map domain Message[] to provider input messages using plain string content plus resolved file references.
+   - message.content → string prompt content.
    - message.fileIds → resolve each fileId to its File entity; use File.mimeType to build the appropriate media content block (image, audio, or file). File type is inferred from mimeType, not stored on the Message.
-   - ToolCallPart → tool_calls array entries on AIMessage.
-   - ToolResultPart → ToolMessage content with toolCallId correlation.
 2. BaseChatModel.invoke(baseMessages) → aiMessage → if error, return LlmError.
-3. Map aiMessage content to LlmCompletionResult.content (ReadonlyArray\<MessagePart\>):
-   - Text content → TextPart.
-   - Tool calls → ToolCallPart (with toolCallId, toolName, input).
+3. Map aiMessage content to LlmCompletionResult.content (string).
 4. Return succeed(llmCompletionResult).
 
 ## Notes
@@ -698,9 +663,8 @@ class MessageContentDomainService {
   adapter-local error types, not domain `ValidationError`. The adapter maps
   transport errors to HTTP status codes independently of the domain error
   hierarchy.
-- The `MessageRow` persisted type stores `content` as a JSONB column
-  containing the `MessagePart[]` array and `file_ids` as a `text[]` column
-  containing the referenced File IDs. The `type` column stores the
+- The `MessageRow` persisted type stores `content` as a text column and
+  `file_ids` as a `text[]` column containing the referenced File IDs. The `type` column stores the
   `LLMMessageType` value. Column names use snake_case per PostgreSQL convention;
   `MapToRow`/`MapFromRow` handle the camelCase ↔ snake_case conversion.
 - File type (image, audio, document, etc.) is not stored on the Message.
@@ -723,16 +687,13 @@ DeleteConversation, AppendMessage) and progressively decomposed them:
    metadata added.
 5. Pagination was added using sequence-number-based cursoring derived from
    page number and page size inputs.
-6. Message types were refactored to align with the Vercel AI SDK model:
-   `LlmMessageType` was renamed to `LLMMessageType`, `Message` was
-   simplified to a plain interface with `LLMMessageType` + `MessagePart[]`
-   (no generics), and top-level `toolCalls`/`toolCallId`/`fileIds` fields
-   were folded into typed content parts (`ToolCallPart`, `ToolResultPart`,
-   `ImagePart`, `FilePart`, `AudioPart`).
-7. Message content validation and blob-part operations were consolidated
-   into `MessageContentDomainService`. Input classes (`CreateNextMessageInput`,
+6. Message types were refactored so `Message.content` is plain text and
+   attachments live in `fileIds`; file/media rendering is inferred from
+   `File.mimeType` instead of message-part metadata.
+7. Message content validation was consolidated into
+   `MessageContentDomainService`. Input classes (`CreateNextMessageInput`,
    `CreateMessageRecord`) are plain data classes; callers delegate
-   validation and content manipulation to the service.
+   validation to the service.
 8. `isValid()` methods were extracted from `GetMessagesQuery`,
    `ListConversationsQuery`, and `UploadFileInput` into a dedicated
    `ValidationDomainService`. Those types are now plain data types with no

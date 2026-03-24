@@ -74,10 +74,8 @@ export class MessageDomainService {
       return messageResult;
     }
 
-    const fileIds = this.messageContentDomainService.collectBlobPartFileIds(messageResult.value.content);
-
     return andThenAsync(
-      await traverseAsync(fileIds, (fileId) => fileDomainService.deleteFile(fileId)),
+      await traverseAsync(messageResult.value.fileIds, (fileId) => fileDomainService.deleteFile(fileId)),
       () => this.delete(messageId),
     );
   }
@@ -100,6 +98,7 @@ export class MessageDomainService {
           type: request.type,
           sequenceNumber: count + 1,
           content: request.content,
+          fileIds: request.fileIds,
           createdAt: timestamp,
           updatedAt: timestamp,
         }),

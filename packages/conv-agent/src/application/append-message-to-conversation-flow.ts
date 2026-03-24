@@ -6,10 +6,8 @@ import { map, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
 import type { FileContent } from "../domain/objects/file";
 import { CreateNextMessageInput } from "../domain/objects/message-input";
-import type { MessagePart } from "../domain/objects/message";
 import { type LlmDomainService } from "../domain/services/llm-domain-service";
 import { UploadFileInput } from "../domain/objects/upload-file-input";
-import type { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 
 export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 
@@ -22,7 +20,7 @@ export interface Attachment {
 export interface AppendMessageRequest {
   readonly conversationId: string;
   readonly type: LLMMessageTypeValue;
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
   readonly attachments: ReadonlyArray<Attachment>;
 }
 
@@ -30,7 +28,6 @@ export class AppendMessageToConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
-    private readonly messageContentDomainService: MessageContentDomainService,
     private readonly fileDomainService: FileDomainService,
     private readonly llmDomainService: LlmDomainService,
   ) {}
@@ -58,20 +55,12 @@ export class AppendMessageToConversationFlow {
       return uploadFilesResult;
     }
 
-    const userContentResult = this.messageContentDomainService.replaceBlobPartFileIds(
-      request.content,
-      uploadFilesResult.value.map((file) => file.id),
-    );
-
-    if (!userContentResult.ok) {
-      return userContentResult;
-    }
-
     const createUserMessageResult = await this.messageDomainService.createNextMessage(
       new CreateNextMessageInput({
         conversationId: request.conversationId,
         type: request.type,
-        content: userContentResult.value,
+        content: request.content,
+        fileIds: uploadFilesResult.value.map((file) => file.id),
       }),
     );
 
@@ -97,6 +86,7 @@ export class AppendMessageToConversationFlow {
           conversationId: request.conversationId,
           type: LLMMessageType.Assistant,
           content: llmResult.value.content,
+          fileIds: [],
         }),
       ),
       () => undefined,

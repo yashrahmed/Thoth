@@ -3,14 +3,15 @@ import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import type { Message, MessagePart } from "../../domain/objects/message";
+import type { Message } from "../../domain/objects/message";
 
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
   readonly type: LLMMessageType;
   readonly sequence_number: number;
-  readonly content: MessagePart[];
+  readonly content: string;
+  readonly file_ids: string[];
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
 }
@@ -18,8 +19,6 @@ interface MessageRow {
 interface CountRow {
   readonly count: number | string | bigint;
 }
-
-type JsonValue = string | number | boolean | null | { readonly [key: string]: JsonValue } | JsonValue[];
 
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
@@ -32,6 +31,7 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
+          file_ids,
           created_at,
           updated_at
         )
@@ -39,7 +39,8 @@ export class PostgresMessageRepository implements MessageRepository {
           ${record.conversationId},
           ${record.type},
           ${record.sequenceNumber},
-          ${this.sql.json(toJsonValue(record.content))},
+          ${record.content},
+          ${record.fileIds as string[]},
           ${record.createdAt.toISOString()},
           ${record.updatedAt.toISOString()}
         )
@@ -49,6 +50,7 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
+          file_ids,
           created_at,
           updated_at
       `;
@@ -74,6 +76,7 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
+          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -101,6 +104,7 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
+          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -126,6 +130,7 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
+          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -213,6 +218,7 @@ function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<
       type: row.type,
       sequenceNumber: row.sequence_number,
       content: row.content,
+      fileIds: row.file_ids,
       createdAt: toDate(row.created_at),
       updatedAt: toDate(row.updated_at),
     });
@@ -231,8 +237,4 @@ function toDate(value: string | Date): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
-}
-
-function toJsonValue(value: unknown): JsonValue {
-  return JSON.parse(JSON.stringify(value)) as JsonValue;
 }

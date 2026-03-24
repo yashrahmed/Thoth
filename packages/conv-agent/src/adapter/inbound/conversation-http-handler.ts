@@ -11,7 +11,6 @@ import type { DeleteConversationFlow } from "../../application/delete-conversati
 import type { GetConversationFlow, GetConversationResult } from "../../application/get-conversation-flow";
 import { GetMessagesQuery, type GetMessagesOnConversationFlow, type GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
 import { ListConversationsQuery, type ListConversationsFlow, type ListConversationsItem } from "../../application/list-conversations-flow";
-import type { MessageContentDomainService } from "../../domain/services/message-content-domain-service";
 
 interface TransportValidationError {
   readonly kind: "ValidationError";
@@ -42,7 +41,6 @@ export interface ConversationHttpHandlerDeps {
   readonly deleteConversation: DeleteConversationFlow;
   readonly appendMessageToConversation: AppendMessageToConversationFlow;
   readonly getMessagesOnConversation: GetMessagesOnConversationFlow;
-  readonly messageContentDomainService: MessageContentDomainService;
 }
 
 export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps): (req: Request) => Response | Promise<Response> {
@@ -105,7 +103,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
 
   app.post("/conversations/:id/chat", async (c) => {
     const conversationId = c.req.param("id");
-    const appendRequestResult = await parseAppendMessageRequest(c.req.raw, conversationId, deps.messageContentDomainService);
+    const appendRequestResult = await parseAppendMessageRequest(c.req.raw, conversationId);
 
     if (!appendRequestResult.ok) {
       return mapError(c, appendRequestResult.error);
@@ -195,6 +193,7 @@ function toMessageResponse(message: GetMessagesItem) {
     type: message.type,
     sequenceNumber: message.sequenceNumber,
     content: message.content,
+    fileIds: message.fileIds,
     files: message.files.map((file) => ({
       id: file.id,
       canonicalUrl: file.canonicalUrl,
@@ -212,7 +211,6 @@ function toMessageResponse(message: GetMessagesItem) {
 async function parseAppendMessageRequest(
   req: Request,
   conversationId: string,
-  messageContentDomainService: MessageContentDomainService,
 ): Promise<TransportResult<ApplicationAppendMessageRequest>> {
   const contentType = req.headers.get("content-type") ?? "";
 
@@ -260,12 +258,6 @@ async function parseAppendMessageRequest(
     });
   }
 
-  const blobPartCount = contentResult.value.filter((part) => messageContentDomainService.isBlobPart(part)).length;
-
-  if (blobPartCount !== attachments.length) {
-    return transportFailure("attachments", "attachments must match blob parts in content by order.");
-  }
-
   return {
     ok: true,
     value: {
@@ -284,25 +276,7 @@ function parseContentField(formData: FormData): TransportResult<ApplicationConte
     return transportFailure("content", "content must be present.");
   }
 
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return transportFailure("content", "content must be valid JSON.");
-  }
-
-  if (!Array.isArray(parsed)) {
-    return transportFailure("content", "content must be a JSON array.");
-  }
-
-  for (const part of parsed) {
-    if (typeof part !== "object" || part === null || typeof (part as Record<string, unknown>).type !== "string") {
-      return transportFailure("content", "each content part must be an object with a type field.");
-    }
-  }
-
-  return { ok: true, value: parsed as ApplicationContent };
+  return { ok: true, value };
 }
 
 function transportFailure(fieldName: string, message: string): TransportResult<never> {

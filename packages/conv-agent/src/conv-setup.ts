@@ -61,10 +61,9 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         createConversation: new CreateConversationFlow(conversationDomainService),
         getConversation: new GetConversationFlow(conversationDomainService),
         listConversations: new ListConversationsFlow(conversationDomainService),
-        deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
-        appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
-        getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
-        messageContentDomainService,
+        deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+        appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
+        getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
       }),
     });
     let stopped = false;

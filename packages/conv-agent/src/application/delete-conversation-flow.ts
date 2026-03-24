@@ -1,6 +1,5 @@
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
-import type { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { BlobStoreError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
@@ -13,7 +12,6 @@ export class DeleteConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
-    private readonly messageContentDomainService: MessageContentDomainService,
     private readonly fileDomainService: FileDomainService,
   ) {}
 
@@ -30,9 +28,7 @@ export class DeleteConversationFlow {
       return messagesResult;
     }
 
-    const allFileIds = [
-      ...new Set(messagesResult.value.flatMap((m) => this.messageContentDomainService.collectBlobPartFileIds(m.content))),
-    ];
+    const allFileIds = [...new Set(messagesResult.value.flatMap((message) => message.fileIds))];
 
     const deleteFilesResult = await this.fileDomainService.deleteFiles({ fileIds: allFileIds });
 

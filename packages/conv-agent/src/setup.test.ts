@@ -9,7 +9,7 @@ import { Conversation } from "./domain/objects/conversation";
 import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
-import type { Message, MessagePart, TextPart, ToolCallPart } from "./domain/objects/message";
+import type { Message } from "./domain/objects/message";
 import { CreateNextMessageInput } from "./domain/objects/message-input";
 import { UploadFileInput } from "./domain/objects/upload-file-input";
 import { failure, success, type Result } from "./domain/objects/result";
@@ -55,12 +55,14 @@ describe("message validation", () => {
     const validUserInput = new CreateNextMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.User,
-      content: [textPart("hello"), imagePart("file-1")],
+      content: "hello",
+      fileIds: ["file-1"],
     });
     const invalidAssistantInput = new CreateNextMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
-      content: [imagePart("file-1")],
+      content: "",
+      fileIds: [],
     });
 
     expect(messageContentDomainService.validateMessageInput(validUserInput)).toEqual({
@@ -71,8 +73,8 @@ describe("message validation", () => {
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "content.type",
-        message: "assistant messages must contain only text or tool-call parts.",
+        fieldName: "content",
+        message: "content must be a non-empty string when no files are attached.",
       },
     });
   });
@@ -82,12 +84,14 @@ describe("message validation", () => {
     const validToolInput = new CreateNextMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
-      content: [toolResultPart("tool-call-1", "search")],
+      content: "tool output",
+      fileIds: [],
     });
     const invalidToolInput = new CreateNextMessageInput({
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
-      content: [textPart("bad")],
+      content: "",
+      fileIds: [],
     });
 
     expect(messageContentDomainService.validateMessageInput(validToolInput).ok).toBe(true);
@@ -95,8 +99,8 @@ describe("message validation", () => {
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "content.type",
-        message: "tool messages must contain only tool-result parts.",
+        fieldName: "content",
+        message: "content must be a non-empty string when no files are attached.",
       },
     });
   });
@@ -107,7 +111,8 @@ describe("message validation", () => {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       sequenceNumber: 2,
-      content: [textPart("hello"), toolCallPart("tool-call-1", "search")],
+      content: "hello",
+      fileIds: [],
       createdAt: new Date("2026-03-16T12:00:00.000Z"),
       updatedAt: new Date("2026-03-16T12:00:00.000Z"),
     });
@@ -115,7 +120,8 @@ describe("message validation", () => {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       sequenceNumber: 2,
-      content: [toolResultPart("tool-call-1", "search")],
+      content: "",
+      fileIds: [],
       createdAt: new Date("2026-03-16T12:00:00.000Z"),
       updatedAt: new Date("2026-03-16T12:00:00.000Z"),
     });
@@ -125,8 +131,8 @@ describe("message validation", () => {
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "content.type",
-        message: "assistant messages must contain only text or tool-call parts.",
+        fieldName: "content",
+        message: "content must be a non-empty string when no files are attached.",
       },
     });
   });
@@ -157,21 +163,21 @@ describe("message validation", () => {
     });
   });
 
-  test("MessageContentDomainService collects and replaces blob part file ids", () => {
+  test("MessageContentDomainService validates file ids", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const parts: ReadonlyArray<MessagePart> = [textPart("hello"), imagePart("pending-1"), imagePart("pending-2")];
-
-    expect(messageContentDomainService.collectBlobPartFileIds(parts)).toEqual(["pending-1", "pending-2"]);
-    expect(messageContentDomainService.replaceBlobPartFileIds(parts, ["file-1", "file-2"])).toEqual({
-      ok: true,
-      value: [textPart("hello"), imagePart("file-1"), imagePart("file-2")],
+    const input = new CreateNextMessageInput({
+      conversationId: "conversation-1",
+      type: LLMMessageType.User,
+      content: "hello",
+      fileIds: [""],
     });
-    expect(messageContentDomainService.replaceBlobPartFileIds(parts, ["file-1"])).toEqual({
+
+    expect(messageContentDomainService.validateMessageInput(input)).toEqual({
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "attachments",
-        message: "attachments must match blob parts in content by order.",
+        fieldName: "fileIds",
+        message: "fileIds must be a non-empty string.",
       },
     });
   });
@@ -184,7 +190,7 @@ describe("message validation", () => {
     const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, () => new Date("2026-03-16T12:00:00.000Z"));
     const fileDomainService = new FileDomainService(fileRepository, new BlobDomainService(blobRepository), () => new Date("2026-03-16T12:00:00.000Z"));
 
-    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, [imagePart("file-1")], "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", ["file-1"], "2026-03-16T12:00:00.000Z")]);
     fileRepository.seed([mustCreateFile("file-1", "/conversations/conversation-1/file-1.png", "file-1.png", "image/png", 4)]);
 
     const deleteResult = await messageDomainService.deleteMessageWithFiles("message-1", fileDomainService);
@@ -266,7 +272,7 @@ describe("createConversationHttpHandler", () => {
     const formData = new FormData();
 
     formData.set("type", "user");
-    formData.set("content", JSON.stringify([textPart("hello"), imagePart("pending-image")]));
+    formData.set("content", "hello");
     formData.set("attachment", new globalThis.File(["hello"], "greeting.txt", { type: "text/plain" }));
 
     const response = await handler(
@@ -281,45 +287,46 @@ describe("createConversationHttpHandler", () => {
   });
 
   test("rejects invalid rich-message payloads", async () => {
-    const handler = buildHandler();
+    const conversationRepository = new InMemoryConversationRepository();
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    const handler = buildHandler({ conversationRepository });
 
-    const invalidJsonFormData = new FormData();
-    invalidJsonFormData.set("type", "user");
-    invalidJsonFormData.set("content", "{bad");
+    const missingContentFormData = new FormData();
+    missingContentFormData.set("type", "user");
 
-    const invalidJsonResponse = await handler(
+    const missingContentResponse = await handler(
       new Request("http://localhost/conversations/conversation-1/chat", {
         method: "POST",
-        body: invalidJsonFormData,
+        body: missingContentFormData,
       }),
     );
 
-    expect(invalidJsonResponse.status).toBe(400);
-    expect(await invalidJsonResponse.json()).toEqual({
+    expect(missingContentResponse.status).toBe(400);
+    expect(await missingContentResponse.json()).toEqual({
       error: {
         kind: "ValidationError",
         fieldName: "content",
-        message: "content must be valid JSON.",
+        message: "content must be present.",
       },
     });
 
-    const mismatchedAttachmentsFormData = new FormData();
-    mismatchedAttachmentsFormData.set("type", "user");
-    mismatchedAttachmentsFormData.set("content", JSON.stringify([textPart("hello"), imagePart("pending-image")]));
+    const invalidContentFormData = new FormData();
+    invalidContentFormData.set("type", "user");
+    invalidContentFormData.set("content", "");
 
-    const mismatchedAttachmentsResponse = await handler(
+    const invalidContentResponse = await handler(
       new Request("http://localhost/conversations/conversation-1/chat", {
         method: "POST",
-        body: mismatchedAttachmentsFormData,
+        body: invalidContentFormData,
       }),
     );
 
-    expect(mismatchedAttachmentsResponse.status).toBe(400);
-    expect(await mismatchedAttachmentsResponse.json()).toEqual({
+    expect(invalidContentResponse.status).toBe(400);
+    expect(await invalidContentResponse.json()).toEqual({
       error: {
         kind: "ValidationError",
-        fieldName: "attachments",
-        message: "attachments must match blob parts in content by order.",
+        fieldName: "content",
+        message: "content must be a non-empty string when no files are attached.",
       },
     });
   });
@@ -329,8 +336,8 @@ describe("createConversationHttpHandler", () => {
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
     const messageRepository = new InMemoryMessageRepository();
     messageRepository.seed([
-      mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, [textPart("one"), imagePart("file-1", "image/png")], "2026-03-16T12:00:00.000Z"),
-      mustCreateMessage("message-2", "conversation-1", LLMMessageType.Assistant, 2, [textPart("two"), toolCallPart("tool-call-2", "search")], "2026-03-16T12:01:00.000Z"),
+      mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "one", ["file-1"], "2026-03-16T12:00:00.000Z"),
+      mustCreateMessage("message-2", "conversation-1", LLMMessageType.Assistant, 2, "two", [], "2026-03-16T12:01:00.000Z"),
     ]);
     const fileRepository = new InMemoryFileRepository();
     fileRepository.seed([mustCreateFile("file-1", "/conversations/conversation-1/file-1-one.png", "one.png", "image/png", 3, "2026-03-16T11:59:00.000Z")]);
@@ -350,7 +357,8 @@ describe("createConversationHttpHandler", () => {
           conversationId: "conversation-1",
           type: "user",
           sequenceNumber: 1,
-          content: [textPart("one"), imagePart("file-1", "image/png")],
+          content: "one",
+          fileIds: ["file-1"],
           files: [
             {
               id: "file-1",
@@ -370,7 +378,8 @@ describe("createConversationHttpHandler", () => {
           conversationId: "conversation-1",
           type: "assistant",
           sequenceNumber: 2,
-          content: [textPart("two"), toolCallPart("tool-call-2", "search")],
+          content: "two",
+          fileIds: [],
           files: [],
           createdAt: "2026-03-16T12:01:00.000Z",
           updatedAt: "2026-03-16T12:01:00.000Z",
@@ -421,10 +430,9 @@ function buildHandler(overrides?: {
     createConversation: new CreateConversationFlow(conversationDomainService),
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService),
-    deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
-    appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
-    getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
-    messageContentDomainService,
+    deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+    appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
+    getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
   });
 }
 
@@ -499,6 +507,7 @@ class InMemoryMessageRepository implements MessageRepository {
       record.type,
       record.sequenceNumber,
       record.content,
+      record.fileIds,
       record.createdAt.toISOString(),
     );
     this.messages.set(message.id, message);
@@ -627,10 +636,9 @@ class InMemoryLlmCompletionService implements LlmCompletionService {
     }
 
     const latestMessage = messages.at(-1);
-    const textParts = latestMessage?.content.filter((part): part is TextPart => part.type === "text") ?? [];
 
     return success({
-      content: textParts.length > 0 ? textParts.map((part) => textPart(part.text)) : [textPart("empty")],
+      content: latestMessage?.content || "empty",
     });
   }
 }
@@ -643,13 +651,22 @@ function mustCreateConversation(id: string, isoTimestamp: string): Conversation 
   });
 }
 
-function mustCreateMessage(id: string, conversationId: string, type: LLMMessageType, sequenceNumber: number, content: ReadonlyArray<MessagePart>, isoTimestamp: string): Message {
+function mustCreateMessage(
+  id: string,
+  conversationId: string,
+  type: LLMMessageType,
+  sequenceNumber: number,
+  content: string,
+  fileIds: ReadonlyArray<string>,
+  isoTimestamp: string,
+): Message {
   return {
     id,
     conversationId,
     type,
     sequenceNumber,
     content,
+    fileIds,
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   };
@@ -665,20 +682,4 @@ function mustCreateFile(id: string, canonicalUrl: string, filename: string, mime
     createdAt: new Date(isoTimestamp),
     updatedAt: new Date(isoTimestamp),
   });
-}
-
-function textPart(text: string): TextPart {
-  return { type: "text", text };
-}
-
-function imagePart(fileId: string, mediaType = "image/png"): MessagePart {
-  return { type: "image", fileId, mediaType };
-}
-
-function toolCallPart(toolCallId: string, toolName: string): ToolCallPart {
-  return { type: "tool-call", toolCallId, toolName, input: { query: "hello" } };
-}
-
-function toolResultPart(toolCallId: string, toolName: string): MessagePart {
-  return { type: "tool-result", toolCallId, toolName, output: { result: "ok" } };
 }

@@ -1,4 +1,4 @@
-import type { Message, MessagePart } from "../objects/message";
+import type { Message } from "../objects/message";
 import type { NotFoundError, StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import type { LLMMessageType } from "../objects/llm";
@@ -7,7 +7,8 @@ export class CreateMessageRecord {
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
+  readonly fileIds: ReadonlyArray<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
@@ -15,7 +16,8 @@ export class CreateMessageRecord {
     readonly conversationId: string;
     readonly type: LLMMessageType;
     readonly sequenceNumber: number;
-    readonly content: ReadonlyArray<MessagePart>;
+    readonly content: string;
+    readonly fileIds: ReadonlyArray<string>;
     readonly createdAt: Date;
     readonly updatedAt: Date;
   }) {
@@ -23,6 +25,7 @@ export class CreateMessageRecord {
     this.type = props.type;
     this.sequenceNumber = props.sequenceNumber;
     this.content = props.content;
+    this.fileIds = props.fileIds;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }

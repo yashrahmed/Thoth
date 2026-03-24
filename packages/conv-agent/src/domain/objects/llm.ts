@@ -1,5 +1,3 @@
-import type { MessagePart } from "./message";
-
 export enum LLMMessageType {
   User = "user",
   Assistant = "assistant",
@@ -10,5 +8,5 @@ export enum LLMMessageType {
 export const LLM_MESSAGE_TYPES = Object.values(LLMMessageType);
 
 export interface LlmCompletionResult {
-  readonly content: ReadonlyArray<MessagePart>;
+  readonly content: string;
 }

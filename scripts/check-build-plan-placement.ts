@@ -194,16 +194,19 @@ export function evaluatePlacement(planActions: PlanActionSets, symbols: Readonly
   const findings: PlacementFinding[] = [];
 
   for (const actionName of planActions.appActions) {
+    const qualifiedName = getOwnerQualifiedActionName(actionName);
     const expectedSymbolName = normalizeAppActionName(actionName);
     const targetMatches = findSymbols(symbols, {
       name: expectedSymbolName,
       kind: "class",
       layers: ["application"],
+      ownerName: qualifiedName?.ownerName,
     });
     const wrongLayerMatches = findSymbols(symbols, {
       name: expectedSymbolName,
       kind: "class",
       layers: ["domainService", "domainContract", "outboundAdapter", "inboundAdapter", "other"],
+      ownerName: qualifiedName?.ownerName,
     });
 
     addFindingsForSingleTarget(findings, {
@@ -217,16 +220,19 @@ export function evaluatePlacement(planActions: PlanActionSets, symbols: Readonly
   }
 
   for (const actionName of planActions.domainActions) {
+    const qualifiedName = getOwnerQualifiedActionName(actionName);
     const expectedSymbolName = normalizeDomainActionName(actionName);
     const targetMatches = findSymbols(symbols, {
       name: expectedSymbolName,
       kind: "method",
       layers: ["domainService"],
+      ownerName: qualifiedName?.ownerName,
     });
     const wrongLayerMatches = findSymbols(symbols, {
       name: expectedSymbolName,
       kind: "method",
       layers: ["application", "domainContract", "outboundAdapter", "inboundAdapter", "other"],
+      ownerName: qualifiedName?.ownerName,
     });
 
     addFindingsForSingleTarget(findings, {
@@ -240,21 +246,25 @@ export function evaluatePlacement(planActions: PlanActionSets, symbols: Readonly
   }
 
   for (const actionName of planActions.infraActions) {
+    const qualifiedName = getOwnerQualifiedActionName(actionName);
     const expectedSymbolName = normalizeInfraActionName(actionName);
     const contractMatches = findSymbols(symbols, {
       name: expectedSymbolName,
       kind: "method",
       layers: ["domainContract"],
+      ownerName: qualifiedName?.ownerName,
     });
     const adapterMatches = findSymbols(symbols, {
       name: expectedSymbolName,
       kind: "method",
       layers: ["outboundAdapter"],
+      ownerName: qualifiedName?.ownerName,
     });
     const wrongLayerMatches = findSymbols(symbols, {
       name: expectedSymbolName,
       kind: "method",
       layers: ["application", "domainService", "inboundAdapter", "other"],
+      ownerName: qualifiedName?.ownerName,
     });
 
     if (contractMatches.length === 1 && adapterMatches.length > 0) {
@@ -371,6 +381,14 @@ function extractQualifiedMemberName(actionName: string): { readonly ownerName: s
   };
 }
 
+function getOwnerQualifiedActionName(actionName: string): { readonly ownerName: string; readonly memberName: string } | null {
+  if (actionName.startsWith("App.") || actionName.startsWith("Infra.")) {
+    return null;
+  }
+
+  return extractQualifiedMemberName(actionName);
+}
+
 function stripPrefix(value: string, prefix: string): string {
   return value.startsWith(prefix) ? value.slice(prefix.length) : value;
 }
@@ -455,9 +473,16 @@ function findSymbols(
     readonly name: string;
     readonly kind: ScannedSymbol["kind"];
     readonly layers: ReadonlyArray<Layer>;
+    readonly ownerName?: string;
   },
 ): ReadonlyArray<ScannedSymbol> {
-  return symbols.filter((symbol) => symbol.name === input.name && symbol.kind === input.kind && input.layers.includes(symbol.layer));
+  return symbols.filter(
+    (symbol) =>
+      symbol.name === input.name &&
+      symbol.kind === input.kind &&
+      input.layers.includes(symbol.layer) &&
+      (input.ownerName === undefined || symbol.ownerName === input.ownerName),
+  );
 }
 
 function addFindingsForSingleTarget(

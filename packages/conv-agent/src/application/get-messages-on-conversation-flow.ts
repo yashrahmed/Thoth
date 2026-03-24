@@ -4,7 +4,7 @@ import type { MessageContentDomainService } from "../domain/services/message-con
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
-import { firstFailure, map, traverseAsync } from "../domain/objects/result";
+import { firstFailure, map, success } from "../domain/objects/result";
 import { LLMMessageType, type LLMMessageType as MessageType } from "../domain/objects/llm";
 import type { MessagePart } from "../domain/objects/message";
 import { requireNonEmptyString, requirePositiveInteger } from "../domain/validation";
@@ -89,29 +89,44 @@ export class GetMessagesOnConversationFlow {
       (m) => m.type === LLMMessageType.User || m.type === LLMMessageType.Assistant,
     );
 
-    return traverseAsync(relevantMessages, async (message) => {
-      const filesResult = await this.fileDomainService.getFiles({
-        fileIds: this.messageContentDomainService.collectBlobPartFileIds(message.content),
-      });
+    const allFileIds = [
+      ...new Set(relevantMessages.flatMap((m) => this.messageContentDomainService.collectBlobPartFileIds(m.content))),
+    ];
 
-      return map(filesResult, (files) => ({
-        id: message.id,
-        conversationId: message.conversationId,
-        type: message.type,
-        sequenceNumber: message.sequenceNumber,
-        content: message.content,
-        files: files.map((file) => ({
-          id: file.id,
-          canonicalUrl: file.canonicalUrl,
-          filename: file.filename,
-          mimeType: file.mimeType,
-          sizeInBytes: file.sizeInBytes,
-          createdAt: file.createdAt,
-          updatedAt: file.updatedAt,
-        })),
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-      }));
-    });
+    const filesResult = await this.fileDomainService.getFiles({ fileIds: allFileIds });
+
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    const filesById = new Map(filesResult.value.map((file) => [file.id, file]));
+
+    return success(
+      relevantMessages.map((message) => {
+        const messageFileIds = this.messageContentDomainService.collectBlobPartFileIds(message.content);
+
+        return {
+          id: message.id,
+          conversationId: message.conversationId,
+          type: message.type,
+          sequenceNumber: message.sequenceNumber,
+          content: message.content,
+          files: messageFileIds
+            .map((id) => filesById.get(id))
+            .filter((file): file is NonNullable<typeof file> => file !== undefined)
+            .map((file) => ({
+              id: file.id,
+              canonicalUrl: file.canonicalUrl,
+              filename: file.filename,
+              mimeType: file.mimeType,
+              sizeInBytes: file.sizeInBytes,
+              createdAt: file.createdAt,
+              updatedAt: file.updatedAt,
+            })),
+          createdAt: message.createdAt,
+          updatedAt: message.updatedAt,
+        };
+      }),
+    );
   }
 }

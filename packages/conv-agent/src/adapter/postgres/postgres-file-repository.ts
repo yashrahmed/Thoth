@@ -79,6 +79,31 @@ export class PostgresFileRepository implements FileRepository {
     }
   }
 
+  async selectFileRows(ids: ReadonlyArray<string>): Promise<Result<File[], StoreError>> {
+    if (ids.length === 0) {
+      return success([]);
+    }
+
+    try {
+      const rows = await this.sql<FileRow[]>`
+        select
+          id,
+          canonical_url,
+          filename,
+          mime_type,
+          size_in_bytes,
+          created_at,
+          updated_at
+        from thoth.files
+        where id = any(${ids as string[]})
+      `;
+
+      return mapRows(rows, StoreOperation.Read);
+    } catch (error) {
+      return failure(new StoreError(EntityType.File, StoreOperation.Read, getErrorMessage(error)));
+    }
+  }
+
   async deleteFileRow(id: string): Promise<Result<void, StoreError>> {
     try {
       await this.sql`
@@ -91,6 +116,38 @@ export class PostgresFileRepository implements FileRepository {
       return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
+  async deleteFileRows(ids: ReadonlyArray<string>): Promise<Result<void, StoreError>> {
+    if (ids.length === 0) {
+      return success(undefined);
+    }
+
+    try {
+      await this.sql`
+        delete from thoth.files
+        where id = any(${ids as string[]})
+      `;
+
+      return success(undefined);
+    } catch (error) {
+      return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
+    }
+  }
+}
+
+function mapRows(rows: FileRow[], operation: StoreOperation): Result<File[], StoreError> {
+  const files: File[] = [];
+
+  for (const row of rows) {
+    const result = mapRow(row, operation);
+
+    if (!result.ok) {
+      return result;
+    }
+
+    files.push(result.value);
+  }
+
+  return success(files);
 }
 
 function mapRow(row: FileRow | undefined, operation: StoreOperation): Result<File, StoreError> {

@@ -14,5 +14,7 @@ export interface CreateFileRecord {
 export interface FileRepository {
   upsertFileRow(record: CreateFileRecord): Promise<Result<File, StoreError>>;
   selectFileRow(id: string): Promise<Result<File, NotFoundError | StoreError>>;
+  selectFileRows(ids: ReadonlyArray<string>): Promise<Result<File[], StoreError>>;
   deleteFileRow(id: string): Promise<Result<void, StoreError>>;
+  deleteFileRows(ids: ReadonlyArray<string>): Promise<Result<void, StoreError>>;
 }

@@ -1,8 +1,9 @@
 import type { File as FileEntity } from "../objects/file";
 import type { CreateFileRecord, FileRepository } from "../contracts/file-repository";
-import type { BlobStoreError, NotFoundError, StoreError, ValidationError } from "../objects/errors";
+import { NotFoundError, type BlobStoreError, type StoreError, type ValidationError } from "../objects/errors";
+import { EntityType } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { andThenAsync, firstFailure, traverseAsync } from "../objects/result";
+import { andThenAsync, failure, firstFailure, success, traverseAsync } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
 import { requireNonEmptyString, requirePresent } from "../validation";
 import { UploadFileInput } from "../objects/upload-file-input";
@@ -59,7 +60,54 @@ export class FileDomainService {
   async getFiles(request: {
     readonly fileIds: ReadonlyArray<string>;
   }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | NotFoundError | StoreError>> {
-    return traverseAsync(request.fileIds, (fileId) => this.readFromFileDBStore(fileId));
+    if (request.fileIds.length === 0) {
+      return success([]);
+    }
+
+    const validationResult = firstFailure(...request.fileIds.map((id) => requireNonEmptyString(id, "fileId")));
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
+    const filesResult = await this.fileRepository.selectFileRows(request.fileIds);
+
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    if (filesResult.value.length !== request.fileIds.length) {
+      const foundIds = new Set(filesResult.value.map((f) => f.id));
+      const missingId = request.fileIds.find((id) => !foundIds.has(id));
+
+      return failure(new NotFoundError(EntityType.File, missingId ?? "unknown"));
+    }
+
+    return filesResult;
+  }
+
+  async deleteFiles(request: {
+    readonly fileIds: ReadonlyArray<string>;
+  }): Promise<Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>> {
+    if (request.fileIds.length === 0) {
+      return success(undefined);
+    }
+
+    const filesResult = await this.getFiles(request);
+
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    const blobDeleteResult = await traverseAsync(filesResult.value, (file) =>
+      this.blobDomainService.deleteFromBlobStore(file.canonicalUrl),
+    );
+
+    if (!blobDeleteResult.ok) {
+      return blobDeleteResult;
+    }
+
+    return this.fileRepository.deleteFileRows(request.fileIds);
   }
 
   private buildRecord(request: UploadFileInput, canonicalUrl: string): CreateFileRecord {

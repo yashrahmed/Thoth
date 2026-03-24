@@ -171,6 +171,18 @@ export class PostgresMessageRepository implements MessageRepository {
       return failure(new StoreError(EntityType.Message, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
+  async deleteMessagesByConversation(conversationId: string) {
+    try {
+      await this.sql`
+        delete from thoth.messages
+        where conversation_id = ${conversationId}
+      `;
+
+      return success(undefined);
+    } catch (error) {
+      return failure(new StoreError(EntityType.Message, StoreOperation.Remove, getErrorMessage(error)));
+    }
+  }
 }
 
 function mapRows(rows: MessageRow[], operation: StoreOperation): Result<Message[], StoreError> {

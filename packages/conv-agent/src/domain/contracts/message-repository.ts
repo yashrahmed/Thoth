@@ -47,4 +47,5 @@ export interface MessageRepository {
   selectAllMessagesByConversation(conversationId: string): Promise<Result<Message[], StoreError>>;
   countMessagesByConversation(conversationId: string): Promise<Result<number, StoreError>>;
   deleteMessageRow(messageId: string): Promise<Result<void, StoreError>>;
+  deleteMessagesByConversation(conversationId: string): Promise<Result<void, StoreError>>;
 }

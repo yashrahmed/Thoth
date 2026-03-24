@@ -421,7 +421,7 @@ function buildHandler(overrides?: {
     new CreateConversationFlow(conversationDomainService),
     new GetConversationFlow(conversationDomainService),
     new ListConversationsFlow(conversationDomainService),
-    new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+    new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
     new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
     new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
     messageContentDomainService,
@@ -536,6 +536,16 @@ class InMemoryMessageRepository implements MessageRepository {
     this.messages.delete(messageId);
     return success(undefined);
   }
+
+  async deleteMessagesByConversation(conversationId: string) {
+    for (const [id, message] of this.messages) {
+      if (message.conversationId === conversationId) {
+        this.messages.delete(id);
+      }
+    }
+
+    return success(undefined);
+  }
 }
 
 class InMemoryFileRepository implements FileRepository {
@@ -569,8 +579,30 @@ class InMemoryFileRepository implements FileRepository {
     return success(file);
   }
 
+  async selectFileRows(ids: ReadonlyArray<string>) {
+    const files: StoredFile[] = [];
+
+    for (const id of ids) {
+      const file = this.files.get(id);
+
+      if (file) {
+        files.push(file);
+      }
+    }
+
+    return success(files);
+  }
+
   async deleteFileRow(id: string) {
     this.files.delete(id);
+    return success(undefined);
+  }
+
+  async deleteFileRows(ids: ReadonlyArray<string>) {
+    for (const id of ids) {
+      this.files.delete(id);
+    }
+
     return success(undefined);
   }
 }

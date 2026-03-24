@@ -61,7 +61,7 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         new CreateConversationFlow(conversationDomainService),
         new GetConversationFlow(conversationDomainService),
         new ListConversationsFlow(conversationDomainService),
-        new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+        new DeleteConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
         new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService, llmDomainService),
         new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, messageContentDomainService, fileDomainService),
         messageContentDomainService,

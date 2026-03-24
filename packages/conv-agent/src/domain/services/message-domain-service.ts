@@ -51,6 +51,12 @@ export class MessageDomainService {
     return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.deleteMessageRow(id));
   }
 
+  async removeAllMessagesFromMessageDBStore(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
+      this.messageRepository.deleteMessagesByConversation(id),
+    );
+  }
+
   async deleteMessage(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
     const messageResult = await this.readFromMessageDBStore(messageId);
 

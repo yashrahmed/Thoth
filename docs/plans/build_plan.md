@@ -235,6 +235,13 @@ type Result<T, E> = Success<T> | Failure<E>;
 type Success<T> = { readonly ok: true; readonly value: T };
 type Failure<E> = { readonly ok: false; readonly error: E };
 
+// Result combinators — standalone functions, not methods.
+function andThen<T, E, U, F>(result: Result<T, E>, fn: (value: T) => Result<U, F>): Result<U, E | F>;
+function andThenAsync<T, E, U, F>(result: Result<T, E>, fn: (value: T) => Promise<Result<U, F>>): Promise<Result<U, E | F>>;
+function map<T, E, U>(result: Result<T, E>, fn: (value: T) => U): Result<U, E>;
+function traverseAsync<T, U, E>(items: ReadonlyArray<T>, fn: (item: T) => Promise<Result<U, E>>): Promise<Result<U[], E>>;
+function firstFailure<E>(...results: ReadonlyArray<Result<unknown, E>>): Result<void, E>;
+
 type ValidationError = {
   readonly kind: "ValidationError";
   readonly fieldName: string;
@@ -362,10 +369,10 @@ class MessageContentDomainService {
 
 1. ConversationDomainService.readFromConversationDBStore(command.conversationId) → conversation → if failure, return failure.
 2. MessageDomainService.readAllMessagesFromMessageDBStore(command.conversationId) → messages → if failure, return failure.
-3. For each message: Message in messages:
-   1. MessageDomainService.deleteMessageWithFiles(message.id) → if failure, return failure.
-4. ConversationDomainService.removeFromConversationDBStore(command.conversationId) → if failure, return failure.
-5. Return succeed(void).
+3. Collect all unique file IDs from all messages via MessageContentDomainService.collectBlobPartFileIds → allFileIds.
+4. FileDomainService.deleteFiles({ fileIds: allFileIds }) → if failure, return failure.
+5. MessageDomainService.removeAllMessagesFromMessageDBStore(command.conversationId) → if failure, return failure.
+6. ConversationDomainService.removeFromConversationDBStore(command.conversationId) → if failure, return failure.
 
 ### AppendMessageToConversationFlow.execute (request: AppendMessageRequest): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>
 
@@ -384,11 +391,10 @@ class MessageContentDomainService {
 2. ConversationDomainService.readFromConversationDBStore(query.conversationId) → conversation → if failure, return failure.
 3. MessageDomainService.readPageFromMessageDBStore(query.conversationId, query.pageNum, query.pageSize) → messages → if failure, return failure.
 4. Filter messages to only those with type LLMMessageType.User or LLMMessageType.Assistant → visibleMessages.
-5. For each message: Message in visibleMessages:
-   1. MessageContentDomainService.collectBlobPartFileIds(message.content) → fileIds.
-   2. FileDomainService.getFiles({ fileIds }) → files → if failure, return failure.
-   3. Map message and files to GetMessagesItem({ id, conversationId, type, sequenceNumber, content: message.content, files mapped to GetMessagesFile[], createdAt, updatedAt }).
-6. Return succeed(items).
+5. Collect all unique file IDs from all visibleMessages via MessageContentDomainService.collectBlobPartFileIds → allFileIds.
+6. FileDomainService.getFiles({ fileIds: allFileIds }) → allFiles → if failure, return failure. Build Map<fileId, File> from allFiles.
+7. For each message: Message in visibleMessages: look up message's file IDs in the Map → map message and files to GetMessagesItem.
+8. Return succeed(items).
 
 ### ListConversationsFlow.execute (query: ListConversationsQuery): Result<ListConversationsItem[], ValidationError | StoreError>
 
@@ -489,6 +495,11 @@ class MessageContentDomainService {
 1. RequireNonEmptyString(id, "id") → if failure, return failure.
 2. Infra.DeleteMessageRow(id) → if failure, return failure.
 
+### MessageDomainService.removeAllMessagesFromMessageDBStore (conversationId: string): Result<void, ValidationError | StoreError>
+
+1. RequireNonEmptyString(conversationId, "conversationId") → if failure, return failure.
+2. Infra.DeleteMessagesByConversation(conversationId) → if failure, return failure.
+
 ### FileDomainService.uploadFile (request: UploadFileInput): Result<File, ValidationError | BlobStoreError | StoreError>
 
 1. BlobDomainService.uploadToBlobStore({ conversationId, content, filename, mimeType }) → canonicalUrl → if failure, return failure.
@@ -502,11 +513,21 @@ class MessageContentDomainService {
    1. FileDomainService.uploadFile(file) → uploadedFile → if failure, return failure.
 2. Return succeed(uploadedFiles).
 
-### FileDomainService.getFiles (request: GetFilesInput): Result<File[], NotFoundError | StoreError>
+### FileDomainService.getFiles (request: GetFilesInput): Result<File[], ValidationError | NotFoundError | StoreError>
 
-1. For each fileId: string in request.fileIds:
-   1. FileDomainService.readFromFileDBStore(fileId) → file → if failure, return failure.
-2. Return succeed(files).
+1. If request.fileIds is empty → return succeed([]).
+2. Validate all IDs via firstFailure(requireNonEmptyString for each) → if failure, return failure.
+3. Infra.SelectFileRows(request.fileIds) → files → if failure, return failure.
+4. If files.length ≠ request.fileIds.length → return NotFoundError for first missing ID.
+5. Return succeed(files).
+
+### FileDomainService.deleteFiles (request: { fileIds: ReadonlyArray<string> }): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
+
+1. If request.fileIds is empty → return succeed(void).
+2. FileDomainService.getFiles(request) → files → if failure, return failure.
+3. For each file: File in files: BlobDomainService.deleteFromBlobStore(file.canonicalUrl) → if failure, return failure.
+4. Infra.DeleteFileRows(request.fileIds) → if failure, return failure.
+5. Return succeed(void).
 
 ### FileDomainService.deleteFile (fileId: string): Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>
 
@@ -607,6 +628,11 @@ class MessageContentDomainService {
 1. PostgresClient.query(DeleteByIdQuery("messages", id)) → if error, return StoreError.
 2. Return succeed(void).
 
+### Infra.DeleteMessagesByConversation (conversationId: string): Result<void, StoreError>
+
+1. PostgresClient.query(DELETE FROM messages WHERE conversation_id = conversationId) → if error, return StoreError.
+2. Return succeed(void).
+
 ### Infra.UpsertFileRow (record: CreateFileRecord): Result<File, StoreError>
 
 1. MapToRow(record) → row.
@@ -621,10 +647,23 @@ class MessageContentDomainService {
 3. MapFromRow(row) → file.
 4. Return succeed(file).
 
+### Infra.SelectFileRows (ids: ReadonlyArray<string>): Result<File[], StoreError>
+
+1. If ids is empty → return succeed([]).
+2. PostgresClient.query(SELECT ... FROM files WHERE id = ANY(ids)) → rows → if error, return StoreError.
+3. For each row in rows: MapFromRow(row) → file.
+4. Return succeed(files).
+
 ### Infra.DeleteFileRow (id: string): Result<void, StoreError>
 
 1. PostgresClient.query(DeleteByIdQuery("files", id)) → if error, return StoreError.
 2. Return succeed(void).
+
+### Infra.DeleteFileRows (ids: ReadonlyArray<string>): Result<void, StoreError>
+
+1. If ids is empty → return succeed(void).
+2. PostgresClient.query(DELETE FROM files WHERE id = ANY(ids)) → if error, return StoreError.
+3. Return succeed(void).
 
 ### Infra.PutBlob (content: FileContent): Result<string, BlobStoreError>
 

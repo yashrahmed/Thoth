@@ -673,13 +673,13 @@ function mustCreateMessage(
 }
 
 function mustCreateFile(id: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, isoTimestamp = "2026-03-16T12:00:00.000Z"): StoredFile {
-  return new StoredFile({
+  return new StoredFile(
     id,
     canonicalUrl,
     filename,
     mimeType,
     sizeInBytes,
-    createdAt: new Date(isoTimestamp),
-    updatedAt: new Date(isoTimestamp),
-  });
+    new Date(isoTimestamp),
+    new Date(isoTimestamp),
+  );
 }

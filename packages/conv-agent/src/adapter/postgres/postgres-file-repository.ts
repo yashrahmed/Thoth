@@ -157,15 +157,15 @@ function mapRow(row: FileRow | undefined, operation: StoreOperation): Result<Fil
 
   try {
     return success(
-      new File({
-        id: row.id,
-        canonicalUrl: row.canonical_url,
-        filename: row.filename,
-        mimeType: row.mime_type,
-        sizeInBytes: row.size_in_bytes,
-        createdAt: toDate(row.created_at),
-        updatedAt: toDate(row.updated_at),
-      }),
+      new File(
+        row.id,
+        row.canonical_url,
+        row.filename,
+        row.mime_type,
+        row.size_in_bytes,
+        toDate(row.created_at),
+        toDate(row.updated_at),
+      ),
     );
   } catch (error) {
     if (error instanceof Error) {

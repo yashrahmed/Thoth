@@ -2,16 +2,6 @@ import { ConstructionError } from "./errors";
 
 export type FileContent = ArrayBuffer;
 
-interface FileProps {
-  readonly id: string;
-  readonly canonicalUrl: string;
-  readonly filename: string;
-  readonly mimeType: string;
-  readonly sizeInBytes: number;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}
-
 export class File {
   readonly id: string;
   readonly canonicalUrl: string;
@@ -21,41 +11,49 @@ export class File {
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
-  constructor(props: FileProps) {
-    if (props.id.trim().length === 0) {
+  constructor(
+    id: string,
+    canonicalUrl: string,
+    filename: string,
+    mimeType: string,
+    sizeInBytes: number,
+    createdAt: Date,
+    updatedAt: Date,
+  ) {
+    if (id.trim().length === 0) {
       throw new ConstructionError("File", "File id must be a non-empty string.");
     }
 
-    if (props.canonicalUrl.trim().length === 0) {
+    if (canonicalUrl.trim().length === 0) {
       throw new ConstructionError("File", "File canonicalUrl must be a non-empty string.");
     }
 
-    if (props.filename.trim().length === 0) {
+    if (filename.trim().length === 0) {
       throw new ConstructionError("File", "File filename must be a non-empty string.");
     }
 
-    if (props.mimeType.trim().length === 0) {
+    if (mimeType.trim().length === 0) {
       throw new ConstructionError("File", "File mimeType must be a non-empty string.");
     }
 
-    if (!Number.isInteger(props.sizeInBytes) || props.sizeInBytes < 0) {
+    if (!Number.isInteger(sizeInBytes) || sizeInBytes < 0) {
       throw new ConstructionError("File", "File sizeInBytes must be a non-negative integer.");
     }
 
-    if (Number.isNaN(props.createdAt.getTime())) {
+    if (Number.isNaN(createdAt.getTime())) {
       throw new ConstructionError("File", "File createdAt must be a valid date.");
     }
 
-    if (Number.isNaN(props.updatedAt.getTime())) {
+    if (Number.isNaN(updatedAt.getTime())) {
       throw new ConstructionError("File", "File updatedAt must be a valid date.");
     }
 
-    this.id = props.id;
-    this.canonicalUrl = props.canonicalUrl;
-    this.filename = props.filename;
-    this.mimeType = props.mimeType;
-    this.sizeInBytes = props.sizeInBytes;
-    this.createdAt = props.createdAt;
-    this.updatedAt = props.updatedAt;
+    this.id = id;
+    this.canonicalUrl = canonicalUrl;
+    this.filename = filename;
+    this.mimeType = mimeType;
+    this.sizeInBytes = sizeInBytes;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
   }
 }

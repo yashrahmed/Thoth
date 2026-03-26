@@ -10,7 +10,7 @@ import type { CreateConversationFlow } from "../../application/create-conversati
 import type { Conversation } from "../../domain/objects/conversation";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
-import { type GetMessagesOnConversationFlow, type GetMessagesResponse } from "../../application/get-messages-on-conversation-flow";
+import { type GetMessagesOnConversationFlow, type MessageWithFiles } from "../../application/get-messages-on-conversation-flow";
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
 
 interface TransportValidationError {
@@ -176,7 +176,7 @@ function toConversationResponse(conversation: Conversation) {
   };
 }
 
-function toMessageResponse(message: GetMessagesResponse) {
+function toMessageResponse(message: MessageWithFiles) {
   return {
     id: message.id,
     conversationId: message.conversationId,

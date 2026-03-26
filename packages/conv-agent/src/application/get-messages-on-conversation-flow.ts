@@ -1,15 +1,14 @@
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import type { File } from "../domain/objects/file";
-import type { Message } from "../domain/objects/message";
+import type { MessageWithFiles } from "../domain/objects/message";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import { firstFailure, success } from "../domain/objects/result";
 import { LLMMessageType } from "../domain/objects/llm";
 import { requireNonEmptyString, requirePositiveInteger } from "../domain/validation";
 
-export type GetMessagesResponse = Message & { readonly files: ReadonlyArray<File> };
+export type { MessageWithFiles };
 
 export class GetMessagesOnConversationFlow {
   constructor(
@@ -18,7 +17,7 @@ export class GetMessagesOnConversationFlow {
     private readonly fileDomainService: FileDomainService,
   ) {}
 
-  async execute(query: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<GetMessagesResponse[], NotFoundError | StoreError | ValidationError>> {
+  async execute(query: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<MessageWithFiles[], NotFoundError | StoreError | ValidationError>> {
     const validationResult = firstFailure(
       requireNonEmptyString(query.conversationId, "conversationId"),
       requirePositiveInteger(query.pageNum, "pageNum"),

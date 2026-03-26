@@ -1,4 +1,7 @@
 import type { LLMMessageType } from "./llm";
+import type { File } from "./file";
+
+export type MessageWithFiles = Message & { readonly files: ReadonlyArray<File> };
 
 export class Message {
   readonly id: string;

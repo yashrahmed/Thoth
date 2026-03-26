@@ -34,7 +34,7 @@ type HandlerError =
 type ApplicationMessageType = ApplicationAppendMessageRequest["type"];
 type ApplicationContent = ApplicationAppendMessageRequest["content"];
 
-export interface ConversationHttpHandlerDeps {
+interface ConversationHttpHandlerDeps {
   readonly createConversation: CreateConversationFlow;
   readonly getConversation: GetConversationFlow;
   readonly listConversations: ListConversationsFlow;
@@ -167,7 +167,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
 }
 
 function mapError(c: { json: (data: unknown, status: number) => Response }, error: HandlerError): Response {
-  if (error.kind === "ValidationError" || error.kind === "ConstructionError") {
+  if (error.kind === "ValidationError") {
     return c.json({ error }, 400);
   }
 

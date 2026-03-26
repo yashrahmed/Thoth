@@ -1,6 +1,6 @@
 import { type MessagePageRequest, type MessageRepository } from "../contracts/message-repository";
 import type { Message } from "../objects/message";
-import { BlobStoreError, NotFoundError, ValidationError, type StoreError } from "../objects/errors";
+import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, traverseAsync } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
@@ -61,7 +61,7 @@ export class MessageDomainService {
     return this.delete(messageId);
   }
 
-  async deleteMessageWithFiles(messageId: string, fileDomainService: FileDomainService): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
+  async deleteMessageWithFiles(messageId: string, fileDomainService: FileDomainService): Promise<Result<void, NotFoundError | StoreError | ValidationError>> {
     const messageResult = await this.findById(messageId);
 
     if (!messageResult.ok) {

@@ -1,4 +1,4 @@
-import { ConstructionError } from "./errors";
+import { ValidationError } from "./errors";
 
 interface ConversationProps {
   readonly id: string;
@@ -13,15 +13,15 @@ export class Conversation {
 
   constructor(props: ConversationProps) {
     if (props.id.trim().length === 0) {
-      throw new ConstructionError("Conversation", "Conversation id must be a non-empty string.");
+      throw new ValidationError("id", "Conversation id must be a non-empty string.");
     }
 
     if (Number.isNaN(props.createdAt.getTime())) {
-      throw new ConstructionError("Conversation", "Conversation createdAt must be a valid date.");
+      throw new ValidationError("createdAt", "Conversation createdAt must be a valid date.");
     }
 
     if (Number.isNaN(props.updatedAt.getTime())) {
-      throw new ConstructionError("Conversation", "Conversation updatedAt must be a valid date.");
+      throw new ValidationError("updatedAt", "Conversation updatedAt must be a valid date.");
     }
 
     this.id = props.id;

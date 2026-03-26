@@ -1,5 +1,5 @@
 import type { FileContent } from "../objects/file";
-import type { BlobStoreError } from "../objects/errors";
+import type { StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 
 export interface BlobUploadRequest {
@@ -10,6 +10,6 @@ export interface BlobUploadRequest {
 }
 
 export interface BlobRepository {
-  putBlob(request: BlobUploadRequest): Promise<Result<string, BlobStoreError>>;
-  removeBlob(url: string): Promise<Result<void, BlobStoreError>>;
+  putBlob(request: BlobUploadRequest): Promise<Result<string, StoreError>>;
+  removeBlob(url: string): Promise<Result<void, StoreError>>;
 }

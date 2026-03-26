@@ -1,6 +1,6 @@
 import type { File as FileEntity } from "../objects/file";
 import type { FileRepository } from "../contracts/file-repository";
-import { NotFoundError, type BlobStoreError, type StoreError, type ValidationError } from "../objects/errors";
+import { NotFoundError, type StoreError, type ValidationError } from "../objects/errors";
 import { EntityType } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, failure, firstFailure, success, traverseAsync } from "../objects/result";
@@ -27,7 +27,7 @@ export class FileDomainService {
     return andThenAsync(requireNonEmptyString(fileId, "id"), (id) => this.fileRepository.deleteFileRow(id));
   }
 
-  async uploadFile(request: UploadFileInput): Promise<Result<FileEntity, ValidationError | BlobStoreError | StoreError>> {
+  async uploadFile(request: UploadFileInput): Promise<Result<FileEntity, ValidationError | StoreError>> {
     const validationResult = this.validateUploadFileInput(request);
 
     if (!validationResult.ok) {
@@ -41,11 +41,11 @@ export class FileDomainService {
 
   async uploadFiles(request: {
     readonly files: ReadonlyArray<UploadFileInput>;
-  }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | BlobStoreError | StoreError>> {
+  }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
     return traverseAsync(request.files, (file) => this.uploadFile(file));
   }
 
-  async deleteFile(fileId: string): Promise<Result<void, NotFoundError | StoreError | ValidationError | BlobStoreError>> {
+  async deleteFile(fileId: string): Promise<Result<void, NotFoundError | StoreError | ValidationError>> {
     const fileResult = await this.findById(fileId);
 
     if (!fileResult.ok) {
@@ -88,7 +88,7 @@ export class FileDomainService {
 
   async deleteFiles(request: {
     readonly fileIds: ReadonlyArray<string>;
-  }): Promise<Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError>> {
+  }): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
     if (request.fileIds.length === 0) {
       return success(undefined);
     }

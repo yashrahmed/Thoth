@@ -3,7 +3,7 @@ import { failure, success, type Result } from "../domain/objects/result";
 import { LlmError, ValidationError } from "../domain/objects/errors";
 import { LlmDomainService } from "../domain/services/llm-domain-service";
 
-export interface PromptLlmRequest {
+interface PromptLlmRequest {
   readonly prompt: string;
 }
 

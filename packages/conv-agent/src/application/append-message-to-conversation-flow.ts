@@ -1,7 +1,7 @@
 import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import type { BlobStoreError, LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
+import type { LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import { map, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
 import type { FileContent } from "../domain/objects/file";
@@ -32,7 +32,7 @@ export class AppendMessageToConversationFlow {
     private readonly llmDomainService: LlmDomainService,
   ) {}
 
-  async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | BlobStoreError | LlmError>> {
+  async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
     const conversationResult = await this.conversationDomainService.findById(request.conversationId);
 
     if (!conversationResult.ok) {

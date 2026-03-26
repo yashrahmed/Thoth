@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import type { BlobRepository, BlobUploadRequest } from "../../domain/contracts/blob-repository";
-import { BlobStoreError, BlobStoreOperation } from "../../domain/objects/errors";
+import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 
 interface R2BlobConfig {
@@ -29,7 +29,7 @@ export class R2BlobRepository implements BlobRepository {
     private readonly credentials: R2BlobCredentials,
   ) {}
 
-  async putBlob(request: BlobUploadRequest): Promise<Result<string, BlobStoreError>> {
+  async putBlob(request: BlobUploadRequest): Promise<Result<string, StoreError>> {
     const canonicalPath = this.getCanonicalPath(request.conversationId, request.filename);
     const objectKey = this.getObjectKey(canonicalPath);
 
@@ -42,16 +42,16 @@ export class R2BlobRepository implements BlobRepository {
       });
 
       if (!response.ok) {
-        return failure(new BlobStoreError(BlobStoreOperation.Upload, await getResponseMessage(response)));
+        return failure(new StoreError(EntityType.File, StoreOperation.Persist, await getResponseMessage(response)));
       }
 
       return success(canonicalPath);
     } catch (error) {
-      return failure(new BlobStoreError(BlobStoreOperation.Upload, getErrorMessage(error)));
+      return failure(new StoreError(EntityType.File, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
 
-  async removeBlob(url: string): Promise<Result<void, BlobStoreError>> {
+  async removeBlob(url: string): Promise<Result<void, StoreError>> {
     const objectKey = this.getObjectKey(url);
 
     try {
@@ -61,12 +61,12 @@ export class R2BlobRepository implements BlobRepository {
       });
 
       if (!response.ok) {
-        return failure(new BlobStoreError(BlobStoreOperation.Delete, await getResponseMessage(response)));
+        return failure(new StoreError(EntityType.File, StoreOperation.Remove, await getResponseMessage(response)));
       }
 
       return success(undefined);
     } catch (error) {
-      return failure(new BlobStoreError(BlobStoreOperation.Delete, getErrorMessage(error)));
+      return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
 

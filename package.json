@@ -17,7 +17,6 @@
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",
     "dev:web": "bun run --filter @thoth/web dev",
     "graph:conv-agent": "bun scripts/generate-conv-call-graph.ts",
-    "llm:prompt": "bun scripts/prompt-llm.ts",
     "r2:upload": "bun scripts/r2-ops.ts upload",
     "r2:download": "bun scripts/r2-ops.ts download",
     "format": "bun x prettier . --write",

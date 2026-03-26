@@ -1,4 +1,4 @@
-import type { CreateMessageRecord, MessageRepository, MessageSequencePageRequest } from "../../domain/contracts/message-repository";
+import type { MessagePageRequest, MessageRepository } from "../../domain/contracts/message-repository";
 import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
@@ -23,7 +23,7 @@ interface CountRow {
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async upsertMessageRow(record: CreateMessageRecord) {
+  async upsertMessageRow(record: Omit<Message, "id">) {
     try {
       const rows = await this.sql<MessageRow[]>`
         insert into thoth.messages (
@@ -95,8 +95,9 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async selectMessagePage(request: MessageSequencePageRequest) {
+  async selectMessagePage(request: MessagePageRequest) {
     try {
+      const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
       const rows = await this.sql<MessageRow[]>`
         select
           id,
@@ -110,7 +111,7 @@ export class PostgresMessageRepository implements MessageRepository {
         from thoth.messages
         where
           conversation_id = ${request.conversationId}
-          and sequence_number >= ${request.fromSequence}
+          and sequence_number >= ${fromSequence}
         order by sequence_number asc
         limit ${request.pageSize}
       `;

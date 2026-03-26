@@ -1,4 +1,4 @@
-import type { ConversationPageRequest, ConversationOffsetPageRequest, ConversationRepository } from "../contracts/conversation-repository";
+import type { ConversationPageRequest, ConversationRepository } from "../contracts/conversation-repository";
 import type { Conversation } from "../objects/conversation";
 import type { NotFoundError, StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
@@ -31,12 +31,7 @@ export class ConversationDomainService {
   }
 
   async findPage(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
-    const pageRequest: ConversationOffsetPageRequest = {
-      offset: (request.pageNum - 1) * request.pageSize,
-      pageSize: request.pageSize,
-    };
-
-    return this.conversationRepository.selectConversationPage(pageRequest);
+    return this.conversationRepository.selectConversationPage(request);
   }
 
   async delete(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {

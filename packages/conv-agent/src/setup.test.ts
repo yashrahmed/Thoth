@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
 import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
-import type { ConversationOffsetPageRequest, ConversationRepository, CreateConversationRecord } from "./domain/contracts/conversation-repository";
-import type { CreateFileRecord, FileRepository } from "./domain/contracts/file-repository";
-import { CreateMessageRecord, type MessageRepository, type MessageSequencePageRequest } from "./domain/contracts/message-repository";
+import type { ConversationPageRequest, ConversationRepository } from "./domain/contracts/conversation-repository";
+import type { FileRepository } from "./domain/contracts/file-repository";
+import { type MessagePageRequest, type MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
 import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
@@ -107,7 +107,7 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates persisted content", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const validRecord = new CreateMessageRecord({
+    const validRecord: Omit<Message, "id"> = {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       sequenceNumber: 2,
@@ -115,8 +115,8 @@ describe("message validation", () => {
       fileIds: [],
       createdAt: new Date("2026-03-16T12:00:00.000Z"),
       updatedAt: new Date("2026-03-16T12:00:00.000Z"),
-    });
-    const invalidRecord = new CreateMessageRecord({
+    };
+    const invalidRecord: Omit<Message, "id"> = {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       sequenceNumber: 2,
@@ -124,7 +124,7 @@ describe("message validation", () => {
       fileIds: [],
       createdAt: new Date("2026-03-16T12:00:00.000Z"),
       updatedAt: new Date("2026-03-16T12:00:00.000Z"),
-    });
+    };
 
     expect(messageContentDomainService.validateMessageRecord(validRecord).ok).toBe(true);
     expect(messageContentDomainService.validateMessageRecord(invalidRecord)).toEqual({
@@ -448,7 +448,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
-  async upsertConversationRow(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>> {
+  async upsertConversationRow(record: Omit<Conversation, "id">): Promise<Result<Conversation, StoreError>> {
     const conversation = mustCreateConversation("conversation-created", record.createdAt.toISOString());
     this.conversations.set(conversation.id, conversation);
     return success(conversation);
@@ -464,7 +464,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async selectConversationPage(request: ConversationOffsetPageRequest) {
+  async selectConversationPage(request: ConversationPageRequest) {
     const items = [...this.conversations.values()].sort((left, right) => {
       const updatedAtDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
 
@@ -475,7 +475,8 @@ class InMemoryConversationRepository implements ConversationRepository {
       return right.id.localeCompare(left.id);
     });
 
-    return success(items.slice(request.offset, request.offset + request.pageSize));
+    const offset = (request.pageNum - 1) * request.pageSize;
+    return success(items.slice(offset, offset + request.pageSize));
   }
 
   async deleteConversationRow(conversationId: string) {
@@ -500,7 +501,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return this.messages.get(messageId);
   }
 
-  async upsertMessageRow(record: CreateMessageRecord) {
+  async upsertMessageRow(record: Omit<Message, "id">) {
     const message = mustCreateMessage(
       `message-${this.messages.size + 1}`,
       record.conversationId,
@@ -524,10 +525,11 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async selectMessagePage(request: MessageSequencePageRequest) {
+  async selectMessagePage(request: MessagePageRequest) {
+    const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
     return success(
       [...this.messages.values()]
-        .filter((message) => message.conversationId === request.conversationId && message.sequenceNumber >= request.fromSequence)
+        .filter((message) => message.conversationId === request.conversationId && message.sequenceNumber >= fromSequence)
         .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
         .slice(0, request.pageSize),
     );
@@ -572,7 +574,7 @@ class InMemoryFileRepository implements FileRepository {
     return this.files.get(id);
   }
 
-  async upsertFileRow(record: CreateFileRecord) {
+  async upsertFileRow(record: Omit<StoredFile, "id">) {
     const file = mustCreateFile(`file-${this.files.size + 1}`, record.canonicalUrl, record.filename, record.mimeType, record.sizeInBytes, record.createdAt.toISOString());
     this.files.set(file.id, file);
     return success(file);

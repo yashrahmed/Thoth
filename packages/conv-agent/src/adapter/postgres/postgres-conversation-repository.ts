@@ -1,4 +1,4 @@
-import type { CreateConversationRecord, ConversationOffsetPageRequest, ConversationRepository } from "../../domain/contracts/conversation-repository";
+import type { ConversationPageRequest, ConversationRepository } from "../../domain/contracts/conversation-repository";
 import { Conversation } from "../../domain/objects/conversation";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
@@ -13,7 +13,7 @@ interface ConversationRow {
 export class PostgresConversationRepository implements ConversationRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async upsertConversationRow(record: CreateConversationRecord): Promise<Result<Conversation, StoreError>> {
+  async upsertConversationRow(record: Omit<Conversation, "id">): Promise<Result<Conversation, StoreError>> {
     try {
       const rows = await this.sql<ConversationRow[]>`
         insert into thoth.conversations (created_at, updated_at)
@@ -47,14 +47,15 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
   }
 
-  async selectConversationPage(request: ConversationOffsetPageRequest): Promise<Result<Conversation[], StoreError>> {
+  async selectConversationPage(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
     try {
+      const offset = (request.pageNum - 1) * request.pageSize;
       const rows = await this.sql<ConversationRow[]>`
         select id, created_at, updated_at
         from thoth.conversations
         order by updated_at desc, id desc
         limit ${request.pageSize}
-        offset ${request.offset}
+        offset ${offset}
       `;
 
       const conversations: Conversation[] = [];

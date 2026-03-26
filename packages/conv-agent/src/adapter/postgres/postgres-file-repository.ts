@@ -1,4 +1,4 @@
-import type { CreateFileRecord, FileRepository } from "../../domain/contracts/file-repository";
+import type { FileRepository } from "../../domain/contracts/file-repository";
 import { File } from "../../domain/objects/file";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
@@ -17,7 +17,7 @@ interface FileRow {
 export class PostgresFileRepository implements FileRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async upsertFileRow(record: CreateFileRecord) {
+  async upsertFileRow(record: Omit<File, "id">) {
     try {
       const rows = await this.sql<FileRow[]>`
         insert into thoth.files (

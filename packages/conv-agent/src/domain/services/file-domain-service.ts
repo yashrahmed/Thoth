@@ -1,5 +1,5 @@
 import type { File as FileEntity } from "../objects/file";
-import type { CreateFileRecord, FileRepository } from "../contracts/file-repository";
+import type { FileRepository } from "../contracts/file-repository";
 import { NotFoundError, type BlobStoreError, type StoreError, type ValidationError } from "../objects/errors";
 import { EntityType } from "../objects/errors";
 import type { Result } from "../objects/result";
@@ -15,7 +15,7 @@ export class FileDomainService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async save(record: CreateFileRecord): Promise<Result<FileEntity, StoreError>> {
+  async save(record: Omit<FileEntity, "id">): Promise<Result<FileEntity, StoreError>> {
     return this.fileRepository.upsertFileRow(record);
   }
 
@@ -110,7 +110,7 @@ export class FileDomainService {
     return this.fileRepository.deleteFileRows(request.fileIds);
   }
 
-  private buildRecord(request: UploadFileInput, canonicalUrl: string): CreateFileRecord {
+  private buildRecord(request: UploadFileInput, canonicalUrl: string): Omit<FileEntity, "id"> {
     const timestamp = this.now();
 
     return {

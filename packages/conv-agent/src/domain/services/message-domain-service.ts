@@ -1,4 +1,4 @@
-import { CreateMessageRecord, type MessagePageRequest, type MessageRepository, type MessageSequencePageRequest } from "../contracts/message-repository";
+import { type MessagePageRequest, type MessageRepository } from "../contracts/message-repository";
 import type { Message } from "../objects/message";
 import { BlobStoreError, NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
@@ -15,7 +15,7 @@ export class MessageDomainService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async save(record: CreateMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
+  async save(record: Omit<Message, "id">): Promise<Result<Message, ValidationError | StoreError>> {
     return andThenAsync(this.messageContentDomainService.validateMessageRecord(record), () =>
       this.messageRepository.upsertMessageRow(record),
     );
@@ -26,13 +26,7 @@ export class MessageDomainService {
   }
 
   async findPage(request: MessagePageRequest): Promise<Result<Message[], StoreError>> {
-    const pageRequest: MessageSequencePageRequest = {
-      conversationId: request.conversationId,
-      fromSequence: (request.pageNum - 1) * request.pageSize + 1,
-      pageSize: request.pageSize,
-    };
-
-    return this.messageRepository.selectMessagePage(pageRequest);
+    return this.messageRepository.selectMessagePage(request);
   }
 
   async findAll(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
@@ -92,17 +86,15 @@ export class MessageDomainService {
     return andThenAsync(countResult, (count) => {
       const timestamp = this.now();
 
-      return this.save(
-        new CreateMessageRecord({
-          conversationId: request.conversationId,
-          type: request.type,
-          sequenceNumber: count + 1,
-          content: request.content,
-          fileIds: request.fileIds,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        }),
-      );
+      return this.save({
+        conversationId: request.conversationId,
+        type: request.type,
+        sequenceNumber: count + 1,
+        content: request.content,
+        fileIds: request.fileIds,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
     });
   }
 }

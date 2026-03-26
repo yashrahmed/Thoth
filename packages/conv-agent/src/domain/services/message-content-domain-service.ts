@@ -2,7 +2,7 @@ import { requireNonEmptyString, requirePositiveInteger, requirePresent } from ".
 import { ValidationError } from "../objects/errors";
 import { LLM_MESSAGE_TYPES, type LLMMessageType } from "../objects/llm";
 import { CreateNextMessageInput } from "../objects/message-input";
-import { CreateMessageRecord } from "../contracts/message-repository";
+import type { Message } from "../objects/message";
 import { failure, success, type Result } from "../objects/result";
 
 export class MessageContentDomainService {
@@ -10,7 +10,7 @@ export class MessageContentDomainService {
     return this.validateMessageInputLike(request.conversationId, request.type, request.content, request.fileIds);
   }
 
-  validateMessageRecord(record: CreateMessageRecord): Result<void, ValidationError> {
+  validateMessageRecord(record: Omit<Message, "id">): Result<void, ValidationError> {
     return this.validateMessageInputLike(record.conversationId, record.type, record.content, record.fileIds, record.sequenceNumber);
   }
 

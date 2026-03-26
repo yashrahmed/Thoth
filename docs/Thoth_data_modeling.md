@@ -1,0 +1,92 @@
+# Thoth Data Modeling
+
+## Entities
+
+```typescript
+class Conversation {
+  id: string;
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+}
+
+class Message {
+  id: string;
+  conversation_id: string;
+  type: string;
+  sequence_number: number;
+  content: string;
+  file_ids: string[];
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+}
+
+class File {
+  id: string;
+  canonical_url: string;
+  filename: string;
+  mime_type: string;
+  size_in_bytes: number;
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+}
+
+class Attachment {
+  content: ArrayBuffer;
+  filename: string;
+  mimeType: string;
+}
+```
+
+## Requests
+
+```typescript
+class GetMessageOnConversationRequest {
+  conversation_id: string;
+  pageNum: number;
+  pageSize: number;
+}
+
+class DeleteConversationRequest {
+  conversation_id: string;
+}
+
+class ListConversationRequest {
+  pageNum: number;
+  pageSize: number;
+}
+
+class AppendMsgToConversationRequest {
+  content: string;
+  conversation_id: string;
+  attachments: Attachment[];
+  type: LLMMessageType;
+}
+```
+
+## Errors
+
+```typescript
+class ValidationError {
+  kind: string;
+  fields: { fieldName: string; message: string }[];
+  message: string;
+}
+
+class NotFoundError {
+  kind: string;
+  entityType: string;
+  id: string;
+}
+
+class StoreError {
+  kind: string;
+  entityType: string;
+  operation: string;
+  message: string;
+}
+
+class LLMError {
+  kind: string;
+  message: string;
+}
+```

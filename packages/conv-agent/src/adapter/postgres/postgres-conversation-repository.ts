@@ -96,9 +96,7 @@ function mapRow(row: ConversationRow | undefined, operation: StoreOperation): Re
   }
 
   try {
-    return success(
-      new Conversation(row.id, toDate(row.created_at), toDate(row.updated_at)),
-    );
+    return success(new Conversation(row.id, toDate(row.created_at), toDate(row.updated_at)));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Conversation, operation, error.message));

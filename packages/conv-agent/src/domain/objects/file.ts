@@ -9,15 +9,7 @@ export class File {
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
-  constructor(
-    id: string,
-    canonicalUrl: string,
-    filename: string,
-    mimeType: string,
-    sizeInBytes: number,
-    createdAt: Date,
-    updatedAt: Date,
-  ) {
+  constructor(id: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, createdAt: Date, updatedAt: Date) {
     if (id.trim().length === 0) {
       throw new ValidationError("id", "File id must be a non-empty string.");
     }

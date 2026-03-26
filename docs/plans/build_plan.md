@@ -279,15 +279,18 @@ class ValidationDomainService {
 ```
 
 `validateGetMessagesQuery` validates:
+
 - RequireNonEmptyString(conversationId)
 - RequirePositiveInteger(pageNum)
 - RequirePositiveInteger(pageSize)
 
 `validateListConversationsQuery` validates:
+
 - RequirePositiveInteger(pageNum)
 - RequirePositiveInteger(pageSize)
 
 `validateUploadFileInput` validates:
+
 - RequireNonEmptyString(conversationId)
 - RequirePresent(content)
 - RequireNonEmptyString(filename)
@@ -303,6 +306,7 @@ class MessageContentDomainService {
 ```
 
 `validateMessageInput` and `validateMessageRecord` validate:
+
 - RequireNonEmptyString(conversationId)
 - RequirePositiveInteger(sequenceNumber) (when present)
 - RequirePresent(content), RequirePresent(type)

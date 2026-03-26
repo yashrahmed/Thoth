@@ -9,10 +9,7 @@ export class ListConversationsFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
   async execute(query: { readonly pageNum: number; readonly pageSize: number }): Promise<Result<Conversation[], StoreError | ValidationError>> {
-    const validationResult = firstFailure(
-      requirePositiveInteger(query.pageNum, "pageNum"),
-      requirePositiveInteger(query.pageSize, "pageSize"),
-    );
+    const validationResult = firstFailure(requirePositiveInteger(query.pageNum, "pageNum"), requirePositiveInteger(query.pageSize, "pageSize"));
 
     if (!validationResult.ok) {
       return validationResult;

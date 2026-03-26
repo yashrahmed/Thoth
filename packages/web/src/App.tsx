@@ -411,24 +411,25 @@ export function App() {
                 const attachmentIds = message.fileIds.length > 0 ? message.fileIds : message.files.map((file) => file.id);
 
                 return (
-                <article key={message.id} style={message.type === "user" ? userBubbleWrapStyle : assistantBubbleWrapStyle}>
-                  <div style={message.type === "user" ? userBubbleStyle : assistantBubbleStyle}>
-                    <div style={bubbleMetaStyle}>
-                      <span>{message.type === "user" ? "You" : "Assistant"}</span>
-                      <span>#{message.sequenceNumber}</span>
-                    </div>
-                    {message.content ? <p style={messageTextStyle}>{message.content}</p> : null}
-                    {attachmentIds.length > 0 ? (
-                      <div style={fileListStyle}>
-                        <p style={attachmentLabelStyle}>Attachments</p>
-                        {attachmentIds.map((fileId) => (
-                          <FileAttachmentView key={fileId} fileId={fileId} files={message.files} />
-                        ))}
+                  <article key={message.id} style={message.type === "user" ? userBubbleWrapStyle : assistantBubbleWrapStyle}>
+                    <div style={message.type === "user" ? userBubbleStyle : assistantBubbleStyle}>
+                      <div style={bubbleMetaStyle}>
+                        <span>{message.type === "user" ? "You" : "Assistant"}</span>
+                        <span>#{message.sequenceNumber}</span>
                       </div>
-                    ) : null}
-                  </div>
-                </article>
-              )})
+                      {message.content ? <p style={messageTextStyle}>{message.content}</p> : null}
+                      {attachmentIds.length > 0 ? (
+                        <div style={fileListStyle}>
+                          <p style={attachmentLabelStyle}>Attachments</p>
+                          {attachmentIds.map((fileId) => (
+                            <FileAttachmentView key={fileId} fileId={fileId} files={message.files} />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })
             )}
           </div>
 

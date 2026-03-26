@@ -156,17 +156,7 @@ function mapRow(row: FileRow | undefined, operation: StoreOperation): Result<Fil
   }
 
   try {
-    return success(
-      new File(
-        row.id,
-        row.canonical_url,
-        row.filename,
-        row.mime_type,
-        row.size_in_bytes,
-        toDate(row.created_at),
-        toDate(row.updated_at),
-      ),
-    );
+    return success(new File(row.id, row.canonical_url, row.filename, row.mime_type, row.size_in_bytes, toDate(row.created_at), toDate(row.updated_at)));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.File, operation, error.message));

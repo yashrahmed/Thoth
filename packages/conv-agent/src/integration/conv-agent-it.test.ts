@@ -167,10 +167,7 @@ function buildImageMessageFormData(imageBytes: Uint8Array, text: string): FormDa
   const formData = new FormData();
 
   formData.set("type", "user");
-  formData.set(
-    "content",
-    text,
-  );
+  formData.set("content", text);
   formData.set(
     "attachment",
     new File([toArrayBuffer(imageBytes)], "lambo.jpg", {

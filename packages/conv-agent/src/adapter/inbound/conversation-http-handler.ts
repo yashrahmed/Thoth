@@ -198,10 +198,7 @@ function toMessageResponse(message: MessageWithFiles) {
   };
 }
 
-async function parseAppendMessageRequest(
-  req: Request,
-  conversationId: string,
-): Promise<TransportResult<ApplicationAppendMessageRequest>> {
+async function parseAppendMessageRequest(req: Request, conversationId: string): Promise<TransportResult<ApplicationAppendMessageRequest>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("multipart/form-data")) {

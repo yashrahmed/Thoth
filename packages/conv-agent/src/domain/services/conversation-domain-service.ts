@@ -21,9 +21,7 @@ export class ConversationDomainService {
   }
 
   async findById(conversationId: string): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
-      this.conversationRepository.selectConversationRow(id),
-    );
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.conversationRepository.selectConversationRow(id));
   }
 
   async findPage(request: { readonly pageNum: number; readonly pageSize: number }): Promise<Result<Conversation[], StoreError>> {
@@ -31,8 +29,6 @@ export class ConversationDomainService {
   }
 
   async delete(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
-      this.conversationRepository.deleteConversationRow(id),
-    );
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.conversationRepository.deleteConversationRow(id));
   }
 }

@@ -17,7 +17,11 @@ export class GetMessagesOnConversationFlow {
     private readonly fileDomainService: FileDomainService,
   ) {}
 
-  async execute(query: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<MessageWithFiles[], NotFoundError | StoreError | ValidationError>> {
+  async execute(query: {
+    readonly conversationId: string;
+    readonly pageNum: number;
+    readonly pageSize: number;
+  }): Promise<Result<MessageWithFiles[], NotFoundError | StoreError | ValidationError>> {
     const validationResult = firstFailure(
       requireNonEmptyString(query.conversationId, "conversationId"),
       requirePositiveInteger(query.pageNum, "pageNum"),
@@ -40,9 +44,7 @@ export class GetMessagesOnConversationFlow {
       return messagesResult;
     }
 
-    const relevantMessages = messagesResult.value.filter(
-      (m) => m.type === LLMMessageType.User || m.type === LLMMessageType.Assistant,
-    );
+    const relevantMessages = messagesResult.value.filter((m) => m.type === LLMMessageType.User || m.type === LLMMessageType.Assistant);
 
     const allFileIds = [...new Set(relevantMessages.flatMap((message) => message.fileIds))];
 
@@ -57,9 +59,7 @@ export class GetMessagesOnConversationFlow {
     return success(
       relevantMessages.map((message) => ({
         ...message,
-        files: message.fileIds
-          .map((id) => filesById.get(id))
-          .filter((file): file is NonNullable<typeof file> => file !== undefined),
+        files: message.fileIds.map((id) => filesById.get(id)).filter((file): file is NonNullable<typeof file> => file !== undefined),
       })),
     );
   }

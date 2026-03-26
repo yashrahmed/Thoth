@@ -213,18 +213,7 @@ function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<
   }
 
   try {
-    return success(
-      new Message(
-        row.id,
-        row.conversation_id,
-        row.type,
-        row.sequence_number,
-        row.content,
-        row.file_ids,
-        toDate(row.created_at),
-        toDate(row.updated_at),
-      ),
-    );
+    return success(new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, row.file_ids, toDate(row.created_at), toDate(row.updated_at)));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, operation, error.message));

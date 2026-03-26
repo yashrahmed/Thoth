@@ -50,18 +50,18 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates message input by role", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const validUserInput = ({
+    const validUserInput = {
       conversationId: "conversation-1",
       type: LLMMessageType.User,
       content: "hello",
       fileIds: ["file-1"],
-    });
-    const invalidAssistantInput = ({
+    };
+    const invalidAssistantInput = {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       content: "",
       fileIds: [],
-    });
+    };
 
     expect(messageContentDomainService.validateMessageInput(validUserInput)).toEqual({
       ok: true,
@@ -79,18 +79,18 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates next message input", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const validToolInput = ({
+    const validToolInput = {
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
       content: "tool output",
       fileIds: [],
-    });
-    const invalidToolInput = ({
+    };
+    const invalidToolInput = {
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
       content: "",
       fileIds: [],
-    });
+    };
 
     expect(messageContentDomainService.validateMessageInput(validToolInput).ok).toBe(true);
     expect(messageContentDomainService.validateMessageInput(invalidToolInput)).toEqual({
@@ -137,18 +137,18 @@ describe("message validation", () => {
 
   test("FileDomainService validates required upload fields", async () => {
     const fileDomainService = new FileDomainService(new InMemoryFileRepository(), new BlobDomainService(new InMemoryBlobRepository()), () => new Date("2026-03-16T12:00:00.000Z"));
-    const validInput = ({
+    const validInput = {
       conversationId: "conversation-1",
       content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
       filename: "hello.txt",
       mimeType: "text/plain",
-    });
-    const invalidInput = ({
+    };
+    const invalidInput = {
       conversationId: "conversation-1",
       content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
       filename: "",
       mimeType: "text/plain",
-    });
+    };
 
     expect((await fileDomainService.uploadFile(validInput)).ok).toBe(true);
     expect(await fileDomainService.uploadFile(invalidInput)).toEqual({
@@ -163,12 +163,12 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates file ids", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const input = ({
+    const input = {
       conversationId: "conversation-1",
       type: LLMMessageType.User,
       content: "hello",
       fileIds: [""],
-    });
+    };
 
     expect(messageContentDomainService.validateMessageInput(input)).toEqual({
       ok: false,
@@ -660,13 +660,5 @@ function mustCreateMessage(
 }
 
 function mustCreateFile(id: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, isoTimestamp = "2026-03-16T12:00:00.000Z"): StoredFile {
-  return new StoredFile(
-    id,
-    canonicalUrl,
-    filename,
-    mimeType,
-    sizeInBytes,
-    new Date(isoTimestamp),
-    new Date(isoTimestamp),
-  );
+  return new StoredFile(id, canonicalUrl, filename, mimeType, sizeInBytes, new Date(isoTimestamp), new Date(isoTimestamp));
 }

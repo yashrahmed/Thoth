@@ -13,16 +13,7 @@ export class Message {
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
-  constructor(
-    id: string,
-    conversationId: string,
-    type: LLMMessageType,
-    sequenceNumber: number,
-    content: string,
-    fileIds: ReadonlyArray<string>,
-    createdAt: Date,
-    updatedAt: Date,
-  ) {
+  constructor(id: string, conversationId: string, type: LLMMessageType, sequenceNumber: number, content: string, fileIds: ReadonlyArray<string>, createdAt: Date, updatedAt: Date) {
     this.id = id;
     this.conversationId = conversationId;
     this.type = type;

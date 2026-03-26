@@ -22,18 +22,7 @@ export class PromptLlmFlow {
     }
 
     const timestamp = this.now();
-    const llmResult = await this.llmDomainService.complete([
-      new Message(
-        crypto.randomUUID(),
-        crypto.randomUUID(),
-        LLMMessageType.User,
-        1,
-        prompt,
-        [],
-        timestamp,
-        timestamp,
-      ),
-    ]);
+    const llmResult = await this.llmDomainService.complete([new Message(crypto.randomUUID(), crypto.randomUUID(), LLMMessageType.User, 1, prompt, [], timestamp, timestamp)]);
 
     if (!llmResult.ok) {
       return llmResult;

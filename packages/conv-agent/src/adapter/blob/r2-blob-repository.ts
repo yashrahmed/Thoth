@@ -29,7 +29,12 @@ export class R2BlobRepository implements BlobRepository {
     private readonly credentials: R2BlobCredentials,
   ) {}
 
-  async putBlob(request: { readonly conversationId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, StoreError>> {
+  async putBlob(request: {
+    readonly conversationId: string;
+    readonly content: ArrayBuffer;
+    readonly filename: string;
+    readonly mimeType: string;
+  }): Promise<Result<string, StoreError>> {
     const canonicalPath = this.getCanonicalPath(request.conversationId, request.filename);
     const objectKey = this.getObjectKey(canonicalPath);
 

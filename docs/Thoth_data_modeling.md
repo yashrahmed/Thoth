@@ -2,11 +2,11 @@
 
 ## Entity to DB Table Mapping
 
-| Entity | DB Table |
-|---|---|
+| Entity       | DB Table            |
+| ------------ | ------------------- |
 | Conversation | thoth.conversations |
-| Message | thoth.messages |
-| File | thoth.files |
+| Message      | thoth.messages      |
+| File         | thoth.files         |
 
 ## Enums
 

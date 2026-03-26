@@ -15,9 +15,7 @@ export class MessageDomainService {
   ) {}
 
   async save(record: Omit<Message, "id">): Promise<Result<Message, ValidationError | StoreError>> {
-    return andThenAsync(this.messageContentDomainService.validateMessageRecord(record), () =>
-      this.messageRepository.upsertMessageRow(record),
-    );
+    return andThenAsync(this.messageContentDomainService.validateMessageRecord(record), () => this.messageRepository.upsertMessageRow(record));
   }
 
   async findById(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
@@ -29,15 +27,11 @@ export class MessageDomainService {
   }
 
   async findAll(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
-      this.messageRepository.selectAllMessagesByConversation(id),
-    );
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.selectAllMessagesByConversation(id));
   }
 
   async count(conversationId: string): Promise<Result<number, ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
-      this.messageRepository.countMessagesByConversation(id),
-    );
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.countMessagesByConversation(id));
   }
 
   async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {
@@ -45,9 +39,7 @@ export class MessageDomainService {
   }
 
   async deleteAll(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) =>
-      this.messageRepository.deleteMessagesByConversation(id),
-    );
+    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.deleteMessagesByConversation(id));
   }
 
   async deleteMessage(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
@@ -67,10 +59,7 @@ export class MessageDomainService {
       return messageResult;
     }
 
-    return andThenAsync(
-      await traverseAsync(messageResult.value.fileIds, (fileId) => fileDomainService.deleteFile(fileId)),
-      () => this.delete(messageId),
-    );
+    return andThenAsync(await traverseAsync(messageResult.value.fileIds, (fileId) => fileDomainService.deleteFile(fileId)), () => this.delete(messageId));
   }
 
   async createNextMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {

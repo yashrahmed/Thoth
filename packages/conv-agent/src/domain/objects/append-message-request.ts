@@ -7,12 +7,7 @@ export class AppendMessageRequest {
   readonly content: string;
   readonly attachments: ReadonlyArray<Attachment>;
 
-  constructor(
-    conversationId: string,
-    type: LLMMessageType,
-    content: string,
-    attachments: ReadonlyArray<Attachment>,
-  ) {
+  constructor(conversationId: string, type: LLMMessageType, content: string, attachments: ReadonlyArray<Attachment>) {
     this.conversationId = conversationId;
     this.type = type;
     this.content = content;

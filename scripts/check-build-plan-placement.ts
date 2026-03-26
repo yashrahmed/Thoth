@@ -478,10 +478,7 @@ function findSymbols(
 ): ReadonlyArray<ScannedSymbol> {
   return symbols.filter(
     (symbol) =>
-      symbol.name === input.name &&
-      symbol.kind === input.kind &&
-      input.layers.includes(symbol.layer) &&
-      (input.ownerName === undefined || symbol.ownerName === input.ownerName),
+      symbol.name === input.name && symbol.kind === input.kind && input.layers.includes(symbol.layer) && (input.ownerName === undefined || symbol.ownerName === input.ownerName),
   );
 }
 

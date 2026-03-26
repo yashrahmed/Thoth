@@ -17,6 +17,19 @@ enum LLMMessageType {
   System = "system",
   Tool = "tool",
 }
+
+enum EntityType {
+  Conversation = "Conversation",
+  Message = "Message",
+  File = "File",
+}
+
+enum StoreOperation {
+  Persist = "persist",
+  Read = "read",
+  Remove = "remove",
+  ReadPage = "readPage",
+}
 ```
 
 ## Entities
@@ -31,7 +44,7 @@ class Conversation {
 class Message {
   id: string;
   conversation_id: string;
-  type: string;
+  type: LLMMessageType;
   sequence_number: number;
   content: string;
   file_ids: string[];
@@ -87,24 +100,24 @@ class AppendMsgToConversationRequest {
 ```typescript
 class ValidationError {
   kind: string;
-  fields: { fieldName: string; message: string }[];
+  fieldName: string;
   message: string;
 }
 
 class NotFoundError {
   kind: string;
-  entityType: string;
+  entityType: EntityType;
   id: string;
 }
 
 class StoreError {
   kind: string;
-  entityType: string;
-  operation: string;
+  entityType: EntityType;
+  operation: StoreOperation;
   message: string;
 }
 
-class LLMError {
+class LlmError {
   kind: string;
   message: string;
 }

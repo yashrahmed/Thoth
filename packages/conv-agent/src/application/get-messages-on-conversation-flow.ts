@@ -6,7 +6,7 @@ import type { NotFoundError, StoreError, ValidationError } from "../domain/objec
 import type { Result } from "../domain/objects/result";
 import { firstFailure, success } from "../domain/objects/result";
 import { LLMMessageType } from "../domain/objects/llm";
-import { requireNonEmptyString, requirePositiveInteger } from "../domain/validation";
+import { GenericValidationService } from "../domain/services/generic-validation-service";
 
 export type { MessageWithFiles };
 
@@ -15,6 +15,7 @@ export class GetMessagesOnConversationFlow {
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
+    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
   ) {}
 
   async execute(query: {
@@ -23,9 +24,9 @@ export class GetMessagesOnConversationFlow {
     readonly pageSize: number;
   }): Promise<Result<MessageWithFiles[], NotFoundError | StoreError | ValidationError>> {
     const validationResult = firstFailure(
-      requireNonEmptyString(query.conversationId, "conversationId"),
-      requirePositiveInteger(query.pageNum, "pageNum"),
-      requirePositiveInteger(query.pageSize, "pageSize"),
+      this.genericValidationService.requireNonEmptyString(query.conversationId, "conversationId"),
+      this.genericValidationService.requirePositiveInteger(query.pageNum, "pageNum"),
+      this.genericValidationService.requirePositiveInteger(query.pageSize, "pageSize"),
     );
 
     if (!validationResult.ok) {

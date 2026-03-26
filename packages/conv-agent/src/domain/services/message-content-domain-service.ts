@@ -1,10 +1,12 @@
-import { requireNonEmptyString, requirePositiveInteger, requirePresent } from "../validation";
 import { ValidationError } from "../objects/errors";
 import { LLM_MESSAGE_TYPES, type LLMMessageType } from "../objects/llm";
 import type { CreateMessageInput, Message } from "../objects/message";
 import { failure, success, type Result } from "../objects/result";
+import { GenericValidationService } from "./generic-validation-service";
 
 export class MessageContentDomainService {
+  constructor(private readonly genericValidationService: GenericValidationService = new GenericValidationService()) {}
+
   validateMessageInput(request: CreateMessageInput): Result<void, ValidationError> {
     return this.validateMessageInputLike(request.conversationId, request.type, request.content, request.fileIds);
   }
@@ -20,14 +22,14 @@ export class MessageContentDomainService {
     fileIds: ReadonlyArray<string>,
     sequenceNumber?: number,
   ): Result<void, ValidationError> {
-    const conversationIdResult = requireNonEmptyString(conversationId, "conversationId");
+    const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
 
     if (!conversationIdResult.ok) {
       return conversationIdResult;
     }
 
     if (sequenceNumber !== undefined) {
-      const sequenceNumberResult = requirePositiveInteger(sequenceNumber, "sequenceNumber");
+      const sequenceNumberResult = this.genericValidationService.requirePositiveInteger(sequenceNumber, "sequenceNumber");
 
       if (!sequenceNumberResult.ok) {
         return sequenceNumberResult;
@@ -38,7 +40,7 @@ export class MessageContentDomainService {
       return failure(new ValidationError("type", "type must be one of user, assistant, system, or tool."));
     }
 
-    const contentResult = requirePresent(content, "content");
+    const contentResult = this.genericValidationService.requirePresent(content, "content");
 
     if (!contentResult.ok) {
       return contentResult;
@@ -53,7 +55,7 @@ export class MessageContentDomainService {
     }
 
     for (const fileId of fileIds) {
-      const fileIdResult = requireNonEmptyString(fileId, "fileIds");
+      const fileIdResult = this.genericValidationService.requireNonEmptyString(fileId, "fileIds");
 
       if (!fileIdResult.ok) {
         return fileIdResult;

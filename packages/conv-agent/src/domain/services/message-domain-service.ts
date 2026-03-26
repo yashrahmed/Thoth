@@ -4,14 +4,15 @@ import { NotFoundError, ValidationError, type StoreError } from "../objects/erro
 import type { Result } from "../objects/result";
 import { andThenAsync, traverseAsync } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
+import { GenericValidationService } from "./generic-validation-service";
 import type { MessageContentDomainService } from "./message-content-domain-service";
-import { requireNonEmptyString } from "../validation";
 
 export class MessageDomainService {
   constructor(
     private readonly messageRepository: MessageRepository,
     private readonly messageContentDomainService: MessageContentDomainService,
     private readonly now: () => Date = () => new Date(),
+    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
   ) {}
 
   async save(record: Omit<Message, "id">): Promise<Result<Message, ValidationError | StoreError>> {
@@ -19,7 +20,7 @@ export class MessageDomainService {
   }
 
   async findById(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.selectMessageRow(id));
+    return andThenAsync(this.genericValidationService.requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.selectMessageRow(id));
   }
 
   async findPage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<Message[], StoreError>> {
@@ -27,19 +28,19 @@ export class MessageDomainService {
   }
 
   async findAll(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.selectAllMessagesByConversation(id));
+    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.selectAllMessagesByConversation(id));
   }
 
   async count(conversationId: string): Promise<Result<number, ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.countMessagesByConversation(id));
+    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.countMessagesByConversation(id));
   }
 
   async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.deleteMessageRow(id));
+    return andThenAsync(this.genericValidationService.requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.deleteMessageRow(id));
   }
 
   async deleteAll(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
-    return andThenAsync(requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.deleteMessagesByConversation(id));
+    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.deleteMessagesByConversation(id));
   }
 
   async deleteMessage(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {

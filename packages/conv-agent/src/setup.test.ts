@@ -6,7 +6,7 @@ import type { ConversationRepository } from "./domain/contracts/conversation-rep
 import type { FileRepository } from "./domain/contracts/file-repository";
 import type { MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
-import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/objects/errors";
+import { EntityType, LlmError, NotFoundError, StoreOperation, type StoreError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
 import { Message } from "./domain/objects/message";
@@ -157,6 +157,50 @@ describe("message validation", () => {
         kind: "ValidationError",
         fieldName: "filename",
         message: "filename must be a non-empty string.",
+      },
+    });
+  });
+
+  test("ConversationDomainService validates conversations returned from the repository", async () => {
+    const repository = new InMemoryConversationRepository();
+    const conversationDomainService = new ConversationDomainService(repository, () => new Date("2026-03-16T12:00:00.000Z"));
+
+    repository.seed([new Conversation("conversation-1", new Date("invalid"), new Date("2026-03-16T12:00:00.000Z"))]);
+
+    expect(await conversationDomainService.findById("conversation-1")).toEqual({
+      ok: false,
+      error: {
+        kind: "StoreError",
+        entityType: EntityType.Conversation,
+        operation: StoreOperation.Read,
+        message: "createdAt must be a valid date.",
+      },
+    });
+  });
+
+  test("FileDomainService validates files returned from the repository", async () => {
+    const repository = new InMemoryFileRepository();
+    const fileDomainService = new FileDomainService(repository, new BlobDomainService(new InMemoryBlobRepository()), () => new Date("2026-03-16T12:00:00.000Z"));
+
+    repository.seed([
+      new StoredFile(
+        "file-1",
+        "/conversations/conversation-1/file-1.png",
+        "file-1.png",
+        "image/png",
+        -1,
+        new Date("2026-03-16T12:00:00.000Z"),
+        new Date("2026-03-16T12:00:00.000Z"),
+      ),
+    ]);
+
+    expect(await fileDomainService.findById("file-1")).toEqual({
+      ok: false,
+      error: {
+        kind: "StoreError",
+        entityType: EntityType.File,
+        operation: StoreOperation.Read,
+        message: "sizeInBytes must be a non-negative integer.",
       },
     });
   });

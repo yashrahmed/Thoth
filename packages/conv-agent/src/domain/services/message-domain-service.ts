@@ -1,10 +1,9 @@
 import { type MessagePageRequest, type MessageRepository } from "../contracts/message-repository";
-import type { Message } from "../objects/message";
+import type { CreateMessageInput, Message } from "../objects/message";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, traverseAsync } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
-import { CreateNextMessageInput } from "../objects/message-input";
 import type { MessageContentDomainService } from "./message-content-domain-service";
 import { requireNonEmptyString } from "../validation";
 
@@ -74,7 +73,7 @@ export class MessageDomainService {
     );
   }
 
-  async createNextMessage(request: CreateNextMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
+  async createNextMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
     const validationResult = this.messageContentDomainService.validateMessageInput(request);
 
     if (!validationResult.ok) {

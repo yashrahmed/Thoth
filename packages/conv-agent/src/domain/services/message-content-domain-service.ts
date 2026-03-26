@@ -1,12 +1,11 @@
 import { requireNonEmptyString, requirePositiveInteger, requirePresent } from "../validation";
 import { ValidationError } from "../objects/errors";
 import { LLM_MESSAGE_TYPES, type LLMMessageType } from "../objects/llm";
-import { CreateNextMessageInput } from "../objects/message-input";
-import type { Message } from "../objects/message";
+import type { CreateMessageInput, Message } from "../objects/message";
 import { failure, success, type Result } from "../objects/result";
 
 export class MessageContentDomainService {
-  validateMessageInput(request: CreateNextMessageInput): Result<void, ValidationError> {
+  validateMessageInput(request: CreateMessageInput): Result<void, ValidationError> {
     return this.validateMessageInputLike(request.conversationId, request.type, request.content, request.fileIds);
   }
 

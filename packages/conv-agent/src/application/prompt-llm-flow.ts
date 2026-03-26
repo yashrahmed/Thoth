@@ -1,4 +1,5 @@
 import { LLMMessageType } from "../domain/objects/llm";
+import { Message } from "../domain/objects/message";
 import { failure, success, type Result } from "../domain/objects/result";
 import { LlmError, ValidationError } from "../domain/objects/errors";
 import { LlmDomainService } from "../domain/services/llm-domain-service";
@@ -22,16 +23,16 @@ export class PromptLlmFlow {
 
     const timestamp = this.now();
     const llmResult = await this.llmDomainService.complete([
-      {
-        id: crypto.randomUUID(),
-        conversationId: crypto.randomUUID(),
-        type: LLMMessageType.User,
-        sequenceNumber: 1,
-        content: prompt,
-        fileIds: [],
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      },
+      new Message(
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+        LLMMessageType.User,
+        1,
+        prompt,
+        [],
+        timestamp,
+        timestamp,
+      ),
     ]);
 
     if (!llmResult.ok) {

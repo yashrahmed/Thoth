@@ -1,7 +1,5 @@
 import { ValidationError } from "./errors";
 
-export type FileContent = ArrayBuffer;
-
 export class File {
   readonly id: string;
   readonly canonicalUrl: string;

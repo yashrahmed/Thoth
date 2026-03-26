@@ -6,30 +6,7 @@ import type { Result } from "../domain/objects/result";
 import { firstFailure, success } from "../domain/objects/result";
 import { LLMMessageType, type LLMMessageType as MessageType } from "../domain/objects/llm";
 import { requireNonEmptyString, requirePositiveInteger } from "../domain/validation";
-
-export class GetMessagesQuery {
-  readonly conversationId: string;
-  readonly pageNum: number;
-  readonly pageSize: number;
-
-  constructor(props: {
-    readonly conversationId: string;
-    readonly pageNum: number;
-    readonly pageSize: number;
-  }) {
-    this.conversationId = props.conversationId;
-    this.pageNum = props.pageNum;
-    this.pageSize = props.pageSize;
-  }
-
-  isValid(): Result<void, ValidationError> {
-    return firstFailure(
-      requireNonEmptyString(this.conversationId, "conversationId"),
-      requirePositiveInteger(this.pageNum, "pageNum"),
-      requirePositiveInteger(this.pageSize, "pageSize"),
-    );
-  }
-}
+import type { MessagePageRequest } from "../domain/contracts/message-repository";
 
 export interface GetMessagesFile {
   readonly id: string;
@@ -60,8 +37,12 @@ export class GetMessagesOnConversationFlow {
     private readonly fileDomainService: FileDomainService,
   ) {}
 
-  async execute(query: GetMessagesQuery): Promise<Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>> {
-    const validationResult = query.isValid();
+  async execute(query: MessagePageRequest): Promise<Result<GetMessagesItem[], NotFoundError | StoreError | ValidationError>> {
+    const validationResult = firstFailure(
+      requireNonEmptyString(query.conversationId, "conversationId"),
+      requirePositiveInteger(query.pageNum, "pageNum"),
+      requirePositiveInteger(query.pageSize, "pageSize"),
+    );
 
     if (!validationResult.ok) {
       return validationResult;
@@ -73,11 +54,7 @@ export class GetMessagesOnConversationFlow {
       return conversationResult;
     }
 
-    const messagesResult = await this.messageDomainService.findPage({
-      conversationId: query.conversationId,
-      pageNum: query.pageNum,
-      pageSize: query.pageSize,
-    });
+    const messagesResult = await this.messageDomainService.findPage(query);
 
     if (!messagesResult.ok) {
       return messagesResult;

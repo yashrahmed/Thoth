@@ -4,15 +4,12 @@ import type { ConversationDomainService } from "../domain/services/conversation-
 import type { LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import { map, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
-import type { FileContent } from "../domain/objects/file";
-import { CreateNextMessageInput } from "../domain/objects/message-input";
 import { type LlmDomainService } from "../domain/services/llm-domain-service";
-import { UploadFileInput } from "../domain/objects/upload-file-input";
 
 export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 
 export interface Attachment {
-  readonly content: FileContent;
+  readonly content: ArrayBuffer;
   readonly filename: string;
   readonly mimeType: string;
 }
@@ -40,29 +37,24 @@ export class AppendMessageToConversationFlow {
     }
 
     const uploadFilesResult = await this.fileDomainService.uploadFiles({
-      files: request.attachments.map(
-        (attachment) =>
-          new UploadFileInput({
-            conversationId: request.conversationId,
-            content: attachment.content,
-            filename: attachment.filename,
-            mimeType: attachment.mimeType,
-          }),
-      ),
+      files: request.attachments.map((attachment) => ({
+        conversationId: request.conversationId,
+        content: attachment.content,
+        filename: attachment.filename,
+        mimeType: attachment.mimeType,
+      })),
     });
 
     if (!uploadFilesResult.ok) {
       return uploadFilesResult;
     }
 
-    const createUserMessageResult = await this.messageDomainService.createNextMessage(
-      new CreateNextMessageInput({
-        conversationId: request.conversationId,
-        type: request.type,
-        content: request.content,
-        fileIds: uploadFilesResult.value.map((file) => file.id),
-      }),
-    );
+    const createUserMessageResult = await this.messageDomainService.createNextMessage({
+      conversationId: request.conversationId,
+      type: request.type,
+      content: request.content,
+      fileIds: uploadFilesResult.value.map((file) => file.id),
+    });
 
     if (!createUserMessageResult.ok) {
       return createUserMessageResult;
@@ -81,14 +73,12 @@ export class AppendMessageToConversationFlow {
     }
 
     return map(
-      await this.messageDomainService.createNextMessage(
-        new CreateNextMessageInput({
-          conversationId: request.conversationId,
-          type: LLMMessageType.Assistant,
-          content: llmResult.value.content,
-          fileIds: [],
-        }),
-      ),
+      await this.messageDomainService.createNextMessage({
+        conversationId: request.conversationId,
+        type: LLMMessageType.Assistant,
+        content: llmResult.value.content,
+        fileIds: [],
+      }),
       () => undefined,
     );
   }

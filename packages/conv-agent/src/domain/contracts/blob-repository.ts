@@ -1,10 +1,9 @@
-import type { FileContent } from "../objects/file";
 import type { StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 
 export interface BlobUploadRequest {
   readonly conversationId: string;
-  readonly content: FileContent;
+  readonly content: ArrayBuffer;
   readonly filename: string;
   readonly mimeType: string;
 }

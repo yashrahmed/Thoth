@@ -97,11 +97,7 @@ function mapRow(row: ConversationRow | undefined, operation: StoreOperation): Re
 
   try {
     return success(
-      new Conversation({
-        id: row.id,
-        createdAt: toDate(row.created_at),
-        updatedAt: toDate(row.updated_at),
-      }),
+      new Conversation(row.id, toDate(row.created_at), toDate(row.updated_at)),
     );
   } catch (error) {
     if (error instanceof Error) {

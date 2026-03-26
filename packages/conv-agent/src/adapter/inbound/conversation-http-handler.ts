@@ -9,8 +9,8 @@ import {
 import type { CreateConversationFlow, CreateConversationResult } from "../../application/create-conversation-flow";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow, GetConversationResult } from "../../application/get-conversation-flow";
-import { GetMessagesQuery, type GetMessagesOnConversationFlow, type GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
-import { ListConversationsQuery, type ListConversationsFlow, type ListConversationsItem } from "../../application/list-conversations-flow";
+import { type GetMessagesOnConversationFlow, type GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
+import { type ListConversationsFlow, type ListConversationsItem } from "../../application/list-conversations-flow";
 
 interface TransportValidationError {
   readonly kind: "ValidationError";
@@ -83,12 +83,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
   app.get("/conversations", async (c) => {
     const pageNum = Number(c.req.query("pageNum"));
     const pageSize = Number(c.req.query("pageSize"));
-    const result = await deps.listConversations.execute(
-      new ListConversationsQuery({
-        pageNum,
-        pageSize,
-      }),
-    );
+    const result = await deps.listConversations.execute({ pageNum, pageSize });
 
     if (!result.ok) {
       return mapError(c, result.error);
@@ -122,13 +117,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     const conversationId = c.req.param("id");
     const pageNum = Number(c.req.query("pageNum"));
     const pageSize = Number(c.req.query("pageSize"));
-    const result = await deps.getMessagesOnConversation.execute(
-      new GetMessagesQuery({
-        conversationId,
-        pageNum,
-        pageSize,
-      }),
-    );
+    const result = await deps.getMessagesOnConversation.execute({ conversationId, pageNum, pageSize });
 
     if (!result.ok) {
       return mapError(c, result.error);

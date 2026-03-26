@@ -3,23 +3,7 @@ import type { Result } from "../domain/objects/result";
 import { firstFailure, map } from "../domain/objects/result";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import { requirePositiveInteger } from "../domain/validation";
-
-export class ListConversationsQuery {
-  readonly pageNum: number;
-  readonly pageSize: number;
-
-  constructor(props: {
-    readonly pageNum: number;
-    readonly pageSize: number;
-  }) {
-    this.pageNum = props.pageNum;
-    this.pageSize = props.pageSize;
-  }
-
-  isValid(): Result<void, ValidationError> {
-    return firstFailure(requirePositiveInteger(this.pageNum, "pageNum"), requirePositiveInteger(this.pageSize, "pageSize"));
-  }
-}
+import type { ConversationPageRequest } from "../domain/contracts/conversation-repository";
 
 export interface ListConversationsItem {
   readonly id: string;
@@ -30,18 +14,18 @@ export interface ListConversationsItem {
 export class ListConversationsFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
-  async execute(query: ListConversationsQuery): Promise<Result<ListConversationsItem[], StoreError | ValidationError>> {
-    const validationResult = query.isValid();
+  async execute(query: ConversationPageRequest): Promise<Result<ListConversationsItem[], StoreError | ValidationError>> {
+    const validationResult = firstFailure(
+      requirePositiveInteger(query.pageNum, "pageNum"),
+      requirePositiveInteger(query.pageSize, "pageSize"),
+    );
 
     if (!validationResult.ok) {
       return validationResult;
     }
 
     return map(
-      await this.conversationDomainService.findPage({
-        pageNum: query.pageNum,
-        pageSize: query.pageSize,
-      }),
+      await this.conversationDomainService.findPage(query),
       (conversations) =>
         conversations.map((conversation) => ({
           id: conversation.id,

@@ -3,7 +3,7 @@ import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import type { Message } from "../../domain/objects/message";
+import { Message } from "../../domain/objects/message";
 
 interface MessageRow {
   readonly id: string;
@@ -213,16 +213,18 @@ function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<
   }
 
   try {
-    return success({
-      id: row.id,
-      conversationId: row.conversation_id,
-      type: row.type,
-      sequenceNumber: row.sequence_number,
-      content: row.content,
-      fileIds: row.file_ids,
-      createdAt: toDate(row.created_at),
-      updatedAt: toDate(row.updated_at),
-    });
+    return success(
+      new Message(
+        row.id,
+        row.conversation_id,
+        row.type,
+        row.sequence_number,
+        row.content,
+        row.file_ids,
+        toDate(row.created_at),
+        toDate(row.updated_at),
+      ),
+    );
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, operation, error.message));

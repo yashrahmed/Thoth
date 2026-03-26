@@ -9,9 +9,8 @@ import { Conversation } from "./domain/objects/conversation";
 import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
-import type { Message } from "./domain/objects/message";
-import { CreateNextMessageInput } from "./domain/objects/message-input";
-import { UploadFileInput } from "./domain/objects/upload-file-input";
+import { Message, type CreateMessageInput } from "./domain/objects/message";
+import type { BlobUploadRequest } from "./domain/contracts/blob-repository";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
@@ -52,13 +51,13 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates message input by role", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const validUserInput = new CreateNextMessageInput({
+    const validUserInput = ({
       conversationId: "conversation-1",
       type: LLMMessageType.User,
       content: "hello",
       fileIds: ["file-1"],
     });
-    const invalidAssistantInput = new CreateNextMessageInput({
+    const invalidAssistantInput = ({
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       content: "",
@@ -81,13 +80,13 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates next message input", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const validToolInput = new CreateNextMessageInput({
+    const validToolInput = ({
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
       content: "tool output",
       fileIds: [],
     });
-    const invalidToolInput = new CreateNextMessageInput({
+    const invalidToolInput = ({
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
       content: "",
@@ -139,13 +138,13 @@ describe("message validation", () => {
 
   test("FileDomainService validates required upload fields", async () => {
     const fileDomainService = new FileDomainService(new InMemoryFileRepository(), new BlobDomainService(new InMemoryBlobRepository()), () => new Date("2026-03-16T12:00:00.000Z"));
-    const validInput = new UploadFileInput({
+    const validInput = ({
       conversationId: "conversation-1",
       content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
       filename: "hello.txt",
       mimeType: "text/plain",
     });
-    const invalidInput = new UploadFileInput({
+    const invalidInput = ({
       conversationId: "conversation-1",
       content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
       filename: "",
@@ -165,7 +164,7 @@ describe("message validation", () => {
 
   test("MessageContentDomainService validates file ids", () => {
     const messageContentDomainService = new MessageContentDomainService();
-    const input = new CreateNextMessageInput({
+    const input = ({
       conversationId: "conversation-1",
       type: LLMMessageType.User,
       content: "hello",
@@ -646,11 +645,7 @@ class InMemoryLlmCompletionService implements LlmCompletionService {
 }
 
 function mustCreateConversation(id: string, isoTimestamp: string): Conversation {
-  return new Conversation({
-    id,
-    createdAt: new Date(isoTimestamp),
-    updatedAt: new Date(isoTimestamp),
-  });
+  return new Conversation(id, new Date(isoTimestamp), new Date(isoTimestamp));
 }
 
 function mustCreateMessage(
@@ -662,16 +657,7 @@ function mustCreateMessage(
   fileIds: ReadonlyArray<string>,
   isoTimestamp: string,
 ): Message {
-  return {
-    id,
-    conversationId,
-    type,
-    sequenceNumber,
-    content,
-    fileIds,
-    createdAt: new Date(isoTimestamp),
-    updatedAt: new Date(isoTimestamp),
-  };
+  return new Message(id, conversationId, type, sequenceNumber, content, fileIds, new Date(isoTimestamp), new Date(isoTimestamp));
 }
 
 function mustCreateFile(id: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, isoTimestamp = "2026-03-16T12:00:00.000Z"): StoredFile {

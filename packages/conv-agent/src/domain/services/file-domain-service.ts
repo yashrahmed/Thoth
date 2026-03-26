@@ -6,7 +6,7 @@ import type { Result } from "../objects/result";
 import { andThenAsync, failure, firstFailure, success, traverseAsync } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
 import { requireNonEmptyString, requirePresent } from "../validation";
-import { UploadFileInput } from "../objects/upload-file-input";
+import type { BlobUploadRequest } from "../contracts/blob-repository";
 
 export class FileDomainService {
   constructor(
@@ -27,8 +27,8 @@ export class FileDomainService {
     return andThenAsync(requireNonEmptyString(fileId, "id"), (id) => this.fileRepository.deleteFileRow(id));
   }
 
-  async uploadFile(request: UploadFileInput): Promise<Result<FileEntity, ValidationError | StoreError>> {
-    const validationResult = this.validateUploadFileInput(request);
+  async uploadFile(request: BlobUploadRequest): Promise<Result<FileEntity, ValidationError | StoreError>> {
+    const validationResult = this.validateBlobUploadRequest(request);
 
     if (!validationResult.ok) {
       return validationResult;
@@ -40,7 +40,7 @@ export class FileDomainService {
   }
 
   async uploadFiles(request: {
-    readonly files: ReadonlyArray<UploadFileInput>;
+    readonly files: ReadonlyArray<BlobUploadRequest>;
   }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
     return traverseAsync(request.files, (file) => this.uploadFile(file));
   }
@@ -110,7 +110,7 @@ export class FileDomainService {
     return this.fileRepository.deleteFileRows(request.fileIds);
   }
 
-  private buildRecord(request: UploadFileInput, canonicalUrl: string): Omit<FileEntity, "id"> {
+  private buildRecord(request: BlobUploadRequest, canonicalUrl: string): Omit<FileEntity, "id"> {
     const timestamp = this.now();
 
     return {
@@ -123,7 +123,7 @@ export class FileDomainService {
     };
   }
 
-  private validateUploadFileInput(request: UploadFileInput): Result<void, ValidationError> {
+  private validateBlobUploadRequest(request: BlobUploadRequest): Result<void, ValidationError> {
     return firstFailure(
       requirePresent(request.content, "content"),
       requireNonEmptyString(request.conversationId, "conversationId"),

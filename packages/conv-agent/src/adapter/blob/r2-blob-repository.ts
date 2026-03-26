@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import type { BlobRepository, BlobUploadRequest } from "../../domain/contracts/blob-repository";
+import type { BlobRepository } from "../../domain/contracts/blob-repository";
 import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 
@@ -29,7 +29,7 @@ export class R2BlobRepository implements BlobRepository {
     private readonly credentials: R2BlobCredentials,
   ) {}
 
-  async putBlob(request: BlobUploadRequest): Promise<Result<string, StoreError>> {
+  async putBlob(request: { readonly conversationId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, StoreError>> {
     const canonicalPath = this.getCanonicalPath(request.conversationId, request.filename);
     const objectKey = this.getObjectKey(canonicalPath);
 

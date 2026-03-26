@@ -67,6 +67,10 @@ class Attachment {
   filename: string;
   mimeType: string;
 }
+
+type CreateMessageInput = Pick<Message, "conversationId" | "type" | "content" | "fileIds">;
+
+type GetMessagesResponse = Message & { files: File[] };
 ```
 
 ## Requests
@@ -79,6 +83,10 @@ class GetMessageOnConversationRequest {
 }
 
 class DeleteConversationRequest {
+  conversation_id: string;
+}
+
+class GetConversationsRequest {
   conversation_id: string;
 }
 

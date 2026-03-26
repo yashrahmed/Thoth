@@ -6,7 +6,7 @@ import type { Result } from "../objects/result";
 import { andThenAsync, failure, firstFailure, success, traverseAsync } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
 import { requireNonEmptyString, requirePresent } from "../validation";
-import type { BlobUploadRequest } from "../contracts/blob-repository";
+type BlobUploadInput = { readonly conversationId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string };
 
 export class FileDomainService {
   constructor(
@@ -27,8 +27,8 @@ export class FileDomainService {
     return andThenAsync(requireNonEmptyString(fileId, "id"), (id) => this.fileRepository.deleteFileRow(id));
   }
 
-  async uploadFile(request: BlobUploadRequest): Promise<Result<FileEntity, ValidationError | StoreError>> {
-    const validationResult = this.validateBlobUploadRequest(request);
+  async uploadFile(request: BlobUploadInput): Promise<Result<FileEntity, ValidationError | StoreError>> {
+    const validationResult = this.validateBlobUploadInput(request);
 
     if (!validationResult.ok) {
       return validationResult;
@@ -40,7 +40,7 @@ export class FileDomainService {
   }
 
   async uploadFiles(request: {
-    readonly files: ReadonlyArray<BlobUploadRequest>;
+    readonly files: ReadonlyArray<BlobUploadInput>;
   }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
     return traverseAsync(request.files, (file) => this.uploadFile(file));
   }
@@ -110,7 +110,7 @@ export class FileDomainService {
     return this.fileRepository.deleteFileRows(request.fileIds);
   }
 
-  private buildRecord(request: BlobUploadRequest, canonicalUrl: string): Omit<FileEntity, "id"> {
+  private buildRecord(request: BlobUploadInput, canonicalUrl: string): Omit<FileEntity, "id"> {
     const timestamp = this.now();
 
     return {
@@ -123,7 +123,7 @@ export class FileDomainService {
     };
   }
 
-  private validateBlobUploadRequest(request: BlobUploadRequest): Result<void, ValidationError> {
+  private validateBlobUploadInput(request: BlobUploadInput): Result<void, ValidationError> {
     return firstFailure(
       requirePresent(request.content, "content"),
       requireNonEmptyString(request.conversationId, "conversationId"),

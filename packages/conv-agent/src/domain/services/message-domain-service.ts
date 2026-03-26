@@ -1,4 +1,4 @@
-import { type MessagePageRequest, type MessageRepository } from "../contracts/message-repository";
+import type { MessageRepository } from "../contracts/message-repository";
 import type { CreateMessageInput, Message } from "../objects/message";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
@@ -24,7 +24,7 @@ export class MessageDomainService {
     return andThenAsync(requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.selectMessageRow(id));
   }
 
-  async findPage(request: MessagePageRequest): Promise<Result<Message[], StoreError>> {
+  async findPage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<Message[], StoreError>> {
     return this.messageRepository.selectMessagePage(request);
   }
 

@@ -2,15 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
 import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
-import type { ConversationPageRequest, ConversationRepository } from "./domain/contracts/conversation-repository";
+import type { ConversationRepository } from "./domain/contracts/conversation-repository";
 import type { FileRepository } from "./domain/contracts/file-repository";
-import { type MessagePageRequest, type MessageRepository } from "./domain/contracts/message-repository";
+import type { MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
 import { EntityType, LlmError, NotFoundError, type StoreError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
-import { Message, type CreateMessageInput } from "./domain/objects/message";
-import type { BlobUploadRequest } from "./domain/contracts/blob-repository";
+import { Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
@@ -463,7 +462,7 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(conversation);
   }
 
-  async selectConversationPage(request: ConversationPageRequest) {
+  async selectConversationPage(request: { readonly pageNum: number; readonly pageSize: number }) {
     const items = [...this.conversations.values()].sort((left, right) => {
       const updatedAtDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
 
@@ -524,7 +523,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(message);
   }
 
-  async selectMessagePage(request: MessagePageRequest) {
+  async selectMessagePage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }) {
     const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
     return success(
       [...this.messages.values()]

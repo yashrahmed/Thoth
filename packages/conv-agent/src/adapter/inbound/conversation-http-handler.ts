@@ -6,11 +6,12 @@ import {
   type AppendMessageRequest as ApplicationAppendMessageRequest,
   type Attachment,
 } from "../../application/append-message-to-conversation-flow";
-import type { CreateConversationFlow, CreateConversationResult } from "../../application/create-conversation-flow";
+import type { CreateConversationFlow } from "../../application/create-conversation-flow";
+import type { Conversation } from "../../domain/objects/conversation";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
-import type { GetConversationFlow, GetConversationResult } from "../../application/get-conversation-flow";
-import { type GetMessagesOnConversationFlow, type GetMessagesItem } from "../../application/get-messages-on-conversation-flow";
-import { type ListConversationsFlow, type ListConversationsItem } from "../../application/list-conversations-flow";
+import type { GetConversationFlow } from "../../application/get-conversation-flow";
+import { type GetMessagesOnConversationFlow, type GetMessagesResponse } from "../../application/get-messages-on-conversation-flow";
+import type { ListConversationsFlow } from "../../application/list-conversations-flow";
 
 interface TransportValidationError {
   readonly kind: "ValidationError";
@@ -167,7 +168,7 @@ function mapError(c: { json: (data: unknown, status: number) => Response }, erro
   return c.json({ error }, 500);
 }
 
-function toConversationResponse(conversation: CreateConversationResult | GetConversationResult | ListConversationsItem) {
+function toConversationResponse(conversation: Conversation) {
   return {
     id: conversation.id,
     createdAt: conversation.createdAt.toISOString(),
@@ -175,7 +176,7 @@ function toConversationResponse(conversation: CreateConversationResult | GetConv
   };
 }
 
-function toMessageResponse(message: GetMessagesItem) {
+function toMessageResponse(message: GetMessagesResponse) {
   return {
     id: message.id,
     conversationId: message.conversationId,

@@ -1,4 +1,4 @@
-import type { MessagePageRequest, MessageRepository } from "../../domain/contracts/message-repository";
+import type { MessageRepository } from "../../domain/contracts/message-repository";
 import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
@@ -95,7 +95,7 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async selectMessagePage(request: MessagePageRequest) {
+  async selectMessagePage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }) {
     try {
       const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
       const rows = await this.sql<MessageRow[]>`

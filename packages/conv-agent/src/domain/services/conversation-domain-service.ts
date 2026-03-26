@@ -1,4 +1,4 @@
-import type { ConversationPageRequest, ConversationRepository } from "../contracts/conversation-repository";
+import type { ConversationRepository } from "../contracts/conversation-repository";
 import type { Conversation } from "../objects/conversation";
 import type { NotFoundError, StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
@@ -30,7 +30,7 @@ export class ConversationDomainService {
     );
   }
 
-  async findPage(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
+  async findPage(request: { readonly pageNum: number; readonly pageSize: number }): Promise<Result<Conversation[], StoreError>> {
     return this.conversationRepository.selectConversationPage(request);
   }
 

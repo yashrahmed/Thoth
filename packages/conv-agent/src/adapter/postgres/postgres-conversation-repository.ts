@@ -1,4 +1,4 @@
-import type { ConversationPageRequest, ConversationRepository } from "../../domain/contracts/conversation-repository";
+import type { ConversationRepository } from "../../domain/contracts/conversation-repository";
 import { Conversation } from "../../domain/objects/conversation";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
@@ -47,7 +47,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
   }
 
-  async selectConversationPage(request: ConversationPageRequest): Promise<Result<Conversation[], StoreError>> {
+  async selectConversationPage(request: { readonly pageNum: number; readonly pageSize: number }): Promise<Result<Conversation[], StoreError>> {
     try {
       const offset = (request.pageNum - 1) * request.pageSize;
       const rows = await this.sql<ConversationRow[]>`

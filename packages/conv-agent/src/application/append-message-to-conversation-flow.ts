@@ -3,23 +3,13 @@ import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import { map, type Result } from "../domain/objects/result";
-import { LLM_MESSAGE_TYPES, LLMMessageType, type LLMMessageType as LLMMessageTypeValue } from "../domain/objects/llm";
+import { LLM_MESSAGE_TYPES, LLMMessageType } from "../domain/objects/llm";
 import { type LlmDomainService } from "../domain/services/llm-domain-service";
+import { type AppendMessageRequest } from "../domain/objects/append-message-request";
 
+export { type AppendMessageRequest } from "../domain/objects/append-message-request";
+export { type Attachment } from "../domain/objects/attachment";
 export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
-
-export interface Attachment {
-  readonly content: ArrayBuffer;
-  readonly filename: string;
-  readonly mimeType: string;
-}
-
-export interface AppendMessageRequest {
-  readonly conversationId: string;
-  readonly type: LLMMessageTypeValue;
-  readonly content: string;
-  readonly attachments: ReadonlyArray<Attachment>;
-}
 
 export class AppendMessageToConversationFlow {
   constructor(

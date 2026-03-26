@@ -14,14 +14,10 @@ export class ConversationDomainService {
   async createConversation(): Promise<Result<Conversation, StoreError>> {
     const timestamp = this.now();
 
-    return this.save({
+    return this.conversationRepository.upsertConversationRow({
       createdAt: timestamp,
       updatedAt: timestamp,
     });
-  }
-
-  async save(record: { readonly createdAt: Date; readonly updatedAt: Date }): Promise<Result<Conversation, StoreError>> {
-    return this.conversationRepository.upsertConversationRow(record);
   }
 
   async findById(conversationId: string): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {

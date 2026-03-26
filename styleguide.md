@@ -29,27 +29,14 @@ separate from the architectural rules in [AGENTS.md](./AGENTS.md).
 - Keep abstractions only when they preserve a real boundary, protect against
   likely divergence, or make the code materially easier to understand.
 
-## Build Plan Mapping
+## Action Placement
 
-- Map each action in [docs/plans/build_plan.md](./docs/plans/build_plan.md)
-  exactly once into code at the layer the plan assigns it to.
-- If `build_plan.md` declares an `App.*` action, implement that action as a
-  flow in the application layer.
-- If `build_plan.md` declares a named action without the `App.*` or `Infra.*`
-  prefix, implement that action as a domain service method.
-- If `build_plan.md` declares an `Infra.*` action, implement that action as a
-  repository or adapter method in the outbound layer.
-- Do not collapse distinct plan actions into a single code unit when the plan
-  models them separately.
-  Example: `App.CreateConversation` and `CreateConversation` are separate
-  actions and should remain separate in code.
-  Example: `CreateNextMessage` and `PersistToMessageDBStore` are separate
-  actions and should not be merged into one repository call site name.
-- Do not move a plan action into another layer just because the code would be
-  shorter there.
-  Example: validation and derived values for `ReadPageFromMessageDBStore`
-  belong in the domain service method for that action, not in the flow or
-  repository.
+- Keep application flows focused on top-level use cases.
+- Keep validation and derived-value computation in domain services when it is
+  part of the business action being performed.
+- Keep repositories and adapters focused on raw persistence or transport I/O.
+- Do not collapse distinct responsibilities into one code unit just because a
+  shorter implementation is possible.
   Example: raw SQL and provider error translation for `Infra.SelectMessagePage`
   belong in the repository, not in the domain service.
 

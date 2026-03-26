@@ -75,40 +75,15 @@ Use ideas from Domain-Driven Design during development.
 
 ## Action Placement
 
-When implementing actions from `docs/plans/build_plan.md`, place them by
-action type rather than by convenience.
+Place behavior by responsibility rather than by convenience.
 
-- `App.*` actions belong in the application layer as flows.
-  - Example: `App.CreateConversation`, `App.AppendMessageToConversation`,
-    `App.GetMessagesOnConversation`.
-- Named non-`App.*` actions belong in the domain layer as domain service
-  methods.
-  - Example: `PersistToConversationDBStore`, `ReadFromMessageDBStore`,
-    `CreateNextMessage`, `UploadFile`, `DeleteFile`.
-- `Infra.*` actions belong in outbound adapters and should be represented by
-  repository or storage-adapter methods whose names reflect the infra step.
-  - Example: `UpsertConversationRow`, `SelectMessagePage`, `DeleteFileRow`,
-    `PutBlob`, `RemoveBlob`.
-
-Use this mapping rule when deciding where validation, derived values, and raw
-I/O should live.
-
-- Flows should orchestrate only top-level `App.*` use cases.
+- Application flows should orchestrate top-level use cases.
 - Domain service methods should own validation and derived-value computation
-  for the named non-`App.*` action they implement.
-  - Example: `ReadPageFromConversationDBStore` computes `offset` before
-    calling the repo.
-  - Example: `ReadPageFromMessageDBStore` computes `fromSequence` before
-    calling the repo.
+  for business actions.
 - Repository and blob-storage adapter methods should perform raw database or
   blob-store operations and map provider failures into domain error types.
 - Do not give domain service methods and infra-facing repository methods the
-  same name when the plan models them as separate actions.
-  - The service method should use the plan action name.
-  - The repository/adapter method should use the corresponding `Infra.*`
-    name in code form.
-- When checking compliance between `docs/plans/build_plan.md` and code
-  placement, use `bun run lint:placement` before doing manual inspection.
+  same name when they represent different responsibilities.
 
 ## Persistence
 

@@ -15,10 +15,6 @@ export class FileDomainService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async save(record: Omit<FileEntity, "id">): Promise<Result<FileEntity, StoreError>> {
-    return this.fileRepository.upsertFileRow(record);
-  }
-
   async findById(fileId: string): Promise<Result<FileEntity, ValidationError | NotFoundError | StoreError>> {
     return andThenAsync(requireNonEmptyString(fileId, "id"), (id) => this.fileRepository.selectFileRow(id));
   }
@@ -35,7 +31,7 @@ export class FileDomainService {
     }
 
     return andThenAsync(await this.blobDomainService.upload(request), (canonicalUrl) =>
-      this.save(this.buildRecord(request, canonicalUrl)),
+      this.fileRepository.upsertFileRow(this.buildRecord(request, canonicalUrl)),
     );
   }
 

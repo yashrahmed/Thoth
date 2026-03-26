@@ -1,5 +1,24 @@
 # Thoth Data Modeling
 
+## Entity to DB Table Mapping
+
+| Entity | DB Table |
+|---|---|
+| Conversation | thoth.conversations |
+| Message | thoth.messages |
+| File | thoth.files |
+
+## Enums
+
+```typescript
+enum LLMMessageType {
+  User = "user",
+  Assistant = "assistant",
+  System = "system",
+  Tool = "tool",
+}
+```
+
 ## Entities
 
 ```typescript

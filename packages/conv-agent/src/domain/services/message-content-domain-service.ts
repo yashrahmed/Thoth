@@ -8,20 +8,14 @@ export class MessageContentDomainService {
   constructor(private readonly genericValidationService: GenericValidationService = new GenericValidationService()) {}
 
   validateMessageInput(request: CreateMessageInput): Result<void, ValidationError> {
-    return this.validateMessageInputLike(request.conversationId, request.type, request.content, request.fileIds);
+    return this.validateMessageInputLike(request.conversationId, request.type, request.content);
   }
 
   validateMessageRecord(record: Omit<Message, "id">): Result<void, ValidationError> {
-    return this.validateMessageInputLike(record.conversationId, record.type, record.content, record.fileIds, record.sequenceNumber);
+    return this.validateMessageInputLike(record.conversationId, record.type, record.content, record.sequenceNumber);
   }
 
-  private validateMessageInputLike(
-    conversationId: string,
-    type: LLMMessageType,
-    content: string,
-    fileIds: ReadonlyArray<string>,
-    sequenceNumber?: number,
-  ): Result<void, ValidationError> {
+  private validateMessageInputLike(conversationId: string, type: LLMMessageType, content: string, sequenceNumber?: number): Result<void, ValidationError> {
     const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
 
     if (!conversationIdResult.ok) {
@@ -48,18 +42,6 @@ export class MessageContentDomainService {
 
     if (typeof content !== "string") {
       return failure(new ValidationError("content", "content must be a string."));
-    }
-
-    if (!Array.isArray(fileIds)) {
-      return failure(new ValidationError("fileIds", "fileIds must be an array."));
-    }
-
-    for (const fileId of fileIds) {
-      const fileIdResult = this.genericValidationService.requireNonEmptyString(fileId, "fileIds");
-
-      if (!fileIdResult.ok) {
-        return fileIdResult;
-      }
     }
 
     return success(undefined);

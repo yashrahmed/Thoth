@@ -106,7 +106,7 @@ class AppendMsgToConversationRequest {
 ## Notes
 
 - File ownership is modeled explicitly through `thoth.files.message_id`.
-- Message attachments are resolved by querying files on a message, not by reading `messages.file_ids`.
+- Message attachments are resolved by querying files on a message through `thoth.files.message_id`.
 - `Attachment` is the request-side upload shape. `File` is the persisted attachment shape.
 
 ## Errors

@@ -34,7 +34,6 @@ export class AppendMessageToConversationFlow {
       conversationId: request.conversationId,
       type: request.type,
       content: request.content,
-      fileIds: [],
     });
 
     if (!createUserMessageResult.ok) {
@@ -72,7 +71,6 @@ export class AppendMessageToConversationFlow {
         conversationId: request.conversationId,
         type: LLMMessageType.Assistant,
         content: llmResult.value.content,
-        fileIds: [],
       }),
       () => undefined,
     );

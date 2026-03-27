@@ -11,7 +11,6 @@ interface MessageRow {
   readonly type: LLMMessageType;
   readonly sequence_number: number;
   readonly content: string;
-  readonly file_ids: string[];
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
 }
@@ -31,7 +30,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          file_ids,
           created_at,
           updated_at
         )
@@ -40,7 +38,6 @@ export class PostgresMessageRepository implements MessageRepository {
           ${record.type},
           ${record.sequenceNumber},
           ${record.content},
-          ${record.fileIds as string[]},
           ${record.createdAt.toISOString()},
           ${record.updatedAt.toISOString()}
         )
@@ -50,7 +47,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          file_ids,
           created_at,
           updated_at
       `;
@@ -76,7 +72,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -105,7 +100,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -131,7 +125,6 @@ export class PostgresMessageRepository implements MessageRepository {
           type,
           sequence_number,
           content,
-          file_ids,
           created_at,
           updated_at
         from thoth.messages
@@ -213,7 +206,7 @@ function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<
   }
 
   try {
-    return success(new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, row.file_ids, toDate(row.created_at), toDate(row.updated_at)));
+    return success(new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, toDate(row.created_at), toDate(row.updated_at)));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, operation, error.message));

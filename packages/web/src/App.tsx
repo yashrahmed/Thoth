@@ -28,7 +28,6 @@ type ChatMessage = {
   readonly type: "user" | "assistant" | "system" | "tool";
   readonly sequenceNumber: number;
   readonly content: string;
-  readonly fileIds: ReadonlyArray<string>;
   readonly files: ReadonlyArray<ChatFile>;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -408,8 +407,6 @@ export function App() {
               <EmptyState title="No messages yet" body="Send the first prompt to start the thread." />
             ) : (
               messages.map((message) => {
-                const attachmentIds = message.fileIds.length > 0 ? message.fileIds : message.files.map((file) => file.id);
-
                 return (
                   <article key={message.id} style={message.type === "user" ? userBubbleWrapStyle : assistantBubbleWrapStyle}>
                     <div style={message.type === "user" ? userBubbleStyle : assistantBubbleStyle}>
@@ -418,11 +415,11 @@ export function App() {
                         <span>#{message.sequenceNumber}</span>
                       </div>
                       {message.content ? <p style={messageTextStyle}>{message.content}</p> : null}
-                      {attachmentIds.length > 0 ? (
+                      {message.files.length > 0 ? (
                         <div style={fileListStyle}>
                           <p style={attachmentLabelStyle}>Attachments</p>
-                          {attachmentIds.map((fileId) => (
-                            <FileAttachmentView key={fileId} fileId={fileId} files={message.files} />
+                          {message.files.map((file) => (
+                            <FileAttachmentView key={file.id} file={file} />
                           ))}
                         </div>
                       ) : null}
@@ -504,13 +501,8 @@ function EmptyState(props: { readonly title: string; readonly body: string }) {
   );
 }
 
-function FileAttachmentView(props: { readonly fileId: string; readonly files: ReadonlyArray<ChatFile> }) {
-  const file = props.files.find((item) => item.id === props.fileId);
-
-  if (!file) {
-    return <span style={missingFileChipStyle}>Attachment unavailable</span>;
-  }
-
+function FileAttachmentView(props: { readonly file: ChatFile }) {
+  const file = props.file;
   const url = new URL(file.canonicalUrl, CONV_AGENT_URL).toString();
 
   if (file.mimeType.startsWith("image/")) {
@@ -946,12 +938,6 @@ const fileChipStyle: React.CSSProperties = {
   borderRadius: "999px",
   background: "rgba(255, 255, 255, 0.1)",
   textDecoration: "none",
-};
-
-const missingFileChipStyle: React.CSSProperties = {
-  ...fileChipStyle,
-  color: "rgba(247, 241, 232, 0.74)",
-  cursor: "default",
 };
 
 const composerStyle: React.CSSProperties = {

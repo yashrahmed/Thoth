@@ -75,7 +75,6 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
       expect(firstPage.items[index]?.type).toBe(expectedType);
       expect(firstPage.items[index]?.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
       if (expectedType === "user") {
-        expect(firstPage.items[index]?.fileIds).toEqual([expect.any(String)]);
         expect(firstPage.items[index]?.files).toHaveLength(1);
         expect(firstPage.items[index]?.files[0]).toMatchObject({
           filename: "lambo.jpg",
@@ -83,7 +82,6 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
           sizeInBytes: imageBytes.byteLength,
         });
       } else {
-        expect(firstPage.items[index]?.fileIds).toEqual([]);
         expect(firstPage.items[index]?.files).toEqual([]);
       }
     }
@@ -108,7 +106,6 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
       expect(secondPage.items[index]?.type).toBe(expectedType);
       expect(secondPage.items[index]?.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
       if (expectedType === "user") {
-        expect(secondPage.items[index]?.fileIds).toEqual([expect.any(String)]);
         expect(secondPage.items[index]?.files).toHaveLength(1);
         expect(secondPage.items[index]?.files[0]).toMatchObject({
           filename: "lambo.jpg",
@@ -116,7 +113,6 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
           sizeInBytes: imageBytes.byteLength,
         });
       } else {
-        expect(secondPage.items[index]?.fileIds).toEqual([]);
         expect(secondPage.items[index]?.files).toEqual([]);
       }
     }

@@ -80,7 +80,6 @@ export class MessageDomainService {
         type: request.type,
         sequenceNumber: count + 1,
         content: request.content,
-        fileIds: request.fileIds,
         createdAt: timestamp,
         updatedAt: timestamp,
       });

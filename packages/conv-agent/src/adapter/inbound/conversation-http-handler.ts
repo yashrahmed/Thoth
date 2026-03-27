@@ -183,7 +183,6 @@ function toMessageResponse(message: MessageWithFiles) {
     type: message.type,
     sequenceNumber: message.sequenceNumber,
     content: message.content,
-    fileIds: message.files.map((file) => file.id),
     files: message.files.map((file) => ({
       id: file.id,
       canonicalUrl: file.canonicalUrl,

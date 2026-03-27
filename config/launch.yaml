@@ -1,4 +1,4 @@
-# Local launch config for `scripts/launch-all-servers-local.sh`.
+# Local launch config for `scripts/launch-all.sh`.
 # Each runtime reads its own config block via `CONFIG_FILE`.
 
 proxy:

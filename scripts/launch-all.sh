@@ -10,7 +10,7 @@ CONFIG_PATH="$REPO_ROOT/config/launch.yaml"
 COMMAND="${1:-}"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop|restart>"
+  echo "Usage: ./scripts/launch-all.sh <start|stop>"
   exit 1
 fi
 
@@ -85,7 +85,7 @@ start_service() {
   port_pids="$(lsof -ti tcp:"$service_port" || true)"
   if [ -n "$port_pids" ]; then
     echo "$service_name could not start because port $service_port is already in use."
-    echo "Run ./scripts/launch-all-servers-local.sh restart to replace the existing process."
+    echo "Run ./scripts/launch-all.sh start to replace the existing process."
     exit 1
   fi
 
@@ -130,22 +130,29 @@ require_config() {
   fi
 }
 
+start_database() {
+  "$SCRIPT_DIR/db-local.sh" start
+}
+
+stop_database() {
+  "$SCRIPT_DIR/db-local.sh" stop
+}
+
 case "$COMMAND" in
-  start|restart)
+  start)
     require_config
-
-    if [ "$COMMAND" = "restart" ]; then
-      stop_all_services
-    fi
-
+    stop_all_services
+    stop_database
+    start_database
     start_all_services
     ;;
   stop)
     stop_all_services
+    stop_database
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./scripts/launch-all-servers-local.sh <start|stop|restart>"
+    echo "Usage: ./scripts/launch-all.sh <start|stop>"
     exit 1
     ;;
 esac

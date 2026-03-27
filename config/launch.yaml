@@ -11,7 +11,7 @@ convAgent:
     endpoint: https://61caa9d56c5a0143bfda0f07fd01088a.r2.cloudflarestorage.com
     bucket: thoth-obj-store-dev
     region: auto
-    folder: conversations
+    folder: conv-agent
 
 kbCurateAgent:
   port: 3002

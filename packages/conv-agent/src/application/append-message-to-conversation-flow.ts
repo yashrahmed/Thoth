@@ -1,8 +1,8 @@
 import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import type { LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
-import { map, type Result } from "../domain/objects/result";
+import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
+import { failure, map, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES, LLMMessageType } from "../domain/objects/llm";
 import { type LlmDomainService } from "../domain/services/llm-domain-service";
 import { type AppendMessageRequest } from "../domain/objects/append-message-request";
@@ -26,9 +26,24 @@ export class AppendMessageToConversationFlow {
       return conversationResult;
     }
 
+    if (request.content.trim().length === 0 && request.attachments.length === 0) {
+      return failure(new ValidationError("content", "content must be a non-empty string when no files are attached."));
+    }
+
+    const createUserMessageResult = await this.messageDomainService.createNextMessage({
+      conversationId: request.conversationId,
+      type: request.type,
+      content: request.content,
+      fileIds: [],
+    });
+
+    if (!createUserMessageResult.ok) {
+      return createUserMessageResult;
+    }
+
     const uploadFilesResult = await this.fileDomainService.uploadFiles({
       files: request.attachments.map((attachment) => ({
-        conversationId: request.conversationId,
+        messageId: createUserMessageResult.value.id,
         content: attachment.content,
         filename: attachment.filename,
         mimeType: attachment.mimeType,
@@ -36,18 +51,8 @@ export class AppendMessageToConversationFlow {
     });
 
     if (!uploadFilesResult.ok) {
-      return uploadFilesResult;
-    }
-
-    const createUserMessageResult = await this.messageDomainService.createNextMessage({
-      conversationId: request.conversationId,
-      type: request.type,
-      content: request.content,
-      fileIds: uploadFilesResult.value.map((file) => file.id),
-    });
-
-    if (!createUserMessageResult.ok) {
-      return createUserMessageResult;
+      const deleteUserMessageResult = await this.messageDomainService.delete(createUserMessageResult.value.id);
+      return deleteUserMessageResult.ok ? uploadFilesResult : deleteUserMessageResult;
     }
 
     const allMessagesResult = await this.messageDomainService.findAll(request.conversationId);

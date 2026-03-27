@@ -6,6 +6,7 @@ import type { PostgresDatabase } from "./postgres-database";
 
 interface FileRow {
   readonly id: string;
+  readonly message_id: string;
   readonly canonical_url: string;
   readonly filename: string;
   readonly mime_type: string;
@@ -21,6 +22,7 @@ export class PostgresFileRepository implements FileRepository {
     try {
       const rows = await this.sql<FileRow[]>`
         insert into thoth.files (
+          message_id,
           canonical_url,
           filename,
           mime_type,
@@ -29,6 +31,7 @@ export class PostgresFileRepository implements FileRepository {
           updated_at
         )
         values (
+          ${record.messageId},
           ${record.canonicalUrl},
           ${record.filename},
           ${record.mimeType},
@@ -38,6 +41,7 @@ export class PostgresFileRepository implements FileRepository {
         )
         returning
           id,
+          message_id,
           canonical_url,
           filename,
           mime_type,
@@ -57,6 +61,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
+          message_id,
           canonical_url,
           filename,
           mime_type,
@@ -88,6 +93,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
+          message_id,
           canonical_url,
           filename,
           mime_type,
@@ -96,6 +102,33 @@ export class PostgresFileRepository implements FileRepository {
           updated_at
         from thoth.files
         where id = any(${ids as string[]})
+      `;
+
+      return mapRows(rows, StoreOperation.Read);
+    } catch (error) {
+      return failure(new StoreError(EntityType.File, StoreOperation.Read, getErrorMessage(error)));
+    }
+  }
+
+  async selectFileRowsByMessageIds(messageIds: ReadonlyArray<string>): Promise<Result<File[], StoreError>> {
+    if (messageIds.length === 0) {
+      return success([]);
+    }
+
+    try {
+      const rows = await this.sql<FileRow[]>`
+        select
+          id,
+          message_id,
+          canonical_url,
+          filename,
+          mime_type,
+          size_in_bytes,
+          created_at,
+          updated_at
+        from thoth.files
+        where message_id = any(${messageIds as string[]})
+        order by created_at asc, id asc
       `;
 
       return mapRows(rows, StoreOperation.Read);
@@ -132,6 +165,23 @@ export class PostgresFileRepository implements FileRepository {
       return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
+
+  async deleteFileRowsByMessageIds(messageIds: ReadonlyArray<string>): Promise<Result<void, StoreError>> {
+    if (messageIds.length === 0) {
+      return success(undefined);
+    }
+
+    try {
+      await this.sql`
+        delete from thoth.files
+        where message_id = any(${messageIds as string[]})
+      `;
+
+      return success(undefined);
+    } catch (error) {
+      return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
+    }
+  }
 }
 
 function mapRows(rows: FileRow[], operation: StoreOperation): Result<File[], StoreError> {
@@ -156,7 +206,7 @@ function mapRow(row: FileRow | undefined, operation: StoreOperation): Result<Fil
   }
 
   try {
-    return success(new File(row.id, row.canonical_url, row.filename, row.mime_type, row.size_in_bytes, toDate(row.created_at), toDate(row.updated_at)));
+    return success(new File(row.id, row.message_id, row.canonical_url, row.filename, row.mime_type, row.size_in_bytes, toDate(row.created_at), toDate(row.updated_at)));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.File, operation, error.message));

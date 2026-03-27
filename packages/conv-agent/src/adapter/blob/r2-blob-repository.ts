@@ -16,7 +16,7 @@ interface R2BlobCredentials {
   readonly secretAccessKey: string;
 }
 
-const CONVERSATIONS_CANONICAL_PATH_PREFIX = "/conversations/";
+const FILES_CANONICAL_PATH_PREFIX = "/files/";
 
 enum BlobRequestMethod {
   Put = "PUT",
@@ -29,13 +29,8 @@ export class R2BlobRepository implements BlobRepository {
     private readonly credentials: R2BlobCredentials,
   ) {}
 
-  async putBlob(request: {
-    readonly conversationId: string;
-    readonly content: ArrayBuffer;
-    readonly filename: string;
-    readonly mimeType: string;
-  }): Promise<Result<string, StoreError>> {
-    const canonicalPath = this.getCanonicalPath(request.conversationId, request.filename);
+  async putBlob(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, StoreError>> {
+    const canonicalPath = this.getCanonicalPath(request.filename);
     const objectKey = this.getObjectKey(canonicalPath);
 
     try {
@@ -116,13 +111,13 @@ export class R2BlobRepository implements BlobRepository {
     });
   }
 
-  private getCanonicalPath(conversationId: string, filename: string): string {
-    return `${CONVERSATIONS_CANONICAL_PATH_PREFIX}${encodePathSegment(conversationId)}/${randomUUID()}-${sanitizeFilename(filename)}`;
+  private getCanonicalPath(filename: string): string {
+    return `${FILES_CANONICAL_PATH_PREFIX}${randomUUID()}-${sanitizeFilename(filename)}`;
   }
 
   private getObjectKey(canonicalPath: string): string {
-    if (!canonicalPath.startsWith(CONVERSATIONS_CANONICAL_PATH_PREFIX)) {
-      throw new Error("Blob canonical path must start with /conversations/.");
+    if (!canonicalPath.startsWith(FILES_CANONICAL_PATH_PREFIX)) {
+      throw new Error("Blob canonical path must start with /files/.");
     }
 
     const trimmedFolder = trimSlashes(this.config.folder);

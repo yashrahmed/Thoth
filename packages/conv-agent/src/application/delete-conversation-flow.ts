@@ -25,9 +25,9 @@ export class DeleteConversationFlow {
       return messagesResult;
     }
 
-    const allFileIds = [...new Set(messagesResult.value.flatMap((message) => message.fileIds))];
-
-    const deleteFilesResult = await this.fileDomainService.deleteFiles({ fileIds: allFileIds });
+    const deleteFilesResult = await this.fileDomainService.deleteFilesOnMessages({
+      messageIds: messagesResult.value.map((message) => message.id),
+    });
 
     if (!deleteFilesResult.ok) {
       return deleteFilesResult;

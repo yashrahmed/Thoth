@@ -62,10 +62,6 @@ export class MessageContentDomainService {
       }
     }
 
-    if (content.trim().length === 0 && fileIds.length === 0) {
-      return failure(new ValidationError("content", "content must be a non-empty string when no files are attached."));
-    }
-
     return success(undefined);
   }
 }

@@ -65,14 +65,15 @@ async function renderMessagesAsPrompt(messages: ReadonlyArray<Message>, fileRepo
     return "No conversation context available.";
   }
 
-  const filesById = await loadFilesById(messages, fileRepository);
+  const filesByMessageId = await loadFilesByMessageId(messages, fileRepository);
 
   return messages
     .map((message) => {
       const contentLines = message.content.trim().length > 0 ? [message.content] : [];
+      const files = filesByMessageId.get(message.id) ?? [];
 
-      if (message.fileIds.length > 0) {
-        contentLines.push(...message.fileIds.map((fileId) => renderAttachment(fileId, filesById.get(fileId))));
+      if (files.length > 0) {
+        contentLines.push(...files.map((file) => renderAttachment(file)));
       }
 
       const content = contentLines.join("\n").trim();
@@ -82,31 +83,34 @@ async function renderMessagesAsPrompt(messages: ReadonlyArray<Message>, fileRepo
     .join("\n\n");
 }
 
-async function loadFilesById(messages: ReadonlyArray<Message>, fileRepository?: FileRepository): Promise<Map<string, File>> {
-  const fileIds = [...new Set(messages.flatMap((message) => message.fileIds))];
+async function loadFilesByMessageId(messages: ReadonlyArray<Message>, fileRepository?: FileRepository): Promise<Map<string, File[]>> {
+  const messageIds = messages.map((message) => message.id);
 
-  if (!fileRepository || fileIds.length === 0) {
+  if (!fileRepository || messageIds.length === 0) {
     return new Map();
   }
 
-  const filesResult = await fileRepository.selectFileRows(fileIds);
+  const filesResult = await fileRepository.selectFileRowsByMessageIds(messageIds);
 
   if (!filesResult.ok) {
     throw new Error(filesResult.error.message);
   }
 
-  return new Map(filesResult.value.map((file) => [file.id, file]));
+  const filesByMessageId = new Map<string, File[]>();
+
+  for (const file of filesResult.value) {
+    const existingFiles = filesByMessageId.get(file.messageId) ?? [];
+    filesByMessageId.set(file.messageId, [...existingFiles, file]);
+  }
+
+  return filesByMessageId;
 }
 
 function renderRoleLabel(type: LLMMessageType): string {
   return `[${type.toUpperCase()}]`;
 }
 
-function renderAttachment(fileId: string, file: File | undefined): string {
-  if (!file) {
-    return `[attachment id=${fileId}]`;
-  }
-
+function renderAttachment(file: File): string {
   return `[${inferAttachmentKind(file.mimeType)} id=${file.id} filename=${file.filename} mimeType=${file.mimeType} url=${file.canonicalUrl}]`;
 }
 

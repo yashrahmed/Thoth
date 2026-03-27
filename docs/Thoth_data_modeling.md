@@ -47,13 +47,13 @@ class Message {
   type: LLMMessageType;
   sequence_number: number;
   content: string;
-  file_ids: string[];
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
 
 class File {
   id: string;
+  message_id: string;
   canonical_url: string;
   filename: string;
   mime_type: string;
@@ -68,7 +68,7 @@ class Attachment {
   mimeType: string;
 }
 
-type CreateMessageInput = Pick<Message, "conversationId" | "type" | "content" | "fileIds">;
+type CreateMessageInput = Pick<Message, "conversationId" | "type" | "content">;
 
 type GetMessagesResponse = Message & { files: File[] };
 ```
@@ -102,6 +102,12 @@ class AppendMsgToConversationRequest {
   type: LLMMessageType;
 }
 ```
+
+## Notes
+
+- File ownership is modeled explicitly through `thoth.files.message_id`.
+- Message attachments are resolved by querying files on a message, not by reading `messages.file_ids`.
+- `Attachment` is the request-side upload shape. `File` is the persisted attachment shape.
 
 ## Errors
 

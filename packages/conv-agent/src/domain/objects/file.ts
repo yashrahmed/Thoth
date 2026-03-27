@@ -1,5 +1,6 @@
 export class File {
   readonly id: string;
+  readonly messageId: string;
   readonly canonicalUrl: string;
   readonly filename: string;
   readonly mimeType: string;
@@ -7,8 +8,9 @@ export class File {
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
-  constructor(id: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, createdAt: Date, updatedAt: Date) {
+  constructor(id: string, messageId: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, createdAt: Date, updatedAt: Date) {
     this.id = id;
+    this.messageId = messageId;
     this.canonicalUrl = canonicalUrl;
     this.filename = filename;
     this.mimeType = mimeType;

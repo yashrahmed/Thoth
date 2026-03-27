@@ -46,21 +46,25 @@ export class GetMessagesOnConversationFlow {
     }
 
     const relevantMessages = messagesResult.value.filter((m) => m.type === LLMMessageType.User || m.type === LLMMessageType.Assistant);
-
-    const allFileIds = [...new Set(relevantMessages.flatMap((message) => message.fileIds))];
-
-    const filesResult = await this.fileDomainService.getFiles({ fileIds: allFileIds });
+    const filesResult = await this.fileDomainService.getFilesOnMessages({
+      messageIds: relevantMessages.map((message) => message.id),
+    });
 
     if (!filesResult.ok) {
       return filesResult;
     }
 
-    const filesById = new Map(filesResult.value.map((file) => [file.id, file]));
+    const filesByMessageId = new Map<string, typeof filesResult.value>();
+
+    for (const file of filesResult.value) {
+      const existingFiles = filesByMessageId.get(file.messageId) ?? [];
+      filesByMessageId.set(file.messageId, [...existingFiles, file]);
+    }
 
     return success(
       relevantMessages.map((message) => ({
         ...message,
-        files: message.fileIds.map((id) => filesById.get(id)).filter((file): file is NonNullable<typeof file> => file !== undefined),
+        files: filesByMessageId.get(message.id) ?? [],
       })),
     );
   }

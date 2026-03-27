@@ -25,7 +25,7 @@ import { GetMessagesOnConversationFlow } from "./application/get-messages-on-con
 import { ListConversationsFlow } from "./application/list-conversations-flow";
 
 describe("message validation", () => {
-  test("MessageContentDomainService validates message input by role", () => {
+  test("MessageContentDomainService allows empty persisted content now that attachment presence is validated at the flow boundary", () => {
     const messageContentDomainService = new MessageContentDomainService();
     const validUserInput = {
       conversationId: "conversation-1",
@@ -33,7 +33,7 @@ describe("message validation", () => {
       content: "hello",
       fileIds: ["file-1"],
     };
-    const invalidAssistantInput = {
+    const emptyAssistantInput = {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       content: "",
@@ -44,17 +44,13 @@ describe("message validation", () => {
       ok: true,
       value: undefined,
     });
-    expect(messageContentDomainService.validateMessageInput(invalidAssistantInput)).toEqual({
-      ok: false,
-      error: {
-        kind: "ValidationError",
-        fieldName: "content",
-        message: "content must be a non-empty string when no files are attached.",
-      },
+    expect(messageContentDomainService.validateMessageInput(emptyAssistantInput)).toEqual({
+      ok: true,
+      value: undefined,
     });
   });
 
-  test("MessageContentDomainService validates next message input", () => {
+  test("MessageContentDomainService still validates file id structure", () => {
     const messageContentDomainService = new MessageContentDomainService();
     const validToolInput = {
       conversationId: "conversation-1",
@@ -65,8 +61,8 @@ describe("message validation", () => {
     const invalidToolInput = {
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
-      content: "",
-      fileIds: [],
+      content: "tool output",
+      fileIds: [""],
     };
 
     expect(messageContentDomainService.validateMessageInput(validToolInput).ok).toBe(true);
@@ -74,13 +70,13 @@ describe("message validation", () => {
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "content",
-        message: "content must be a non-empty string when no files are attached.",
+        fieldName: "fileIds",
+        message: "fileIds must be a non-empty string.",
       },
     });
   });
 
-  test("MessageContentDomainService validates persisted content", () => {
+  test("MessageContentDomainService validates persisted message structure", () => {
     const messageContentDomainService = new MessageContentDomainService();
     const validRecord: Omit<Message, "id"> = {
       conversationId: "conversation-1",
@@ -95,8 +91,8 @@ describe("message validation", () => {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
       sequenceNumber: 2,
-      content: "",
-      fileIds: [],
+      content: "hello",
+      fileIds: [""],
       createdAt: new Date("2026-03-16T12:00:00.000Z"),
       updatedAt: new Date("2026-03-16T12:00:00.000Z"),
     };
@@ -106,8 +102,8 @@ describe("message validation", () => {
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "content",
-        message: "content must be a non-empty string when no files are attached.",
+        fieldName: "fileIds",
+        message: "fileIds must be a non-empty string.",
       },
     });
   });
@@ -115,13 +111,13 @@ describe("message validation", () => {
   test("FileDomainService validates required upload fields", async () => {
     const fileDomainService = new FileDomainService(new InMemoryFileRepository(), new BlobDomainService(new InMemoryBlobRepository()), () => new Date("2026-03-16T12:00:00.000Z"));
     const validInput = {
-      conversationId: "conversation-1",
+      messageId: "message-1",
       content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
       filename: "hello.txt",
       mimeType: "text/plain",
     };
     const invalidInput = {
-      conversationId: "conversation-1",
+      messageId: "message-1",
       content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
       filename: "",
       mimeType: "text/plain",
@@ -162,6 +158,7 @@ describe("message validation", () => {
     repository.seed([
       new StoredFile(
         "file-1",
+        "message-1",
         "/conversations/conversation-1/file-1.png",
         "file-1.png",
         "image/png",
@@ -209,8 +206,8 @@ describe("message validation", () => {
     const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, () => new Date("2026-03-16T12:00:00.000Z"));
     const fileDomainService = new FileDomainService(fileRepository, new BlobDomainService(blobRepository), () => new Date("2026-03-16T12:00:00.000Z"));
 
-    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", ["file-1"], "2026-03-16T12:00:00.000Z")]);
-    fileRepository.seed([mustCreateFile("file-1", "/conversations/conversation-1/file-1.png", "file-1.png", "image/png", 4)]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", [], "2026-03-16T12:00:00.000Z")]);
+    fileRepository.seed([mustCreateFile("file-1", "message-1", "/conversations/conversation-1/file-1.png", "file-1.png", "image/png", 4)]);
 
     const deleteResult = await messageDomainService.deleteMessageWithFiles("message-1", fileDomainService);
 
@@ -359,7 +356,7 @@ describe("createConversationHttpHandler", () => {
       mustCreateMessage("message-2", "conversation-1", LLMMessageType.Assistant, 2, "two", [], "2026-03-16T12:01:00.000Z"),
     ]);
     const fileRepository = new InMemoryFileRepository();
-    fileRepository.seed([mustCreateFile("file-1", "/conversations/conversation-1/file-1-one.png", "one.png", "image/png", 3, "2026-03-16T11:59:00.000Z")]);
+    fileRepository.seed([mustCreateFile("file-1", "message-1", "/conversations/conversation-1/file-1-one.png", "one.png", "image/png", 3, "2026-03-16T11:59:00.000Z")]);
     const handler = buildHandler({
       conversationRepository,
       messageRepository,
@@ -594,7 +591,15 @@ class InMemoryFileRepository implements FileRepository {
   }
 
   async upsertFileRow(record: Omit<StoredFile, "id">) {
-    const file = mustCreateFile(`file-${this.files.size + 1}`, record.canonicalUrl, record.filename, record.mimeType, record.sizeInBytes, record.createdAt.toISOString());
+    const file = mustCreateFile(
+      `file-${this.files.size + 1}`,
+      record.messageId,
+      record.canonicalUrl,
+      record.filename,
+      record.mimeType,
+      record.sizeInBytes,
+      record.createdAt.toISOString(),
+    );
     this.files.set(file.id, file);
     return success(file);
   }
@@ -623,6 +628,12 @@ class InMemoryFileRepository implements FileRepository {
     return success(files);
   }
 
+  async selectFileRowsByMessageIds(messageIds: ReadonlyArray<string>) {
+    const allowedMessageIds = new Set(messageIds);
+
+    return success([...this.files.values()].filter((file) => allowedMessageIds.has(file.messageId)));
+  }
+
   async deleteFileRow(id: string) {
     this.files.delete(id);
     return success(undefined);
@@ -635,11 +646,23 @@ class InMemoryFileRepository implements FileRepository {
 
     return success(undefined);
   }
+
+  async deleteFileRowsByMessageIds(messageIds: ReadonlyArray<string>) {
+    const allowedMessageIds = new Set(messageIds);
+
+    for (const [id, file] of this.files) {
+      if (allowedMessageIds.has(file.messageId)) {
+        this.files.delete(id);
+      }
+    }
+
+    return success(undefined);
+  }
 }
 
 class InMemoryBlobRepository implements BlobRepository {
-  async putBlob(request: { readonly conversationId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }) {
-    const url = `/conversations/${request.conversationId}/file-1-${request.filename}`;
+  async putBlob(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }) {
+    const url = `/files/file-1-${request.filename}`;
     return success(url);
   }
 
@@ -680,6 +703,14 @@ function mustCreateMessage(
   return new Message(id, conversationId, type, sequenceNumber, content, fileIds, new Date(isoTimestamp), new Date(isoTimestamp));
 }
 
-function mustCreateFile(id: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, isoTimestamp = "2026-03-16T12:00:00.000Z"): StoredFile {
-  return new StoredFile(id, canonicalUrl, filename, mimeType, sizeInBytes, new Date(isoTimestamp), new Date(isoTimestamp));
+function mustCreateFile(
+  id: string,
+  messageId: string,
+  canonicalUrl: string,
+  filename: string,
+  mimeType: string,
+  sizeInBytes: number,
+  isoTimestamp = "2026-03-16T12:00:00.000Z",
+): StoredFile {
+  return new StoredFile(id, messageId, canonicalUrl, filename, mimeType, sizeInBytes, new Date(isoTimestamp), new Date(isoTimestamp));
 }

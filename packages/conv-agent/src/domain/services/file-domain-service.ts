@@ -5,7 +5,7 @@ import type { Result } from "../objects/result";
 import { andThenAsync, failure, firstFailure, success, traverseAsync } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
 import { GenericValidationService } from "./generic-validation-service";
-type BlobUploadInput = { readonly conversationId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string };
+type BlobUploadInput = { readonly messageId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string };
 
 export class FileDomainService {
   constructor(
@@ -54,6 +54,38 @@ export class FileDomainService {
 
   async uploadFiles(request: { readonly files: ReadonlyArray<BlobUploadInput> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
     return traverseAsync(request.files, (file) => this.uploadFile(file));
+  }
+
+  async getFilesOnMessages(request: { readonly messageIds: ReadonlyArray<string> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
+    if (request.messageIds.length === 0) {
+      return success([]);
+    }
+
+    const validationResult = firstFailure(...request.messageIds.map((id) => this.genericValidationService.requireNonEmptyString(id, "messageId")));
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
+    const filesResult = await this.fileRepository.selectFileRowsByMessageIds(request.messageIds);
+
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    const files: FileEntity[] = [];
+
+    for (const file of filesResult.value) {
+      const fileValidationResult = this.validateFile(file, StoreOperation.Read);
+
+      if (!fileValidationResult.ok) {
+        return fileValidationResult;
+      }
+
+      files.push(fileValidationResult.value);
+    }
+
+    return success(files);
   }
 
   async deleteFile(fileId: string): Promise<Result<void, NotFoundError | StoreError | ValidationError>> {
@@ -125,10 +157,31 @@ export class FileDomainService {
     return this.fileRepository.deleteFileRows(request.fileIds);
   }
 
+  async deleteFilesOnMessages(request: { readonly messageIds: ReadonlyArray<string> }): Promise<Result<void, ValidationError | StoreError>> {
+    if (request.messageIds.length === 0) {
+      return success(undefined);
+    }
+
+    const filesResult = await this.getFilesOnMessages(request);
+
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    const blobDeleteResult = await traverseAsync(filesResult.value, (file) => this.blobDomainService.delete(file.canonicalUrl));
+
+    if (!blobDeleteResult.ok) {
+      return blobDeleteResult;
+    }
+
+    return this.fileRepository.deleteFileRowsByMessageIds(request.messageIds);
+  }
+
   private buildRecord(request: BlobUploadInput, canonicalUrl: string): Omit<FileEntity, "id"> {
     const timestamp = this.now();
 
     return {
+      messageId: request.messageId,
       canonicalUrl,
       filename: request.filename,
       mimeType: request.mimeType,
@@ -141,7 +194,7 @@ export class FileDomainService {
   private validateBlobUploadInput(request: BlobUploadInput): Result<void, ValidationError> {
     return firstFailure(
       this.genericValidationService.requirePresent(request.content, "content"),
-      this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
+      this.genericValidationService.requireNonEmptyString(request.messageId, "messageId"),
       this.genericValidationService.requireNonEmptyString(request.filename, "filename"),
       this.genericValidationService.requireNonEmptyString(request.mimeType, "mimeType"),
     );
@@ -149,6 +202,7 @@ export class FileDomainService {
 
   private validateFileRecord(record: Omit<FileEntity, "id">): Result<void, ValidationError> {
     return firstFailure(
+      this.genericValidationService.requireNonEmptyString(record.messageId, "messageId"),
       this.genericValidationService.requireNonEmptyString(record.canonicalUrl, "canonicalUrl"),
       this.genericValidationService.requireNonEmptyString(record.filename, "filename"),
       this.genericValidationService.requireNonEmptyString(record.mimeType, "mimeType"),
@@ -161,6 +215,7 @@ export class FileDomainService {
   private validateFile(file: FileEntity, operation: StoreOperation): Result<FileEntity, StoreError> {
     const validationResult = firstFailure(
       this.genericValidationService.requireNonEmptyString(file.id, "id"),
+      this.genericValidationService.requireNonEmptyString(file.messageId, "messageId"),
       this.genericValidationService.requireNonEmptyString(file.canonicalUrl, "canonicalUrl"),
       this.genericValidationService.requireNonEmptyString(file.filename, "filename"),
       this.genericValidationService.requireNonEmptyString(file.mimeType, "mimeType"),

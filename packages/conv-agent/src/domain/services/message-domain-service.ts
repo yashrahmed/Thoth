@@ -2,7 +2,7 @@ import type { MessageRepository } from "../contracts/message-repository";
 import type { CreateMessageInput, Message } from "../objects/message";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { andThenAsync, traverseAsync } from "../objects/result";
+import { andThenAsync } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
 import { GenericValidationService } from "./generic-validation-service";
 import type { MessageContentDomainService } from "./message-content-domain-service";
@@ -60,7 +60,7 @@ export class MessageDomainService {
       return messageResult;
     }
 
-    return andThenAsync(await traverseAsync(messageResult.value.fileIds, (fileId) => fileDomainService.deleteFile(fileId)), () => this.delete(messageId));
+    return andThenAsync(await fileDomainService.deleteFilesOnMessages({ messageIds: [messageResult.value.id] }), () => this.delete(messageId));
   }
 
   async createNextMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {

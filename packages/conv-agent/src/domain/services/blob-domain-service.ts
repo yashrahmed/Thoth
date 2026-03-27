@@ -10,12 +10,7 @@ export class BlobDomainService {
     private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
   ) {}
 
-  async upload(request: {
-    readonly conversationId: string;
-    readonly content: ArrayBuffer;
-    readonly filename: string;
-    readonly mimeType: string;
-  }): Promise<Result<string, ValidationError | StoreError>> {
+  async upload(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, ValidationError | StoreError>> {
     return this.blobRepository.putBlob(request);
   }
 

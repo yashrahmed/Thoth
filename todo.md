@@ -1,6 +1,17 @@
-1. Set up the repository layer for object storage. See [blob-store-plan.md](/Users/yashrahmed/Documents/personal-github-repos/Thoth/blob-store-plan.md).
-2. Try out the servers with a test frontend.
-3. Figure out auth and whether it is easier to make the system inherently multi-tenant. Even though it is a personal assistant, it runs remotely, so it still needs some form of auth.
-4. Add repository integration tests that verify conversation and message persistence stays aligned with the Flyway schema.
-5. Define the first public planning-agent inputs and outputs.
-6. Connect planning-agent to conv-agent via tool invocation.
+Immediate -
+1. Examine transactions. ****
+2. Examine async usage.
+3. Examine outbox for file uploads. *****
+4. Examine async options for LLM completion.
+5. Trials for Google Auth. 
+6. Deployment trials on Cloudflare.
+
+Big picture -
+1. Learn and try (Quint Lang)[https://quint-lang.org/docs/getting-started]. Use spec modeling to define temporal behaviors.
+2. Extend #1 via temporal logic.
+3. Encoding world models (for app behavior and changes) via integration tests.
+4. Learn ways to maintain a history of changes.
+5. Supporting server side rendering of content.
+
+Open Question -
+1. How do I improve LLM planning? - I do not have an answer as of now. Manual intervention and planning code placement myself is the only way.

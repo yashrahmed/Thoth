@@ -6,6 +6,7 @@ Immediate -
 5. Trials for Google Auth. 
 6. Deployment trials on Cloudflare.
 7. Integrate an actual LLM and make it useful at least locally.
+8. Experiment to visualize the app's structure.
 
 Big picture -
 1. Learn and try (Quint Lang)[https://quint-lang.org/docs/getting-started]. Use spec modeling to define temporal behaviors.
@@ -16,4 +17,6 @@ Big picture -
 6. Supporting Oauth and multitenancy.
 
 Open Question -
-1. How do I improve LLM planning? - I do not have an answer as of now. Manual intervention and planning code placement myself is the only way.
+1. How do I improve LLM planning? 
+   1. I do not have an answer as of now. Manual intervention and planning code placement myself is the only way.
+   2. Increase the bandwidth b/w the LLMs plans and the engineer making it easier to navigate the codebase and understand the machine's intent.

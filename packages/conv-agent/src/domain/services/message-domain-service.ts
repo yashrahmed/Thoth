@@ -2,7 +2,7 @@ import type { MessageRepository } from "../contracts/message-repository";
 import type { CreateMessageInput, Message } from "../objects/message";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { andThenAsync } from "../objects/result";
+import { andThenAsync, firstFailure } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
 import { GenericValidationService } from "./generic-validation-service";
 import type { MessageContentDomainService } from "./message-content-domain-service";
@@ -15,10 +15,6 @@ export class MessageDomainService {
     private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
   ) {}
 
-  async save(record: Omit<Message, "id">): Promise<Result<Message, ValidationError | StoreError>> {
-    return andThenAsync(this.messageContentDomainService.validateMessageRecord(record), () => this.messageRepository.upsertMessageRow(record));
-  }
-
   async findById(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
     return andThenAsync(this.genericValidationService.requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.selectMessageRow(id));
   }
@@ -29,10 +25,6 @@ export class MessageDomainService {
 
   async findAll(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
     return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.selectAllMessagesByConversation(id));
-  }
-
-  async count(conversationId: string): Promise<Result<number, ValidationError | StoreError>> {
-    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.messageRepository.countMessagesByConversation(id));
   }
 
   async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {
@@ -70,19 +62,22 @@ export class MessageDomainService {
       return validationResult;
     }
 
-    const countResult = await this.count(request.conversationId);
+    const timestamp = this.now();
+    const timestampValidationResult = firstFailure(
+      this.genericValidationService.requireValidDate(timestamp, "createdAt"),
+      this.genericValidationService.requireValidDate(timestamp, "updatedAt"),
+    );
 
-    return andThenAsync(countResult, (count) => {
-      const timestamp = this.now();
+    if (!timestampValidationResult.ok) {
+      return timestampValidationResult;
+    }
 
-      return this.save({
-        conversationId: request.conversationId,
-        type: request.type,
-        sequenceNumber: count + 1,
-        content: request.content,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      });
+    return this.messageRepository.insertNextMessageRow({
+      conversationId: request.conversationId,
+      type: request.type,
+      content: request.content,
+      createdAt: timestamp,
+      updatedAt: timestamp,
     });
   }
 }

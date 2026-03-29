@@ -37,29 +37,29 @@ enum StoreOperation {
 ```typescript
 class Conversation {
   id: string;
-  created_at: string; // timestamptz
-  updated_at: string; // timestamptz
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 class Message {
   id: string;
-  conversation_id: string;
+  conversationId: string;
   type: LLMMessageType;
-  sequence_number: number;
+  sequenceNumber: number;
   content: string;
-  created_at: string; // timestamptz
-  updated_at: string; // timestamptz
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 class File {
   id: string;
-  message_id: string;
-  canonical_url: string;
+  messageId: string;
+  canonicalUrl: string;
   filename: string;
-  mime_type: string;
-  size_in_bytes: number;
-  created_at: string; // timestamptz
-  updated_at: string; // timestamptz
+  mimeType: string;
+  sizeInBytes: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 class Attachment {
@@ -70,7 +70,40 @@ class Attachment {
 
 type CreateMessageInput = Pick<Message, "conversationId" | "type" | "content">;
 
+type InsertNextMessageRecord = Omit<Message, "id" | "sequenceNumber">;
+
 type GetMessagesResponse = Message & { files: File[] };
+```
+
+## Persistence Rows
+
+```typescript
+type ConversationRow = {
+  id: string;
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+};
+
+type MessageRow = {
+  id: string;
+  conversation_id: string;
+  type: LLMMessageType;
+  sequence_number: number;
+  content: string;
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+};
+
+type FileRow = {
+  id: string;
+  message_id: string;
+  canonical_url: string;
+  filename: string;
+  mime_type: string;
+  size_in_bytes: number;
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+};
 ```
 
 ## Requests
@@ -108,6 +141,8 @@ class AppendMsgToConversationRequest {
 - File ownership is modeled explicitly through `thoth.files.message_id`.
 - Message attachments are resolved by querying files on a message through `thoth.files.message_id`.
 - `Attachment` is the request-side upload shape. `File` is the persisted attachment shape.
+- `CreateMessageInput` is the application-facing message creation shape.
+- `InsertNextMessageRecord` is the repository write shape used for atomic message insertion.
 
 ## Errors
 

@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
+import { LLMMessageType } from "../domain/objects/llm";
 import { convIntegrationSetup, type ConvIntegrationSetup } from "./conv-agent-it-setup";
 
 const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
@@ -137,6 +139,60 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
     });
   } finally {
     // Clean up the conversation if the test failed before the explicit delete.
+    await deleteConversationIfPresent(startedSetup, conversationId);
+  }
+});
+
+test("allocates message sequence numbers transactionally for concurrent inserts on one conversation", async () => {
+  const startedSetup = requireSetup();
+  let conversationId: string | undefined;
+
+  try {
+    const createResponse = await fetch(new URL("/conversations", startedSetup.server.url), {
+      method: "POST",
+    });
+
+    expect(createResponse.status).toBe(201);
+
+    const createdConversation = (await createResponse.json()) as { readonly id: string };
+    conversationId = createdConversation.id;
+
+    const messageRepository = new PostgresMessageRepository(startedSetup.database);
+    const createdAt = new Date("2026-03-29T12:00:00.000Z");
+
+    const [firstInsertResult, secondInsertResult] = await Promise.all([
+      messageRepository.insertNextMessageRow({
+        conversationId,
+        type: LLMMessageType.User,
+        content: "first",
+        createdAt,
+        updatedAt: createdAt,
+      }),
+      messageRepository.insertNextMessageRow({
+        conversationId,
+        type: LLMMessageType.User,
+        content: "second",
+        createdAt,
+        updatedAt: createdAt,
+      }),
+    ]);
+
+    expect(firstInsertResult.ok).toBe(true);
+    expect(secondInsertResult.ok).toBe(true);
+
+    const messagesResult = await messageRepository.selectAllMessagesByConversation(conversationId);
+
+    expect(messagesResult.ok).toBe(true);
+
+    if (!messagesResult.ok) {
+      throw new Error(messagesResult.error.message);
+    }
+
+    expect(messagesResult.value).toHaveLength(2);
+    expect(messagesResult.value.map((message) => message.sequenceNumber)).toEqual([1, 2]);
+    expect(new Set(messagesResult.value.map((message) => message.id)).size).toBe(2);
+    expect(messagesResult.value.map((message) => message.content).sort()).toEqual(["first", "second"]);
+  } finally {
     await deleteConversationIfPresent(startedSetup, conversationId);
   }
 });

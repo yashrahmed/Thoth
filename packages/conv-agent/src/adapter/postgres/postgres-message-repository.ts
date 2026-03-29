@@ -3,7 +3,7 @@ import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import { Message } from "../../domain/objects/message";
+import { type InsertNextMessageRecord, Message } from "../../domain/objects/message";
 
 interface MessageRow {
   readonly id: string;
@@ -15,47 +15,66 @@ interface MessageRow {
   readonly updated_at: string | Date;
 }
 
-interface CountRow {
-  readonly count: number | string | bigint;
-}
-
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async upsertMessageRow(record: Omit<Message, "id">) {
+  async insertNextMessageRow(record: InsertNextMessageRecord) {
     try {
-      const rows = await this.sql<MessageRow[]>`
-        insert into thoth.messages (
-          conversation_id,
-          type,
-          sequence_number,
-          content,
-          created_at,
-          updated_at
-        )
-        values (
-          ${record.conversationId},
-          ${record.type},
-          ${record.sequenceNumber},
-          ${record.content},
-          ${record.createdAt.toISOString()},
-          ${record.updatedAt.toISOString()}
-        )
-        returning
-          id,
-          conversation_id,
-          type,
-          sequence_number,
-          content,
-          created_at,
-          updated_at
-      `;
+      const row = await this.sql.begin(async (tx) => {
+        const sql = tx as unknown as PostgresDatabase;
 
-      const row = rows[0];
+        const lockedConversationRows = await sql<{ id: string }[]>`
+          select id
+          from thoth.conversations
+          where id = ${record.conversationId}
+          for update
+        `;
 
-      if (!row) {
-        return failure(new StoreError(EntityType.Message, StoreOperation.Persist, "Message row was not returned."));
-      }
+        if (!lockedConversationRows[0]) {
+          throw new Error("Conversation row could not be locked.");
+        }
+
+        const nextSequenceRows = await sql<{ next_sequence_number: number | string | bigint }[]>`
+          select coalesce(max(sequence_number), 0)::int + 1 as next_sequence_number
+          from thoth.messages
+          where conversation_id = ${record.conversationId}
+        `;
+
+        const nextSequenceRow = nextSequenceRows[0];
+
+        if (!nextSequenceRow) {
+          throw new Error("Next message sequence row was not returned.");
+        }
+
+        const rows = await sql<MessageRow[]>`
+          insert into thoth.messages (
+            conversation_id,
+            type,
+            sequence_number,
+            content,
+            created_at,
+            updated_at
+          )
+          values (
+            ${record.conversationId},
+            ${record.type},
+            ${Number(nextSequenceRow.next_sequence_number)},
+            ${record.content},
+            ${record.createdAt.toISOString()},
+            ${record.updatedAt.toISOString()}
+          )
+          returning
+            id,
+            conversation_id,
+            type,
+            sequence_number,
+            content,
+            created_at,
+            updated_at
+        `;
+
+        return rows[0];
+      });
 
       return mapRow(row, StoreOperation.Persist);
     } catch (error) {
@@ -133,26 +152,6 @@ export class PostgresMessageRepository implements MessageRepository {
       `;
 
       return mapRows(rows, StoreOperation.ReadPage);
-    } catch (error) {
-      return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
-    }
-  }
-
-  async countMessagesByConversation(conversationId: string) {
-    try {
-      const rows = await this.sql<CountRow[]>`
-        select count(*)::int as count
-        from thoth.messages
-        where conversation_id = ${conversationId}
-      `;
-
-      const row = rows[0];
-
-      if (!row) {
-        return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, "Message count row was not returned."));
-      }
-
-      return success(Number(row.count));
     } catch (error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }

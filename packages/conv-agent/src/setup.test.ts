@@ -9,7 +9,7 @@ import { Conversation } from "./domain/objects/conversation";
 import { EntityType, LlmError, NotFoundError, StoreOperation, type StoreError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
-import { Message } from "./domain/objects/message";
+import { type InsertNextMessageRecord, Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
@@ -207,6 +207,35 @@ describe("message validation", () => {
     expect(deleteResult.ok).toBe(true);
     expect(messageRepository.get("message-1")).toBeUndefined();
     expect(fileRepository.get("file-1")).toBeUndefined();
+  });
+
+  test("MessageDomainService creates the next message through the repository atomic insert path", async () => {
+    const repository = new AtomicInsertOnlyMessageRepository();
+    const messageDomainService = new MessageDomainService(
+      repository,
+      new MessageContentDomainService(),
+      () => new Date("2026-03-16T12:00:00.000Z"),
+    );
+
+    const result = await messageDomainService.createNextMessage({
+      conversationId: "conversation-1",
+      type: LLMMessageType.User,
+      content: "hello",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z"),
+    });
+    expect(repository.insertedRecords).toEqual([
+      {
+        conversationId: "conversation-1",
+        type: LLMMessageType.User,
+        content: "hello",
+        createdAt: new Date("2026-03-16T12:00:00.000Z"),
+        updatedAt: new Date("2026-03-16T12:00:00.000Z"),
+      },
+    ]);
   });
 });
 
@@ -508,12 +537,16 @@ class InMemoryMessageRepository implements MessageRepository {
     return this.messages.get(messageId);
   }
 
-  async upsertMessageRow(record: Omit<Message, "id">) {
+  async insertNextMessageRow(record: InsertNextMessageRecord) {
+    const nextSequenceNumber =
+      [...this.messages.values()]
+        .filter((message) => message.conversationId === record.conversationId)
+        .reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0) + 1;
     const message = mustCreateMessage(
       `message-${this.messages.size + 1}`,
       record.conversationId,
       record.type,
-      record.sequenceNumber,
+      nextSequenceNumber,
       record.content,
       record.createdAt.toISOString(),
     );
@@ -545,10 +578,6 @@ class InMemoryMessageRepository implements MessageRepository {
     return success([...this.messages.values()].filter((message) => message.conversationId === conversationId));
   }
 
-  async countMessagesByConversation(conversationId: string) {
-    return success([...this.messages.values()].filter((message) => message.conversationId === conversationId).length);
-  }
-
   async deleteMessageRow(messageId: string) {
     this.messages.delete(messageId);
     return success(undefined);
@@ -562,6 +591,41 @@ class InMemoryMessageRepository implements MessageRepository {
     }
 
     return success(undefined);
+  }
+}
+
+class AtomicInsertOnlyMessageRepository implements MessageRepository {
+  readonly insertedRecords: InsertNextMessageRecord[] = [];
+
+  async insertNextMessageRow(record: InsertNextMessageRecord) {
+    this.insertedRecords.push(record);
+    return success(
+      mustCreateMessage("message-1", record.conversationId, record.type, 1, record.content, record.createdAt.toISOString()),
+    );
+  }
+
+  async selectMessageRow(_messageId: string): Promise<Result<Message, NotFoundError | StoreError>> {
+    throw new Error("selectMessageRow should not be called in this test.");
+  }
+
+  async selectMessagePage(_request: {
+    readonly conversationId: string;
+    readonly pageNum: number;
+    readonly pageSize: number;
+  }): Promise<Result<Message[], StoreError>> {
+    throw new Error("selectMessagePage should not be called in this test.");
+  }
+
+  async selectAllMessagesByConversation(_conversationId: string): Promise<Result<Message[], StoreError>> {
+    throw new Error("selectAllMessagesByConversation should not be called in this test.");
+  }
+
+  async deleteMessageRow(_messageId: string): Promise<Result<void, StoreError>> {
+    throw new Error("deleteMessageRow should not be called in this test.");
+  }
+
+  async deleteMessagesByConversation(_conversationId: string): Promise<Result<void, StoreError>> {
+    throw new Error("deleteMessagesByConversation should not be called in this test.");
   }
 }
 

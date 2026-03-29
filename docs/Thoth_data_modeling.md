@@ -8,7 +8,7 @@
 | Message      | thoth.messages      |
 | File         | thoth.files         |
 
-## Enums
+## Core Business Model
 
 ```typescript
 enum LLMMessageType {
@@ -18,23 +18,6 @@ enum LLMMessageType {
   Tool = "tool",
 }
 
-enum EntityType {
-  Conversation = "Conversation",
-  Message = "Message",
-  File = "File",
-}
-
-enum StoreOperation {
-  Persist = "persist",
-  Read = "read",
-  Remove = "remove",
-  ReadPage = "readPage",
-}
-```
-
-## Entities
-
-```typescript
 class Conversation {
   id: string;
   createdAt: Date;
@@ -61,7 +44,11 @@ class File {
   createdAt: Date;
   updatedAt: Date;
 }
+```
 
+## Use-Case Inputs/Outputs
+
+```typescript
 class Attachment {
   content: ArrayBuffer;
   filename: string;
@@ -73,42 +60,7 @@ type CreateMessageInput = Pick<Message, "conversationId" | "type" | "content">;
 type InsertNextMessageRecord = Omit<Message, "id" | "sequenceNumber">;
 
 type GetMessagesResponse = Message & { files: File[] };
-```
 
-## Persistence Rows
-
-```typescript
-type ConversationRow = {
-  id: string;
-  created_at: string; // timestamptz
-  updated_at: string; // timestamptz
-};
-
-type MessageRow = {
-  id: string;
-  conversation_id: string;
-  type: LLMMessageType;
-  sequence_number: number;
-  content: string;
-  created_at: string; // timestamptz
-  updated_at: string; // timestamptz
-};
-
-type FileRow = {
-  id: string;
-  message_id: string;
-  canonical_url: string;
-  filename: string;
-  mime_type: string;
-  size_in_bytes: number;
-  created_at: string; // timestamptz
-  updated_at: string; // timestamptz
-};
-```
-
-## Requests
-
-```typescript
 class GetMessageOnConversationRequest {
   conversation_id: string;
   pageNum: number;
@@ -136,14 +88,6 @@ class AppendMsgToConversationRequest {
 }
 ```
 
-## Notes
-
-- File ownership is modeled explicitly through `thoth.files.message_id`.
-- Message attachments are resolved by querying files on a message through `thoth.files.message_id`.
-- `Attachment` is the request-side upload shape. `File` is the persisted attachment shape.
-- `CreateMessageInput` is the application-facing message creation shape.
-- `InsertNextMessageRecord` is the repository write shape used for atomic message insertion.
-
 ## Errors
 
 ```typescript
@@ -170,4 +114,25 @@ class LlmError {
   kind: string;
   message: string;
 }
+
+enum EntityType {
+  Conversation = "Conversation",
+  Message = "Message",
+  File = "File",
+}
+
+enum StoreOperation {
+  Persist = "persist",
+  Read = "read",
+  Remove = "remove",
+  ReadPage = "readPage",
+}
 ```
+
+## Notes
+
+- File ownership is modeled explicitly through `thoth.files.message_id`.
+- Message attachments are resolved by querying files on a message through `thoth.files.message_id`.
+- `Attachment` is the request-side upload shape. `File` is the persisted attachment shape.
+- `CreateMessageInput` is the application-facing message creation shape.
+- `InsertNextMessageRecord` is the repository write shape used for atomic message insertion.

@@ -1,4 +1,4 @@
-import type { File as FileEntity } from "../objects/file";
+import type { File as FileEntity, UploadedFileMetadata } from "../objects/file";
 import type { FileRepository } from "../contracts/file-repository";
 import { EntityType, NotFoundError, StoreError, StoreOperation, type ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
@@ -6,6 +6,7 @@ import { andThenAsync, failure, firstFailure, success, traverseAsync } from "../
 import type { BlobDomainService } from "./blob-domain-service";
 import { GenericValidationService } from "./generic-validation-service";
 type BlobUploadInput = { readonly messageId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string };
+type BlobOnlyUploadInput = Omit<BlobUploadInput, "messageId">;
 
 export class FileDomainService {
   constructor(
@@ -52,8 +53,36 @@ export class FileDomainService {
     return result.ok ? this.validateFile(result.value, StoreOperation.Persist) : result;
   }
 
+  async uploadBlob(request: BlobOnlyUploadInput): Promise<Result<UploadedFileMetadata, ValidationError | StoreError>> {
+    const validationResult = this.validateBlobOnlyUploadInput(request);
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
+    const blobUploadResult = await this.blobDomainService.upload(request);
+
+    if (!blobUploadResult.ok) {
+      return blobUploadResult;
+    }
+
+    const uploadedFile = {
+      canonicalUrl: blobUploadResult.value,
+      filename: request.filename,
+      mimeType: request.mimeType,
+      sizeInBytes: request.content.byteLength,
+    };
+    const uploadedFileValidationResult = this.validateUploadedFileMetadata(uploadedFile);
+
+    return uploadedFileValidationResult.ok ? success(uploadedFile) : uploadedFileValidationResult;
+  }
+
   async uploadFiles(request: { readonly files: ReadonlyArray<BlobUploadInput> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
     return traverseAsync(request.files, (file) => this.uploadFile(file));
+  }
+
+  async uploadBlobs(request: { readonly files: ReadonlyArray<BlobOnlyUploadInput> }): Promise<Result<ReadonlyArray<UploadedFileMetadata>, ValidationError | StoreError>> {
+    return traverseAsync(request.files, (file) => this.uploadBlob(file));
   }
 
   async getFilesOnMessages(request: { readonly messageIds: ReadonlyArray<string> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
@@ -177,6 +206,22 @@ export class FileDomainService {
     return this.fileRepository.deleteFileRowsByMessageIds(request.messageIds);
   }
 
+  async deleteUploadedBlobs(request: { readonly files: ReadonlyArray<UploadedFileMetadata> }): Promise<Result<void, ValidationError | StoreError>> {
+    if (request.files.length === 0) {
+      return success(undefined);
+    }
+
+    const validationResult = firstFailure(...request.files.map((file) => this.validateUploadedFileMetadata(file)));
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
+    const blobDeleteResult = await traverseAsync(request.files, (file) => this.blobDomainService.delete(file.canonicalUrl));
+
+    return blobDeleteResult.ok ? success(undefined) : blobDeleteResult;
+  }
+
   private buildRecord(request: BlobUploadInput, canonicalUrl: string): Omit<FileEntity, "id"> {
     const timestamp = this.now();
 
@@ -197,6 +242,23 @@ export class FileDomainService {
       this.genericValidationService.requireNonEmptyString(request.messageId, "messageId"),
       this.genericValidationService.requireNonEmptyString(request.filename, "filename"),
       this.genericValidationService.requireNonEmptyString(request.mimeType, "mimeType"),
+    );
+  }
+
+  private validateBlobOnlyUploadInput(request: BlobOnlyUploadInput): Result<void, ValidationError> {
+    return firstFailure(
+      this.genericValidationService.requirePresent(request.content, "content"),
+      this.genericValidationService.requireNonEmptyString(request.filename, "filename"),
+      this.genericValidationService.requireNonEmptyString(request.mimeType, "mimeType"),
+    );
+  }
+
+  private validateUploadedFileMetadata(file: UploadedFileMetadata): Result<void, ValidationError> {
+    return firstFailure(
+      this.genericValidationService.requireNonEmptyString(file.canonicalUrl, "canonicalUrl"),
+      this.genericValidationService.requireNonEmptyString(file.filename, "filename"),
+      this.genericValidationService.requireNonEmptyString(file.mimeType, "mimeType"),
+      this.genericValidationService.requireNonNegativeInteger(file.sizeInBytes, "sizeInBytes"),
     );
   }
 

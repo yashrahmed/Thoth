@@ -1,4 +1,5 @@
 import type { MessageDomainService } from "../domain/services/message-domain-service";
+import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
@@ -14,6 +15,7 @@ export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 export class AppendMessageToConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
+    private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
     private readonly llmDomainService: LlmDomainService,
@@ -30,19 +32,8 @@ export class AppendMessageToConversationFlow {
       return failure(new ValidationError("content", "content must be a non-empty string when no files are attached."));
     }
 
-    const createUserMessageResult = await this.messageDomainService.createNextMessage({
-      conversationId: request.conversationId,
-      type: request.type,
-      content: request.content,
-    });
-
-    if (!createUserMessageResult.ok) {
-      return createUserMessageResult;
-    }
-
-    const uploadFilesResult = await this.fileDomainService.uploadFiles({
+    const uploadFilesResult = await this.fileDomainService.uploadBlobs({
       files: request.attachments.map((attachment) => ({
-        messageId: createUserMessageResult.value.id,
         content: attachment.content,
         filename: attachment.filename,
         mimeType: attachment.mimeType,
@@ -50,8 +41,19 @@ export class AppendMessageToConversationFlow {
     });
 
     if (!uploadFilesResult.ok) {
-      const deleteUserMessageResult = await this.messageDomainService.delete(createUserMessageResult.value.id);
-      return deleteUserMessageResult.ok ? uploadFilesResult : deleteUserMessageResult;
+      return uploadFilesResult;
+    }
+
+    const createUserMessageResult = await this.appendUserMessageDomainService.persistUserMessageWithFiles({
+      conversationId: request.conversationId,
+      type: request.type,
+      content: request.content,
+      files: uploadFilesResult.value,
+    });
+
+    if (!createUserMessageResult.ok) {
+      const deleteUploadedBlobsResult = await this.fileDomainService.deleteUploadedBlobs({ files: uploadFilesResult.value });
+      return deleteUploadedBlobsResult.ok ? createUserMessageResult : deleteUploadedBlobsResult;
     }
 
     const allMessagesResult = await this.messageDomainService.findAll(request.conversationId);

@@ -3,6 +3,7 @@ import { createConversationHttpHandler } from "./adapter/inbound/conversation-ht
 import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";
 import { createPostgresDatabase } from "./adapter/postgres/postgres-database";
 import { PostgresConversationRepository } from "./adapter/postgres/postgres-conversation-repository";
+import { PostgresAppendUserMessageStore } from "./adapter/postgres/postgres-append-user-message-store";
 import { PostgresFileRepository } from "./adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "./adapter/postgres/postgres-message-repository";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
@@ -12,6 +13,7 @@ import { GetConversationFlow } from "./application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "./application/get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "./application/list-conversations-flow";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
+import { AppendUserMessageDomainService } from "./domain/services/append-user-message-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
@@ -45,11 +47,13 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const conversationRepository = new PostgresConversationRepository(database);
     const messageRepository = new PostgresMessageRepository(database);
     const fileRepository = new PostgresFileRepository(database);
+    const appendUserMessageStore = new PostgresAppendUserMessageStore(database);
     const blobRepository = new R2BlobRepository(input.blobStorage, {
       accessKeyId: input.blobStorage.accessKeyId,
       secretAccessKey: input.blobStorage.secretAccessKey,
     });
     const conversationDomainService = new ConversationDomainService(conversationRepository);
+    const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
     const blobDomainService = new BlobDomainService(blobRepository);
     const llmDomainService = new LlmDomainService(new PlaceholderLlmRepository());
     const fileDomainService = new FileDomainService(fileRepository, blobDomainService);
@@ -62,7 +66,13 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         getConversation: new GetConversationFlow(conversationDomainService),
         listConversations: new ListConversationsFlow(conversationDomainService),
         deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
-        appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
+        appendMessageToConversation: new AppendMessageToConversationFlow(
+          conversationDomainService,
+          appendUserMessageDomainService,
+          messageDomainService,
+          fileDomainService,
+          llmDomainService,
+        ),
         getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
       }),
     });

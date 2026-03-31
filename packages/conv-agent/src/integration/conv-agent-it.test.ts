@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
 import { LLMMessageType } from "../domain/objects/llm";
 import { convIntegrationSetup, type ConvIntegrationSetup } from "./conv-agent-it-setup";
@@ -192,6 +193,125 @@ test("allocates message sequence numbers transactionally for concurrent inserts 
     expect(messagesResult.value.map((message) => message.sequenceNumber)).toEqual([1, 2]);
     expect(new Set(messagesResult.value.map((message) => message.id)).size).toBe(2);
     expect(messagesResult.value.map((message) => message.content).sort()).toEqual(["first", "second"]);
+  } finally {
+    await deleteConversationIfPresent(startedSetup, conversationId);
+  }
+});
+
+test("persists one user message plus file rows transactionally through the composite append store", async () => {
+  const startedSetup = requireSetup();
+  let conversationId: string | undefined;
+
+  try {
+    const createResponse = await fetch(new URL("/conversations", startedSetup.server.url), {
+      method: "POST",
+    });
+
+    expect(createResponse.status).toBe(201);
+
+    const createdConversation = (await createResponse.json()) as { readonly id: string };
+    conversationId = createdConversation.id;
+
+    const store = new PostgresAppendUserMessageStore(startedSetup.database);
+    const result = await store.persistUserMessageWithFiles({
+      conversationId,
+      type: LLMMessageType.User,
+      content: "hello",
+      files: [
+        {
+          canonicalUrl: "/files/a.txt",
+          filename: "a.txt",
+          mimeType: "text/plain",
+          sizeInBytes: 1,
+        },
+        {
+          canonicalUrl: "/files/b.txt",
+          filename: "b.txt",
+          mimeType: "text/plain",
+          sizeInBytes: 2,
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.conversationId).toBe(conversationId);
+    expect(result.value.sequenceNumber).toBe(1);
+    expect(result.value.content).toBe("hello");
+
+    const fileRows = await startedSetup.database<{ filename: string; message_id: string }[]>`
+      select filename, message_id
+      from thoth.files
+      where message_id = ${result.value.id}
+      order by filename asc
+    `;
+
+    expect(fileRows).toHaveLength(2);
+    expect(fileRows.map((row) => row.filename)).toEqual(["a.txt", "b.txt"]);
+    expect(new Set(fileRows.map((row) => row.message_id))).toEqual(new Set([result.value.id]));
+  } finally {
+    await deleteConversationIfPresent(startedSetup, conversationId);
+  }
+});
+
+test("rolls back both the user message and file rows when the composite append store fails", async () => {
+  const startedSetup = requireSetup();
+  let conversationId: string | undefined;
+
+  try {
+    const createResponse = await fetch(new URL("/conversations", startedSetup.server.url), {
+      method: "POST",
+    });
+
+    expect(createResponse.status).toBe(201);
+
+    const createdConversation = (await createResponse.json()) as { readonly id: string };
+    conversationId = createdConversation.id;
+
+    const store = new PostgresAppendUserMessageStore(startedSetup.database);
+    const result = await store.persistUserMessageWithFiles({
+      conversationId,
+      type: LLMMessageType.User,
+      content: "hello",
+      files: [
+        {
+          canonicalUrl: "/files/a.txt",
+          filename: "a.txt",
+          mimeType: "text/plain",
+          sizeInBytes: 1,
+        },
+        {
+          canonicalUrl: "/files/overflow.txt",
+          filename: "overflow.txt",
+          mimeType: "text/plain",
+          sizeInBytes: 3_000_000_000,
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+
+    const messageRows = await startedSetup.database<{ count: string }[]>`
+      select count(*)::text as count
+      from thoth.messages
+      where conversation_id = ${conversationId}
+    `;
+    const fileRows = await startedSetup.database<{ count: string }[]>`
+      select count(*)::text as count
+      from thoth.files
+      where message_id in (
+        select id
+        from thoth.messages
+        where conversation_id = ${conversationId}
+      )
+    `;
+
+    expect(messageRows[0]?.count).toBe("0");
+    expect(fileRows[0]?.count).toBe("0");
   } finally {
     await deleteConversationIfPresent(startedSetup, conversationId);
   }

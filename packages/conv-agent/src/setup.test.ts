@@ -1,17 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
+import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "./domain/contracts/append-user-message-store";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
 import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
 import type { ConversationRepository } from "./domain/contracts/conversation-repository";
 import type { FileRepository } from "./domain/contracts/file-repository";
 import type { MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
-import { EntityType, LlmError, NotFoundError, StoreOperation, type StoreError } from "./domain/objects/errors";
+import { EntityType, LlmError, NotFoundError, StoreError, StoreOperation } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
 import { type InsertNextMessageRecord, Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
+import { AppendUserMessageDomainService } from "./domain/services/append-user-message-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
@@ -237,6 +239,133 @@ describe("message validation", () => {
       },
     ]);
   });
+
+  test("AppendMessageToConversationFlow uploads blobs then persists one transactional user message write", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    const appendUserMessageStore = new InMemoryAppendUserMessageStore(messageRepository, fileRepository, () => new Date("2026-03-16T12:00:00.000Z"));
+    const flow = new AppendMessageToConversationFlow(
+      new ConversationDomainService(conversationRepository, () => new Date("2026-03-16T12:00:00.000Z")),
+      new AppendUserMessageDomainService(appendUserMessageStore),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(), () => new Date("2026-03-16T12:00:00.000Z")),
+      new FileDomainService(fileRepository, new BlobDomainService(blobRepository), () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService()),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({
+      conversationId: "conversation-1",
+      type: LLMMessageType.User,
+      content: "hello",
+      attachments: [
+        {
+          content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
+          filename: "hello.txt",
+          mimeType: "text/plain",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(appendUserMessageStore.persistedInputs).toEqual([
+      {
+        conversationId: "conversation-1",
+        type: LLMMessageType.User,
+        content: "hello",
+        files: [
+          {
+            canonicalUrl: "/files/file-1-hello.txt",
+            filename: "hello.txt",
+            mimeType: "text/plain",
+            sizeInBytes: 5,
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("AppendMessageToConversationFlow deletes uploaded blobs when transactional persistence fails", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    const appendUserMessageStore = new FailingAppendUserMessageStore(
+      new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"),
+    );
+    const flow = new AppendMessageToConversationFlow(
+      new ConversationDomainService(conversationRepository, () => new Date("2026-03-16T12:00:00.000Z")),
+      new AppendUserMessageDomainService(appendUserMessageStore),
+      new MessageDomainService(new InMemoryMessageRepository(), new MessageContentDomainService(), () => new Date("2026-03-16T12:00:00.000Z")),
+      new FileDomainService(new InMemoryFileRepository(), new BlobDomainService(blobRepository), () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService()),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({
+      conversationId: "conversation-1",
+      type: LLMMessageType.User,
+      content: "hello",
+      attachments: [
+        {
+          content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
+          filename: "hello.txt",
+          mimeType: "text/plain",
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "StoreError",
+        entityType: EntityType.Message,
+        operation: StoreOperation.Persist,
+        message: "transaction failed",
+      },
+    });
+    expect(blobRepository.deletedUrls).toEqual(["/files/file-1-hello.txt"]);
+  });
+
+  test("AppendMessageToConversationFlow returns blob cleanup failure when transactional persistence and cleanup both fail", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    blobRepository.removeBlobResult = failure(new StoreError(EntityType.File, StoreOperation.Remove, "blob cleanup failed"));
+    const flow = new AppendMessageToConversationFlow(
+      new ConversationDomainService(conversationRepository, () => new Date("2026-03-16T12:00:00.000Z")),
+      new AppendUserMessageDomainService(new FailingAppendUserMessageStore(new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"))),
+      new MessageDomainService(new InMemoryMessageRepository(), new MessageContentDomainService(), () => new Date("2026-03-16T12:00:00.000Z")),
+      new FileDomainService(new InMemoryFileRepository(), new BlobDomainService(blobRepository), () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService()),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({
+      conversationId: "conversation-1",
+      type: LLMMessageType.User,
+      content: "hello",
+      attachments: [
+        {
+          content: new TextEncoder().encode("hello").buffer as ArrayBuffer,
+          filename: "hello.txt",
+          mimeType: "text/plain",
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "StoreError",
+        entityType: EntityType.File,
+        operation: StoreOperation.Remove,
+        message: "blob cleanup failed",
+      },
+    });
+    expect(blobRepository.deletedUrls).toEqual(["/files/file-1-hello.txt"]);
+  });
 });
 
 describe("createConversationHttpHandler", () => {
@@ -446,16 +575,19 @@ function buildHandler(overrides?: {
   readonly conversationRepository?: InMemoryConversationRepository;
   readonly messageRepository?: InMemoryMessageRepository;
   readonly fileRepository?: InMemoryFileRepository;
+  readonly appendUserMessageStore?: AppendUserMessageStore;
   readonly blobRepository?: InMemoryBlobRepository;
   readonly llmCompletionService?: InMemoryLlmCompletionService;
 }) {
   const conversationRepository = overrides?.conversationRepository ?? new InMemoryConversationRepository();
   const messageRepository = overrides?.messageRepository ?? new InMemoryMessageRepository();
   const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
+  const now = () => new Date("2026-03-16T12:00:00.000Z");
+  const appendUserMessageStore = overrides?.appendUserMessageStore ?? new InMemoryAppendUserMessageStore(messageRepository, fileRepository, now);
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
   const llmCompletionService = overrides?.llmCompletionService ?? new InMemoryLlmCompletionService();
-  const now = () => new Date("2026-03-16T12:00:00.000Z");
   const conversationDomainService = new ConversationDomainService(conversationRepository, now);
+  const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
   const blobDomainService = new BlobDomainService(blobRepository);
   const messageContentDomainService = new MessageContentDomainService();
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, now);
@@ -467,7 +599,13 @@ function buildHandler(overrides?: {
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService),
     deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
-    appendMessageToConversation: new AppendMessageToConversationFlow(conversationDomainService, messageDomainService, fileDomainService, llmDomainService),
+    appendMessageToConversation: new AppendMessageToConversationFlow(
+      conversationDomainService,
+      appendUserMessageDomainService,
+      messageDomainService,
+      fileDomainService,
+      llmDomainService,
+    ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
   });
 }
@@ -629,6 +767,60 @@ class AtomicInsertOnlyMessageRepository implements MessageRepository {
   }
 }
 
+class InMemoryAppendUserMessageStore implements AppendUserMessageStore {
+  readonly persistedInputs: PersistUserMessageWithFilesInput[] = [];
+
+  constructor(
+    private readonly messageRepository: InMemoryMessageRepository,
+    private readonly fileRepository: InMemoryFileRepository,
+    private readonly now: () => Date,
+  ) {}
+
+  async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, StoreError>> {
+    this.persistedInputs.push(input);
+    const timestamp = this.now();
+    const messageResult = await this.messageRepository.insertNextMessageRow({
+      conversationId: input.conversationId,
+      type: input.type,
+      content: input.content,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    if (!messageResult.ok) {
+      return messageResult;
+    }
+
+    for (const file of input.files) {
+      const fileResult: Result<StoredFile, StoreError> = await this.fileRepository.upsertFileRow({
+        messageId: messageResult.value.id,
+        canonicalUrl: file.canonicalUrl,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        sizeInBytes: file.sizeInBytes,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+
+      if (fileResult.ok) {
+        continue;
+      }
+
+      return { ok: false, error: fileResult.error };
+    }
+
+    return messageResult;
+  }
+}
+
+class FailingAppendUserMessageStore implements AppendUserMessageStore {
+  constructor(private readonly error: StoreError) {}
+
+  async persistUserMessageWithFiles(_input: PersistUserMessageWithFilesInput): Promise<Result<Message, StoreError>> {
+    return failure(this.error);
+  }
+}
+
 class InMemoryFileRepository implements FileRepository {
   private readonly files = new Map<string, StoredFile>();
 
@@ -644,7 +836,7 @@ class InMemoryFileRepository implements FileRepository {
     return this.files.get(id);
   }
 
-  async upsertFileRow(record: Omit<StoredFile, "id">) {
+  async upsertFileRow(record: Omit<StoredFile, "id">): Promise<Result<StoredFile, StoreError>> {
     const file = mustCreateFile(
       `file-${this.files.size + 1}`,
       record.messageId,
@@ -715,12 +907,21 @@ class InMemoryFileRepository implements FileRepository {
 }
 
 class InMemoryBlobRepository implements BlobRepository {
+  readonly deletedUrls: string[] = [];
+  removeBlobResult: Result<void, StoreError> | null = null;
+
   async putBlob(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }) {
     const url = `/files/file-1-${request.filename}`;
     return success(url);
   }
 
-  async removeBlob(_url: string) {
+  async removeBlob(url: string) {
+    this.deletedUrls.push(url);
+
+    if (this.removeBlobResult) {
+      return this.removeBlobResult;
+    }
+
     return success(undefined);
   }
 }

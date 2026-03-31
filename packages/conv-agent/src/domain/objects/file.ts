@@ -19,3 +19,5 @@ export class File {
     this.updatedAt = updatedAt;
   }
 }
+
+export type UploadedFileMetadata = Pick<File, "canonicalUrl" | "filename" | "mimeType" | "sizeInBytes">;

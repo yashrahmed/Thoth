@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Thoth Conv-Agent Code Map</title>
+  </head>
+  <body>
+    <canvas id="map" aria-label="Interactive conv-agent code map" tabindex="0"></canvas>
+
+    <script>
+      const canvas = document.getElementById("map");
+      const context = canvas.getContext("2d");
+
+      document.body.style.margin = "0";
+      document.body.style.overflow = "hidden";
+      document.body.style.background = "#111111";
+      canvas.style.display = "block";
+      canvas.style.width = "100vw";
+      canvas.style.height = "100vh";
+      canvas.style.outline = "none";
+      canvas.style.cursor = "grab";
+
+      const world = { width: 2400, height: 1600 };
+      const initialCamera = { x: 120, y: 80, width: 2080, height: 1386 };
+      const camera = { ...initialCamera };
+
+      const palette = {
+        bg: "#151515",
+        frameFillTop: "#121212",
+        frameFillBottom: "#0b0b0b",
+        frameStroke: "#f5f4ee",
+        gridMinor: "#242424",
+        gridMajor: "#2f2f2f",
+        accent: "#33b8ff",
+        accentSoft: "rgba(51, 184, 255, 0.2)",
+        accentGlow: "rgba(51, 184, 255, 0.15)",
+        handleStroke: "#ddf6ff",
+        text: "#f8f7f2",
+        textMuted: "#ddd9ce",
+        caption: "#9ab5c3",
+        panel: "rgba(10, 15, 20, 0.82)",
+        panelBorder: "rgba(93, 147, 176, 0.35)",
+        nodeFill: "rgba(255, 255, 255, 0.02)",
+        diamond: "#ffb01c",
+        diamondStroke: "#fff0cb",
+      };
+
+      const nodes = [
+        {
+          id: "create",
+          layer: "APPLICATION FLOW",
+          x: 150,
+          y: 190,
+          width: 280,
+          height: 164,
+          title: ["CreateConversation", "Flow"],
+          lines: [
+            { kind: "desc", text: "Creates timestamps," },
+            { kind: "desc", text: "validates the record," },
+            { kind: "desc", text: "and persists a conversation." },
+          ],
+        },
+        {
+          id: "list",
+          layer: "APPLICATION FLOW",
+          x: 490,
+          y: 190,
+          width: 280,
+          height: 164,
+          title: ["ListConversations", "Flow"],
+          lines: [
+            { kind: "desc", text: "Validates paging," },
+            { kind: "desc", text: "loads a sorted page," },
+            { kind: "desc", text: "and returns newest first." },
+          ],
+        },
+        {
+          id: "getConversation",
+          layer: "APPLICATION FLOW",
+          x: 830,
+          y: 190,
+          width: 280,
+          height: 164,
+          title: ["GetConversation", "Flow"],
+          lines: [
+            { kind: "desc", text: "Validates the id," },
+            { kind: "desc", text: "loads one conversation," },
+            { kind: "desc", text: "and surfaces not-found errors." },
+          ],
+        },
+        {
+          id: "getMessages",
+          layer: "APPLICATION FLOW",
+          x: 1170,
+          y: 190,
+          width: 280,
+          height: 164,
+          title: ["GetMessagesOn", "ConversationFlow"],
+          lines: [
+            { kind: "desc", text: "Validates paging and id," },
+            { kind: "desc", text: "loads messages," },
+            { kind: "desc", text: "then joins attached files." },
+          ],
+        },
+        {
+          id: "append",
+          layer: "APPLICATION FLOW",
+          x: 1510,
+          y: 190,
+          width: 280,
+          height: 164,
+          accentDiamond: true,
+          title: ["AppendMessageTo", "ConversationFlow"],
+          lines: [
+            { kind: "desc", text: "Validates input," },
+            { kind: "desc", text: "uploads files and persists user data," },
+            { kind: "desc", text: "then stores the assistant reply." },
+          ],
+        },
+        {
+          id: "delete",
+          layer: "APPLICATION FLOW",
+          x: 1850,
+          y: 190,
+          width: 280,
+          height: 164,
+          title: ["DeleteConversation", "Flow"],
+          lines: [
+            { kind: "desc", text: "Deletes the stored graph," },
+            { kind: "desc", text: "collects canonical URLs," },
+            { kind: "desc", text: "and removes blobs afterward." },
+          ],
+        },
+        {
+          id: "conversationDomain",
+          layer: "DOMAIN SERVICE",
+          x: 145,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["ConversationDomain", "Service"],
+          lines: [
+            { kind: "bullet", text: "validate ids and timestamps" },
+            { kind: "bullet", text: "create, fetch, and page convos" },
+            { kind: "bullet", text: "call ConversationRepository" },
+          ],
+        },
+        {
+          id: "appendUserDomain",
+          layer: "DOMAIN SERVICE",
+          x: 400,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["AppendUserMessage", "DomainService"],
+          lines: [
+            { kind: "bullet", text: "accept uploaded file metadata" },
+            { kind: "bullet", text: "persist one user message + files" },
+            { kind: "bullet", text: "call AppendUserMessageStore" },
+          ],
+        },
+        {
+          id: "deleteGraphDomain",
+          layer: "DOMAIN SERVICE",
+          x: 655,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["DeleteGraph", "DomainService"],
+          lines: [
+            { kind: "bullet", text: "delete the conversation graph" },
+            { kind: "bullet", text: "return canonical URLs to clean" },
+            { kind: "bullet", text: "call DeleteConversationGraphStore" },
+          ],
+        },
+        {
+          id: "messageDomain",
+          layer: "DOMAIN SERVICE",
+          x: 910,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["MessageDomain", "Service"],
+          lines: [
+            { kind: "bullet", text: "fetch, page, and delete messages" },
+            { kind: "bullet", text: "create next sequenced message" },
+            { kind: "bullet", text: "use MessageContent rules" },
+          ],
+        },
+        {
+          id: "messageContentDomain",
+          layer: "DOMAIN SERVICE",
+          x: 1165,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["MessageContent", "DomainService"],
+          lines: [
+            { kind: "bullet", text: "validate type values" },
+            { kind: "bullet", text: "require present string content" },
+            { kind: "bullet", text: "enforce positive sequences" },
+          ],
+        },
+        {
+          id: "fileDomain",
+          layer: "DOMAIN SERVICE",
+          x: 1420,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["FileDomain", "Service"],
+          lines: [
+            { kind: "bullet", text: "upload blobs and build file rows" },
+            { kind: "bullet", text: "query attachments by message id" },
+            { kind: "bullet", text: "delete files and linked blobs" },
+          ],
+        },
+        {
+          id: "blobDomain",
+          layer: "DOMAIN SERVICE",
+          x: 1675,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["BlobDomain", "Service"],
+          lines: [
+            { kind: "bullet", text: "upload raw blob content" },
+            { kind: "bullet", text: "validate canonical URLs" },
+            { kind: "bullet", text: "call BlobRepository" },
+          ],
+        },
+        {
+          id: "llmDomain",
+          layer: "DOMAIN SERVICE",
+          x: 1930,
+          y: 430,
+          width: 240,
+          height: 182,
+          title: ["LlmDomain", "Service"],
+          lines: [
+            { kind: "bullet", text: "forward ordered messages" },
+            { kind: "bullet", text: "hide provider-specific details" },
+          ],
+        },
+        {
+          id: "conversationRepositoryPort",
+          layer: "DOMAIN REPOSITORY",
+          x: 145,
+          y: 720,
+          width: 250,
+          height: 170,
+          title: ["ConversationRepository", "Port"],
+          lines: [
+            { kind: "bullet", text: "upsert, select, page, delete convos" },
+            { kind: "bullet", text: "return Result-wrapped domain data" },
+          ],
+        },
+        {
+          id: "appendUserStorePort",
+          layer: "DOMAIN STORE",
+          x: 430,
+          y: 720,
+          width: 250,
+          height: 170,
+          title: ["AppendUserMessageStore", "Port"],
+          lines: [
+            { kind: "bullet", text: "persist one user message + files" },
+            { kind: "bullet", text: "return the created Message" },
+          ],
+        },
+        {
+          id: "deleteGraphStorePort",
+          layer: "DOMAIN STORE",
+          x: 715,
+          y: 720,
+          width: 250,
+          height: 170,
+          title: ["DeleteGraphStore", "Port"],
+          lines: [
+            { kind: "bullet", text: "delete the conversation graph" },
+            { kind: "bullet", text: "return canonical URLs for cleanup" },
+          ],
+        },
+        {
+          id: "messageRepositoryPort",
+          layer: "DOMAIN REPOSITORY",
+          x: 1000,
+          y: 720,
+          width: 250,
+          height: 170,
+          title: ["MessageRepository", "Port"],
+          lines: [
+            { kind: "bullet", text: "insert next, select, page, delete" },
+            { kind: "bullet", text: "operate on Message rows" },
+          ],
+        },
+        {
+          id: "fileRepositoryPort",
+          layer: "DOMAIN REPOSITORY",
+          x: 1285,
+          y: 720,
+          width: 250,
+          height: 170,
+          title: ["FileRepository", "Port"],
+          lines: [
+            { kind: "bullet", text: "upsert, select, query, delete files" },
+            { kind: "bullet", text: "operate on File rows" },
+          ],
+        },
+        {
+          id: "blobRepositoryPort",
+          layer: "DOMAIN ADAPTER PORT",
+          x: 1570,
+          y: 720,
+          width: 250,
+          height: 170,
+          title: ["BlobRepository", "Port"],
+          lines: [
+            { kind: "bullet", text: "put blob content" },
+            { kind: "bullet", text: "remove blobs by canonical URL" },
+          ],
+        },
+        {
+          id: "llmPort",
+          layer: "DOMAIN ADAPTER PORT",
+          x: 1855,
+          y: 720,
+          width: 250,
+          height: 170,
+          title: ["LlmCompletionService", "Port"],
+          lines: [
+            { kind: "bullet", text: "complete from ordered Message input" },
+            { kind: "bullet", text: "return LLM completion content" },
+          ],
+        },
+        {
+          id: "pgConversation",
+          layer: "OUTBOUND ADAPTER",
+          x: 145,
+          y: 980,
+          width: 250,
+          height: 186,
+          title: ["PostgresConversation", "Repository"],
+          lines: [
+            { kind: "bullet", text: "insert, select, and page rows" },
+            { kind: "bullet", text: "map SQL rows into Conversation" },
+            { kind: "bullet", text: "delete conversation records" },
+          ],
+        },
+        {
+          id: "pgAppend",
+          layer: "OUTBOUND ADAPTER",
+          x: 430,
+          y: 980,
+          width: 250,
+          height: 186,
+          title: ["PostgresAppendUser", "MessageStore"],
+          lines: [
+            { kind: "bullet", text: "lock conversation row" },
+            { kind: "bullet", text: "insert next message + files" },
+            { kind: "bullet", text: "keep writes in one transaction" },
+          ],
+        },
+        {
+          id: "pgDeleteGraph",
+          layer: "OUTBOUND ADAPTER",
+          x: 715,
+          y: 980,
+          width: 250,
+          height: 186,
+          title: ["PostgresDeleteGraph", "Store"],
+          lines: [
+            { kind: "bullet", text: "collect canonical URLs first" },
+            { kind: "bullet", text: "delete the graph transactionally" },
+            { kind: "bullet", text: "surface not-found and store errors" },
+          ],
+        },
+        {
+          id: "pgMessage",
+          layer: "OUTBOUND ADAPTER",
+          x: 1000,
+          y: 980,
+          width: 250,
+          height: 186,
+          title: ["PostgresMessage", "Repository"],
+          lines: [
+            { kind: "bullet", text: "lock for sequence safety" },
+            { kind: "bullet", text: "insert, page, read, delete rows" },
+            { kind: "bullet", text: "map SQL rows into Message" },
+          ],
+        },
+        {
+          id: "pgFile",
+          layer: "OUTBOUND ADAPTER",
+          x: 1285,
+          y: 980,
+          width: 250,
+          height: 186,
+          title: ["PostgresFile", "Repository"],
+          lines: [
+            { kind: "bullet", text: "insert and query file rows" },
+            { kind: "bullet", text: "select by id or message id" },
+            { kind: "bullet", text: "delete one or many rows" },
+          ],
+        },
+        {
+          id: "r2",
+          layer: "OUTBOUND ADAPTER",
+          x: 1570,
+          y: 980,
+          width: 250,
+          height: 186,
+          title: ["R2Blob", "Repository"],
+          lines: [
+            { kind: "bullet", text: "build canonical object paths" },
+            { kind: "bullet", text: "sign PUT and DELETE requests" },
+            { kind: "bullet", text: "map storage failures to errors" },
+          ],
+        },
+        {
+          id: "placeholderLlm",
+          layer: "OUTBOUND ADAPTER",
+          x: 1855,
+          y: 980,
+          width: 250,
+          height: 186,
+          title: ["PlaceholderLlm", "Repository"],
+          lines: [
+            { kind: "bullet", text: "inspect the latest message" },
+            { kind: "bullet", text: "echo a placeholder reply" },
+            { kind: "bullet", text: "stand in for a real provider" },
+          ],
+        },
+      ];
+
+      const edges = [
+        { from: "create", to: "conversationDomain" },
+        { from: "list", to: "conversationDomain" },
+        { from: "getConversation", to: "conversationDomain" },
+        { from: "getMessages", to: "conversationDomain" },
+        { from: "getMessages", to: "messageDomain" },
+        { from: "getMessages", to: "fileDomain" },
+        { from: "append", to: "conversationDomain" },
+        { from: "append", to: "appendUserDomain" },
+        { from: "append", to: "messageDomain" },
+        { from: "append", to: "fileDomain" },
+        { from: "append", to: "llmDomain" },
+        { from: "delete", to: "deleteGraphDomain" },
+        { from: "delete", to: "blobDomain" },
+        { from: "conversationDomain", to: "conversationRepositoryPort" },
+        { from: "appendUserDomain", to: "appendUserStorePort" },
+        { from: "deleteGraphDomain", to: "deleteGraphStorePort" },
+        { from: "messageDomain", to: "messageContentDomain", mode: "side" },
+        { from: "messageDomain", to: "messageRepositoryPort" },
+        { from: "fileDomain", to: "blobDomain", mode: "side" },
+        { from: "fileDomain", to: "fileRepositoryPort" },
+        { from: "blobDomain", to: "blobRepositoryPort" },
+        { from: "llmDomain", to: "llmPort" },
+        { from: "conversationRepositoryPort", to: "pgConversation" },
+        { from: "appendUserStorePort", to: "pgAppend" },
+        { from: "deleteGraphStorePort", to: "pgDeleteGraph" },
+        { from: "messageRepositoryPort", to: "pgMessage" },
+        { from: "fileRepositoryPort", to: "pgFile" },
+        { from: "blobRepositoryPort", to: "r2" },
+        { from: "llmPort", to: "placeholderLlm" },
+      ];
+
+      const flowHighlights = {
+        create: ["create", "conversationDomain", "conversationRepositoryPort", "pgConversation"],
+        list: ["list", "conversationDomain", "conversationRepositoryPort", "pgConversation"],
+        getConversation: ["getConversation", "conversationDomain", "conversationRepositoryPort", "pgConversation"],
+        getMessages: [
+          "getMessages",
+          "conversationDomain",
+          "conversationRepositoryPort",
+          "pgConversation",
+          "messageDomain",
+          "messageContentDomain",
+          "messageRepositoryPort",
+          "pgMessage",
+          "fileDomain",
+          "blobDomain",
+          "fileRepositoryPort",
+          "blobRepositoryPort",
+          "pgFile",
+          "r2",
+        ],
+        append: [
+          "append",
+          "conversationDomain",
+          "conversationRepositoryPort",
+          "pgConversation",
+          "appendUserDomain",
+          "appendUserStorePort",
+          "pgAppend",
+          "messageDomain",
+          "messageContentDomain",
+          "messageRepositoryPort",
+          "pgMessage",
+          "fileDomain",
+          "blobDomain",
+          "fileRepositoryPort",
+          "blobRepositoryPort",
+          "pgFile",
+          "r2",
+          "llmDomain",
+          "llmPort",
+          "placeholderLlm",
+        ],
+        delete: ["delete", "deleteGraphDomain", "deleteGraphStorePort", "pgDeleteGraph", "blobDomain", "blobRepositoryPort", "r2"],
+      };
+
+      let selectedFlowId = "append";
+      let selectedNodeId = null;
+      let dragState = null;
+
+      function getNode(id) {
+        return nodes.find((node) => node.id === id);
+      }
+
+      function getActiveNodeSet() {
+        if (selectedFlowId) {
+          return new Set(flowHighlights[selectedFlowId] ?? []);
+        }
+
+        if (selectedNodeId) {
+          return new Set([selectedNodeId]);
+        }
+
+        return null;
+      }
+
+      function resizeCanvas() {
+        const ratio = window.devicePixelRatio || 1;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
+          canvas.width = Math.round(width * ratio);
+          canvas.height = Math.round(height * ratio);
+        }
+      }
+
+      function getScreenSize() {
+        return {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          ratio: window.devicePixelRatio || 1,
+        };
+      }
+
+      function worldToScreen(x, y) {
+        const { width, height } = getScreenSize();
+        return {
+          x: ((x - camera.x) / camera.width) * width,
+          y: ((y - camera.y) / camera.height) * height,
+        };
+      }
+
+      function screenToWorld(x, y) {
+        const { width, height } = getScreenSize();
+        return {
+          x: camera.x + (x / width) * camera.width,
+          y: camera.y + (y / height) * camera.height,
+        };
+      }
+
+      function clampCamera() {
+        const pad = 220;
+        camera.x = Math.min(Math.max(camera.x, -pad), world.width - camera.width + pad);
+        camera.y = Math.min(Math.max(camera.y, -pad), world.height - camera.height + pad);
+      }
+
+      function panBy(dx, dy) {
+        camera.x += dx;
+        camera.y += dy;
+        clampCamera();
+        draw();
+      }
+
+      function zoomBy(factor) {
+        const nextWidth = Math.min(2800, Math.max(900, camera.width * factor));
+        const nextHeight = Math.min(2000, Math.max(600, camera.height * factor));
+        camera.x -= (nextWidth - camera.width) / 2;
+        camera.y -= (nextHeight - camera.height) / 2;
+        camera.width = nextWidth;
+        camera.height = nextHeight;
+        clampCamera();
+        draw();
+      }
+
+      function resetCamera() {
+        Object.assign(camera, initialCamera);
+        draw();
+      }
+
+      function roundedRectPath(ctx, x, y, width, height, radius) {
+        const r = Math.min(radius, width / 2, height / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + width, y, x + width, y + height, r);
+        ctx.arcTo(x + width, y + height, x, y + height, r);
+        ctx.arcTo(x, y + height, x, y, r);
+        ctx.arcTo(x, y, x + width, y, r);
+        ctx.closePath();
+      }
+
+      function drawBackground(ctx, screenWidth, screenHeight, ratio) {
+        const radial = ctx.createRadialGradient(screenWidth * 0.5, 0, 40, screenWidth * 0.5, 0, screenHeight * 0.7);
+        radial.addColorStop(0, "rgba(41, 97, 124, 0.24)");
+        radial.addColorStop(1, palette.bg);
+        ctx.fillStyle = radial;
+        ctx.fillRect(0, 0, screenWidth, screenHeight);
+
+        drawGrid(ctx, screenWidth, screenHeight, 24, palette.gridMinor, 1, ratio);
+        drawGrid(ctx, screenWidth, screenHeight, 120, palette.gridMajor, 1.4, ratio);
+      }
+
+      function drawGrid(ctx, screenWidth, screenHeight, spacingWorld, color, lineWidth, ratio) {
+        const startX = Math.floor(camera.x / spacingWorld) * spacingWorld;
+        const endX = camera.x + camera.width;
+        const startY = Math.floor(camera.y / spacingWorld) * spacingWorld;
+        const endY = camera.y + camera.height;
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+
+        for (let x = startX; x <= endX; x += spacingWorld) {
+          const sx = ((x - camera.x) / camera.width) * screenWidth;
+          ctx.moveTo(sx, 0);
+          ctx.lineTo(sx, screenHeight);
+        }
+
+        for (let y = startY; y <= endY; y += spacingWorld) {
+          const sy = ((y - camera.y) / camera.height) * screenHeight;
+          ctx.moveTo(0, sy);
+          ctx.lineTo(screenWidth, sy);
+        }
+
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function applyWorldTransform(ctx, ratio, screenWidth, screenHeight) {
+        ctx.setTransform(
+          (screenWidth / camera.width) * ratio,
+          0,
+          0,
+          (screenHeight / camera.height) * ratio,
+          (-camera.x * screenWidth * ratio) / camera.width,
+          (-camera.y * screenHeight * ratio) / camera.height,
+        );
+      }
+
+      function drawGuide(ctx) {
+        ctx.save();
+        ctx.setLineDash([12, 10]);
+        ctx.strokeStyle = palette.accent;
+        ctx.lineWidth = 2.5;
+        roundedRectPath(ctx, 84, 74, 2232, 1452, 0);
+        ctx.stroke();
+        ctx.restore();
+
+        const handles = [
+          [84, 74],
+          [1200, 74],
+          [2316, 74],
+          [84, 800],
+          [2316, 800],
+          [84, 1526],
+          [1200, 1526],
+          [2316, 1526],
+        ];
+
+        ctx.save();
+        ctx.fillStyle = palette.accent;
+        ctx.strokeStyle = palette.handleStroke;
+        ctx.lineWidth = 3;
+        for (const [x, y] of handles) {
+          ctx.beginPath();
+          ctx.arc(x, y, 18, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawBoundaryArrows(ctx) {
+        const arrows = [
+          { x1: 8, y1: 800, x2: 56, y2: 800, dir: "left" },
+          { x1: 2392, y1: 800, x2: 2344, y2: 800, dir: "right" },
+          { x1: 1200, y1: 8, x2: 1200, y2: 56, dir: "up" },
+          { x1: 1200, y1: 1592, x2: 1200, y2: 1544, dir: "down" },
+        ];
+
+        ctx.save();
+        ctx.strokeStyle = palette.accent;
+        ctx.fillStyle = palette.accentSoft;
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = 0.4;
+
+        for (const arrow of arrows) {
+          ctx.beginPath();
+          ctx.moveTo(arrow.x1, arrow.y1);
+          ctx.lineTo(arrow.x2, arrow.y2);
+          ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
+        for (const arrow of arrows) {
+          ctx.beginPath();
+          if (arrow.dir === "left") {
+            ctx.moveTo(8, 800);
+            ctx.lineTo(32, 780);
+            ctx.lineTo(32, 820);
+          } else if (arrow.dir === "right") {
+            ctx.moveTo(2392, 800);
+            ctx.lineTo(2368, 780);
+            ctx.lineTo(2368, 820);
+          } else if (arrow.dir === "up") {
+            ctx.moveTo(1200, 8);
+            ctx.lineTo(1180, 32);
+            ctx.lineTo(1220, 32);
+          } else {
+            ctx.moveTo(1200, 1592);
+            ctx.lineTo(1180, 1568);
+            ctx.lineTo(1220, 1568);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = palette.accent;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawFrame(ctx) {
+        const gradient = context.createLinearGradient(130, 120, 2270, 1480);
+        gradient.addColorStop(0, palette.frameFillTop);
+        gradient.addColorStop(1, palette.frameFillBottom);
+
+        ctx.save();
+        roundedRectPath(ctx, 130, 120, 2140, 1360, 125);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        ctx.strokeStyle = palette.frameStroke;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function getAnchor(node, direction) {
+        if (direction === "top") {
+          return { x: node.x + node.width / 2, y: node.y };
+        }
+        if (direction === "bottom") {
+          return { x: node.x + node.width / 2, y: node.y + node.height };
+        }
+        if (direction === "left") {
+          return { x: node.x, y: node.y + node.height / 2 };
+        }
+        return { x: node.x + node.width, y: node.y + node.height / 2 };
+      }
+
+      function edgePath(edge) {
+        const from = getNode(edge.from);
+        const to = getNode(edge.to);
+
+        if (!from || !to) {
+          return [];
+        }
+
+        if (edge.mode === "side") {
+          const start = getAnchor(from, "right");
+          const end = getAnchor(to, "left");
+          const midX = (start.x + end.x) / 2;
+          return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+        }
+
+        const start = getAnchor(from, "bottom");
+        const end = getAnchor(to, "top");
+        const midY = start.y + Math.min(82, Math.max(48, (end.y - start.y) * 0.45));
+        return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
+      }
+
+      function drawArrow(ctx, from, to, size) {
+        const angle = Math.atan2(to.y - from.y, to.x - from.x);
+        ctx.beginPath();
+        ctx.moveTo(to.x, to.y);
+        ctx.lineTo(to.x - Math.cos(angle - Math.PI / 6) * size, to.y - Math.sin(angle - Math.PI / 6) * size);
+        ctx.lineTo(to.x - Math.cos(angle + Math.PI / 6) * size, to.y - Math.sin(angle + Math.PI / 6) * size);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      function drawEdges(ctx, activeNodes) {
+        ctx.save();
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        for (const edge of edges) {
+          const points = edgePath(edge);
+          if (points.length === 0) {
+            continue;
+          }
+
+          const highlighted = activeNodes ? activeNodes.has(edge.from) && activeNodes.has(edge.to) : false;
+
+          ctx.globalAlpha = !activeNodes || highlighted ? 1 : 0.16;
+          ctx.strokeStyle = highlighted ? palette.accent : palette.frameStroke;
+          ctx.fillStyle = highlighted ? palette.accent : palette.frameStroke;
+          ctx.lineWidth = highlighted ? 3 : 2.5;
+
+          ctx.beginPath();
+          ctx.moveTo(points[0].x, points[0].y);
+          for (let index = 1; index < points.length; index += 1) {
+            ctx.lineTo(points[index].x, points[index].y);
+          }
+          ctx.stroke();
+
+          const last = points[points.length - 1];
+          const beforeLast = points[points.length - 2];
+          drawArrow(ctx, beforeLast, last, 14);
+        }
+
+        ctx.restore();
+      }
+
+      function drawNode(ctx, node, activeNodes) {
+        ctx.save();
+        const highlighted = activeNodes ? activeNodes.has(node.id) : node.id === selectedNodeId;
+        const dimmed = activeNodes ? !highlighted : selectedNodeId !== null && node.id !== selectedNodeId;
+
+        ctx.globalAlpha = dimmed ? 0.24 : 1;
+
+        if (highlighted) {
+          ctx.shadowColor = palette.accentGlow;
+          ctx.shadowBlur = 24;
+        }
+
+        roundedRectPath(ctx, node.x, node.y, node.width, node.height, 22);
+        ctx.fillStyle = highlighted ? "rgba(51, 184, 255, 0.08)" : palette.nodeFill;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = highlighted ? palette.accent : palette.frameStroke;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        ctx.fillStyle = palette.accent;
+        ctx.font = '700 12px "Avenir Next", "Trebuchet MS", sans-serif';
+        ctx.letterSpacing = "2px";
+        ctx.fillText(node.layer, node.x + 22, node.y + 28);
+
+        ctx.fillStyle = palette.text;
+        ctx.font = '700 20px "Avenir Next", "Trebuchet MS", sans-serif';
+        ctx.fillText(node.title[0], node.x + 22, node.y + 60);
+        ctx.fillText(node.title[1], node.x + 22, node.y + 86);
+
+        for (let index = 0; index < node.lines.length; index += 1) {
+          const line = node.lines[index];
+          const y = node.y + 118 + index * 20;
+          ctx.fillStyle = palette.textMuted;
+          ctx.font = line.kind === "bullet" ? '500 13px "Avenir Next", "Trebuchet MS", sans-serif' : '500 16px "Avenir Next", "Trebuchet MS", sans-serif';
+          const text = line.kind === "bullet" ? `• ${line.text}` : line.text;
+          ctx.fillText(text, node.x + 22, y);
+        }
+
+        if (node.accentDiamond) {
+          const cx = node.x + node.width - 44;
+          const cy = node.y + 28;
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = palette.diamond;
+          ctx.strokeStyle = palette.diamondStroke;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.rect(-8, -8, 16, 16);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.restore();
+      }
+
+      function drawCaption(ctx) {
+        ctx.save();
+        ctx.fillStyle = palette.caption;
+        ctx.font = '500 18px "Avenir Next", "Trebuchet MS", sans-serif';
+        ctx.fillText("Thoth conv-agent code map", 160, 1420);
+        ctx.fillText("Flows, services, repository ports, and concrete adapters are split into separate rows.", 160, 1450);
+        ctx.restore();
+      }
+
+      function drawControls(ctx, screenWidth, screenHeight) {
+        const panel = {
+          x: 28,
+          y: screenHeight - 118,
+          width: 760,
+          height: 82,
+        };
+
+        ctx.save();
+        roundedRectPath(ctx, panel.x, panel.y, panel.width, panel.height, 16);
+        ctx.fillStyle = palette.panel;
+        ctx.fill();
+        ctx.strokeStyle = palette.panelBorder;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = palette.caption;
+        ctx.font = '500 13px "Avenir Next", "Trebuchet MS", sans-serif';
+        ctx.fillText("Click a flow to highlight its full path. Drag to pan. Arrow keys or WASD scroll.", panel.x + 16, panel.y + 34);
+        ctx.fillText("Wheel pans. Ctrl/Cmd + wheel or +/- zoom. Press 0 to reset.", panel.x + 16, panel.y + 56);
+        ctx.restore();
+      }
+
+      function drawFocusRing(ctx, screenWidth, screenHeight) {
+        if (document.activeElement !== canvas) {
+          return;
+        }
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(51, 184, 255, 0.5)";
+        ctx.lineWidth = 2;
+        roundedRectPath(ctx, 12, 12, screenWidth - 24, screenHeight - 24, 20);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function draw() {
+        resizeCanvas();
+        const { width: screenWidth, height: screenHeight, ratio } = getScreenSize();
+        const activeNodes = getActiveNodeSet();
+
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        context.clearRect(0, 0, screenWidth, screenHeight);
+
+        drawBackground(context, screenWidth, screenHeight, ratio);
+        applyWorldTransform(context, ratio, screenWidth, screenHeight);
+        drawGuide(context);
+        drawBoundaryArrows(context);
+        drawFrame(context);
+        drawEdges(context, activeNodes);
+        nodes.forEach((node) => drawNode(context, node, activeNodes));
+        drawCaption(context);
+
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        drawControls(context, screenWidth, screenHeight);
+        drawFocusRing(context, screenWidth, screenHeight);
+      }
+
+      function hitTest(clientX, clientY) {
+        const worldPoint = screenToWorld(clientX, clientY);
+        return nodes.find((node) => worldPoint.x >= node.x && worldPoint.x <= node.x + node.width && worldPoint.y >= node.y && worldPoint.y <= node.y + node.height);
+      }
+
+      canvas.addEventListener("pointerdown", (event) => {
+        canvas.focus();
+        dragState = { x: event.clientX, y: event.clientY, moved: false };
+        canvas.style.cursor = "grabbing";
+      });
+
+      window.addEventListener("pointermove", (event) => {
+        if (!dragState) {
+          return;
+        }
+
+        const dx = ((event.clientX - dragState.x) / window.innerWidth) * camera.width;
+        const dy = ((event.clientY - dragState.y) / window.innerHeight) * camera.height;
+        dragState = { x: event.clientX, y: event.clientY, moved: true };
+        panBy(-dx, -dy);
+      });
+
+      window.addEventListener("pointerup", (event) => {
+        if (!dragState) {
+          return;
+        }
+
+        const releasedWithoutDrag = !dragState.moved;
+        dragState = null;
+        canvas.style.cursor = "grab";
+
+        if (releasedWithoutDrag) {
+          const hitNode = hitTest(event.clientX, event.clientY);
+          if (hitNode) {
+            if (hitNode.layer === "APPLICATION FLOW") {
+              selectedFlowId = hitNode.id;
+              selectedNodeId = null;
+            } else {
+              selectedFlowId = null;
+              selectedNodeId = hitNode.id;
+            }
+            draw();
+          }
+        }
+      });
+
+      canvas.addEventListener(
+        "wheel",
+        (event) => {
+          event.preventDefault();
+
+          if (event.ctrlKey || event.metaKey) {
+            zoomBy(event.deltaY > 0 ? 1.08 : 0.92);
+            return;
+          }
+
+          const dx = (event.deltaX / window.innerWidth) * camera.width;
+          const dy = (event.deltaY / window.innerHeight) * camera.height;
+          panBy(dx, dy);
+        },
+        { passive: false },
+      );
+
+      canvas.addEventListener("keydown", (event) => {
+        const step = (event.shiftKey ? 180 : 72) * (camera.width / initialCamera.width);
+
+        switch (event.key) {
+          case "ArrowLeft":
+          case "a":
+          case "A":
+            event.preventDefault();
+            panBy(-step, 0);
+            break;
+          case "ArrowRight":
+          case "d":
+          case "D":
+            event.preventDefault();
+            panBy(step, 0);
+            break;
+          case "ArrowUp":
+          case "w":
+          case "W":
+            event.preventDefault();
+            panBy(0, -step);
+            break;
+          case "ArrowDown":
+          case "s":
+          case "S":
+            event.preventDefault();
+            panBy(0, step);
+            break;
+          case "+":
+          case "=":
+            event.preventDefault();
+            zoomBy(0.92);
+            break;
+          case "-":
+          case "_":
+            event.preventDefault();
+            zoomBy(1.08);
+            break;
+          case "0":
+            event.preventDefault();
+            resetCamera();
+            break;
+          default:
+            break;
+        }
+      });
+
+      canvas.addEventListener("focus", draw);
+      canvas.addEventListener("blur", draw);
+      window.addEventListener("resize", draw);
+
+      draw();
+    </script>
+  </body>
+</html>

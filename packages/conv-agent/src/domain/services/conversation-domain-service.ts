@@ -8,8 +8,8 @@ import { GenericValidationService } from "./generic-validation-service";
 export class ConversationDomainService {
   constructor(
     private readonly conversationRepository: ConversationRepository,
+    private readonly genericValidationService: GenericValidationService,
     private readonly now: () => Date = () => new Date(),
-    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
   ) {}
 
   async createConversation(): Promise<Result<Conversation, StoreError>> {

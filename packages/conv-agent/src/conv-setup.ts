@@ -18,6 +18,7 @@ import { AppendUserMessageDomainService } from "./domain/services/append-user-me
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
 import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
+import { GenericValidationService } from "./domain/services/generic-validation-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
@@ -55,20 +56,21 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
       accessKeyId: input.blobStorage.accessKeyId,
       secretAccessKey: input.blobStorage.secretAccessKey,
     });
-    const conversationDomainService = new ConversationDomainService(conversationRepository);
+    const genericValidationService = new GenericValidationService();
+    const conversationDomainService = new ConversationDomainService(conversationRepository, genericValidationService);
     const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
     const deleteConversationGraphDomainService = new DeleteConversationGraphDomainService(deleteConversationGraphStore);
-    const blobDomainService = new BlobDomainService(blobRepository);
+    const blobDomainService = new BlobDomainService(blobRepository, genericValidationService);
     const llmDomainService = new LlmDomainService(new PlaceholderLlmRepository());
-    const fileDomainService = new FileDomainService(fileRepository, blobDomainService);
-    const messageContentDomainService = new MessageContentDomainService();
-    const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService);
+    const fileDomainService = new FileDomainService(fileRepository, blobDomainService, genericValidationService);
+    const messageContentDomainService = new MessageContentDomainService(genericValidationService);
+    const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
     const server = Bun.serve({
       port: input.port,
       fetch: createConversationHttpHandler({
         createConversation: new CreateConversationFlow(conversationDomainService),
         getConversation: new GetConversationFlow(conversationDomainService),
-        listConversations: new ListConversationsFlow(conversationDomainService),
+        listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),
         deleteConversation: new DeleteConversationFlow(deleteConversationGraphDomainService, blobDomainService),
         appendMessageToConversation: new AppendMessageToConversationFlow(
           conversationDomainService,
@@ -77,7 +79,7 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
           fileDomainService,
           llmDomainService,
         ),
-        getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+        getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
       }),
     });
     let stopped = false;

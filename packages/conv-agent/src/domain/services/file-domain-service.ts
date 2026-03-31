@@ -12,8 +12,8 @@ export class FileDomainService {
   constructor(
     private readonly fileRepository: FileRepository,
     private readonly blobDomainService: BlobDomainService,
+    private readonly genericValidationService: GenericValidationService,
     private readonly now: () => Date = () => new Date(),
-    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
   ) {}
 
   async findById(fileId: string): Promise<Result<FileEntity, ValidationError | NotFoundError | StoreError>> {

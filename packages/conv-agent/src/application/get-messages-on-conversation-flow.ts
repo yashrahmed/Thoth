@@ -15,7 +15,7 @@ export class GetMessagesOnConversationFlow {
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
-    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
+    private readonly genericValidationService: GenericValidationService,
   ) {}
 
   async execute(query: {

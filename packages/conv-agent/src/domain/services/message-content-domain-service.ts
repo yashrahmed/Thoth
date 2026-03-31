@@ -5,7 +5,7 @@ import { failure, success, type Result } from "../objects/result";
 import { GenericValidationService } from "./generic-validation-service";
 
 export class MessageContentDomainService {
-  constructor(private readonly genericValidationService: GenericValidationService = new GenericValidationService()) {}
+  constructor(private readonly genericValidationService: GenericValidationService) {}
 
   validateMessageInput(request: CreateMessageInput): Result<void, ValidationError> {
     return this.validateMessageInputLike(request.conversationId, request.type, request.content);

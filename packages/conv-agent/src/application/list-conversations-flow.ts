@@ -8,7 +8,7 @@ import { GenericValidationService } from "../domain/services/generic-validation-
 export class ListConversationsFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
-    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
+    private readonly genericValidationService: GenericValidationService,
   ) {}
 
   async execute(query: { readonly pageNum: number; readonly pageSize: number }): Promise<Result<Conversation[], StoreError | ValidationError>> {

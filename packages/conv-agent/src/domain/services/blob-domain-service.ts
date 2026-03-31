@@ -7,7 +7,7 @@ import { GenericValidationService } from "./generic-validation-service";
 export class BlobDomainService {
   constructor(
     private readonly blobRepository: BlobRepository,
-    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
+    private readonly genericValidationService: GenericValidationService,
   ) {}
 
   async upload(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, ValidationError | StoreError>> {

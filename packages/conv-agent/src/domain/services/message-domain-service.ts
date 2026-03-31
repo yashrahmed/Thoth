@@ -11,8 +11,8 @@ export class MessageDomainService {
   constructor(
     private readonly messageRepository: MessageRepository,
     private readonly messageContentDomainService: MessageContentDomainService,
+    private readonly genericValidationService: GenericValidationService,
     private readonly now: () => Date = () => new Date(),
-    private readonly genericValidationService: GenericValidationService = new GenericValidationService(),
   ) {}
 
   async findById(messageId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {

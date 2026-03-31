@@ -4,6 +4,7 @@ import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from ".
 import type { BlobRepository } from "./domain/contracts/blob-repository";
 import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
 import type { ConversationRepository } from "./domain/contracts/conversation-repository";
+import type { DeleteConversationGraphStore, DeletedConversationGraph } from "./domain/contracts/delete-conversation-graph-store";
 import type { FileRepository } from "./domain/contracts/file-repository";
 import type { MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
@@ -15,6 +16,7 @@ import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { AppendUserMessageDomainService } from "./domain/services/append-user-message-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
+import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
@@ -360,6 +362,83 @@ describe("message validation", () => {
     });
     expect(blobRepository.deletedUrls).toEqual(["/files/file-1-hello.txt"]);
   });
+
+  test("DeleteConversationFlow deletes the DB graph before blob cleanup", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    const deleteConversationGraphStore = new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository);
+    const flow = new DeleteConversationFlow(
+      new DeleteConversationGraphDomainService(deleteConversationGraphStore),
+      new BlobDomainService(blobRepository),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z")]);
+    fileRepository.seed([mustCreateFile("file-1", "message-1", "/files/file-1.png", "file-1.png", "image/png", 4)]);
+
+    const result = await flow.execute({ conversationId: "conversation-1" });
+
+    expect(result.ok).toBe(true);
+    expect(blobRepository.deletedUrls).toEqual(["/files/file-1.png"]);
+    expect(conversationRepository.has("conversation-1")).toBe(false);
+    expect(messageRepository.get("message-1")).toBeUndefined();
+    expect(fileRepository.get("file-1")).toBeUndefined();
+  });
+
+  test("DeleteConversationFlow does not attempt blob cleanup when the conversation graph is missing", async () => {
+    const blobRepository = new InMemoryBlobRepository();
+    const flow = new DeleteConversationFlow(
+      new DeleteConversationGraphDomainService(new MissingDeleteConversationGraphStore("conversation-missing")),
+      new BlobDomainService(blobRepository),
+    );
+
+    const result = await flow.execute({ conversationId: "conversation-missing" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "NotFoundError",
+        entityType: EntityType.Conversation,
+        id: "conversation-missing",
+      },
+    });
+    expect(blobRepository.deletedUrls).toEqual([]);
+  });
+
+  test("DeleteConversationFlow returns blob cleanup failure after the DB graph is deleted", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    blobRepository.removeBlobResult = failure(new StoreError(EntityType.File, StoreOperation.Remove, "blob cleanup failed"));
+    const deleteConversationGraphStore = new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository);
+    const flow = new DeleteConversationFlow(
+      new DeleteConversationGraphDomainService(deleteConversationGraphStore),
+      new BlobDomainService(blobRepository),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z")]);
+    fileRepository.seed([mustCreateFile("file-1", "message-1", "/files/file-1.png", "file-1.png", "image/png", 4)]);
+
+    const result = await flow.execute({ conversationId: "conversation-1" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "StoreError",
+        entityType: EntityType.File,
+        operation: StoreOperation.Remove,
+        message: "blob cleanup failed",
+      },
+    });
+    expect(blobRepository.deletedUrls).toEqual(["/files/file-1.png"]);
+    expect(conversationRepository.has("conversation-1")).toBe(false);
+    expect(messageRepository.get("message-1")).toBeUndefined();
+    expect(fileRepository.get("file-1")).toBeUndefined();
+  });
 });
 
 describe("createConversationHttpHandler", () => {
@@ -563,6 +642,42 @@ describe("createConversationHttpHandler", () => {
     expect(response.status).toBe(204);
     expect(repository.deletedIds).toEqual(["conversation-1"]);
   });
+
+  test("returns 500 when blob cleanup fails after the conversation graph is deleted", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    blobRepository.removeBlobResult = failure(new StoreError(EntityType.File, StoreOperation.Remove, "blob cleanup failed"));
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z")]);
+    fileRepository.seed([mustCreateFile("file-1", "message-1", "/files/file-1.png", "file-1.png", "image/png", 4)]);
+    const handler = buildHandler({
+      conversationRepository,
+      messageRepository,
+      fileRepository,
+      blobRepository,
+    });
+
+    const response = await handler(
+      new Request("http://localhost/conversations/conversation-1", {
+        method: "DELETE",
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: {
+        kind: "StoreError",
+        entityType: EntityType.File,
+        operation: StoreOperation.Remove,
+        message: "blob cleanup failed",
+      },
+    });
+    expect(conversationRepository.has("conversation-1")).toBe(false);
+    expect(messageRepository.get("message-1")).toBeUndefined();
+    expect(fileRepository.get("file-1")).toBeUndefined();
+  });
 });
 
 function buildHandler(overrides?: {
@@ -570,6 +685,7 @@ function buildHandler(overrides?: {
   readonly messageRepository?: InMemoryMessageRepository;
   readonly fileRepository?: InMemoryFileRepository;
   readonly appendUserMessageStore?: AppendUserMessageStore;
+  readonly deleteConversationGraphStore?: DeleteConversationGraphStore;
   readonly blobRepository?: InMemoryBlobRepository;
   readonly llmCompletionService?: InMemoryLlmCompletionService;
 }) {
@@ -578,10 +694,12 @@ function buildHandler(overrides?: {
   const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
   const now = () => new Date("2026-03-16T12:00:00.000Z");
   const appendUserMessageStore = overrides?.appendUserMessageStore ?? new InMemoryAppendUserMessageStore(messageRepository, fileRepository, now);
+  const deleteConversationGraphStore = overrides?.deleteConversationGraphStore ?? new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository);
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
   const llmCompletionService = overrides?.llmCompletionService ?? new InMemoryLlmCompletionService();
   const conversationDomainService = new ConversationDomainService(conversationRepository, now);
   const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
+  const deleteConversationGraphDomainService = new DeleteConversationGraphDomainService(deleteConversationGraphStore);
   const blobDomainService = new BlobDomainService(blobRepository);
   const messageContentDomainService = new MessageContentDomainService();
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, now);
@@ -592,7 +710,7 @@ function buildHandler(overrides?: {
     createConversation: new CreateConversationFlow(conversationDomainService),
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService),
-    deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+    deleteConversation: new DeleteConversationFlow(deleteConversationGraphDomainService, blobDomainService),
     appendMessageToConversation: new AppendMessageToConversationFlow(
       conversationDomainService,
       appendUserMessageDomainService,
@@ -647,10 +765,14 @@ class InMemoryConversationRepository implements ConversationRepository {
     return success(items.slice(offset, offset + request.pageSize));
   }
 
-  async deleteConversationRow(conversationId: string) {
+  async deleteConversationRow(conversationId: string): Promise<Result<void, StoreError>> {
     this.deletedIds.push(conversationId);
     this.conversations.delete(conversationId);
     return success(undefined);
+  }
+
+  has(conversationId: string): boolean {
+    return this.conversations.has(conversationId);
   }
 }
 
@@ -698,7 +820,7 @@ class InMemoryMessageRepository implements MessageRepository {
     );
   }
 
-  async selectAllMessagesByConversation(conversationId: string) {
+  async selectAllMessagesByConversation(conversationId: string): Promise<Result<Message[], StoreError>> {
     return success([...this.messages.values()].filter((message) => message.conversationId === conversationId));
   }
 
@@ -707,7 +829,7 @@ class InMemoryMessageRepository implements MessageRepository {
     return success(undefined);
   }
 
-  async deleteMessagesByConversation(conversationId: string) {
+  async deleteMessagesByConversation(conversationId: string): Promise<Result<void, StoreError>> {
     for (const [id, message] of this.messages) {
       if (message.conversationId === conversationId) {
         this.messages.delete(id);
@@ -801,6 +923,65 @@ class FailingAppendUserMessageStore implements AppendUserMessageStore {
   }
 }
 
+class InMemoryDeleteConversationGraphStore implements DeleteConversationGraphStore {
+  constructor(
+    private readonly conversationRepository: InMemoryConversationRepository,
+    private readonly messageRepository: InMemoryMessageRepository,
+    private readonly fileRepository: InMemoryFileRepository,
+  ) {}
+
+  async deleteConversationGraph(conversationId: string): Promise<Result<DeletedConversationGraph, NotFoundError | StoreError>> {
+    const conversationResult = await this.conversationRepository.selectConversationRow(conversationId);
+
+    if (!conversationResult.ok) {
+      return conversationResult;
+    }
+
+    const messagesResult = await this.messageRepository.selectAllMessagesByConversation(conversationId);
+
+    if (!messagesResult.ok) {
+      return failure(messagesResult.error);
+    }
+
+    const filesResult = await this.fileRepository.selectFileRowsByMessageIds(messagesResult.value.map((message) => message.id));
+
+    if (!filesResult.ok) {
+      return failure(filesResult.error);
+    }
+
+    const canonicalUrls = filesResult.value.map((file) => file.canonicalUrl);
+    const deleteFilesResult = await this.fileRepository.deleteFileRowsByMessageIds(messagesResult.value.map((message) => message.id));
+
+    if (!deleteFilesResult.ok) {
+      return failure(deleteFilesResult.error);
+    }
+
+    const deleteMessagesResult = await this.messageRepository.deleteMessagesByConversation(conversationId);
+
+    if (!deleteMessagesResult.ok) {
+      return failure(deleteMessagesResult.error);
+    }
+
+    const deleteConversationResult = await this.conversationRepository.deleteConversationRow(conversationId);
+
+    if (!deleteConversationResult.ok) {
+      return failure(deleteConversationResult.error);
+    }
+
+    return success({
+      canonicalUrls,
+    });
+  }
+}
+
+class MissingDeleteConversationGraphStore implements DeleteConversationGraphStore {
+  constructor(private readonly conversationId: string) {}
+
+  async deleteConversationGraph(): Promise<Result<DeletedConversationGraph, NotFoundError | StoreError>> {
+    return failure(new NotFoundError(EntityType.Conversation, this.conversationId));
+  }
+}
+
 class InMemoryFileRepository implements FileRepository {
   private readonly files = new Map<string, StoredFile>();
 
@@ -854,7 +1035,7 @@ class InMemoryFileRepository implements FileRepository {
     return success(files);
   }
 
-  async selectFileRowsByMessageIds(messageIds: ReadonlyArray<string>) {
+  async selectFileRowsByMessageIds(messageIds: ReadonlyArray<string>): Promise<Result<StoredFile[], StoreError>> {
     const allowedMessageIds = new Set(messageIds);
 
     return success([...this.files.values()].filter((file) => allowedMessageIds.has(file.messageId)));
@@ -873,7 +1054,7 @@ class InMemoryFileRepository implements FileRepository {
     return success(undefined);
   }
 
-  async deleteFileRowsByMessageIds(messageIds: ReadonlyArray<string>) {
+  async deleteFileRowsByMessageIds(messageIds: ReadonlyArray<string>): Promise<Result<void, StoreError>> {
     const allowedMessageIds = new Set(messageIds);
 
     for (const [id, file] of this.files) {

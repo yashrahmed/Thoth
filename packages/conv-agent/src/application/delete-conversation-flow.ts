@@ -1,44 +1,25 @@
-import { type FileDomainService } from "../domain/services/file-domain-service";
-import { type MessageDomainService } from "../domain/services/message-domain-service";
-import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
+import type { BlobDomainService } from "../domain/services/blob-domain-service";
+import type { DeleteConversationGraphDomainService } from "../domain/services/delete-conversation-graph-domain-service";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
+import { success, traverseAsync } from "../domain/objects/result";
 import type { DeleteConversationRequest } from "../domain/objects/delete-conversation-request";
 
 export class DeleteConversationFlow {
   constructor(
-    private readonly conversationDomainService: ConversationDomainService,
-    private readonly messageDomainService: MessageDomainService,
-    private readonly fileDomainService: FileDomainService,
+    private readonly deleteConversationGraphDomainService: DeleteConversationGraphDomainService,
+    private readonly blobDomainService: BlobDomainService,
   ) {}
 
   async execute(command: DeleteConversationRequest): Promise<Result<void, NotFoundError | StoreError | ValidationError>> {
-    const getResult = await this.conversationDomainService.findById(command.conversationId);
+    const deleteGraphResult = await this.deleteConversationGraphDomainService.deleteConversationGraph(command.conversationId);
 
-    if (!getResult.ok) {
-      return getResult;
+    if (!deleteGraphResult.ok) {
+      return deleteGraphResult;
     }
 
-    const messagesResult = await this.messageDomainService.findAll(command.conversationId);
+    const blobDeleteResult = await traverseAsync(deleteGraphResult.value.canonicalUrls, (canonicalUrl) => this.blobDomainService.delete(canonicalUrl));
 
-    if (!messagesResult.ok) {
-      return messagesResult;
-    }
-
-    const deleteFilesResult = await this.fileDomainService.deleteFilesOnMessages({
-      messageIds: messagesResult.value.map((message) => message.id),
-    });
-
-    if (!deleteFilesResult.ok) {
-      return deleteFilesResult;
-    }
-
-    const deleteMessagesResult = await this.messageDomainService.deleteAll(command.conversationId);
-
-    if (!deleteMessagesResult.ok) {
-      return deleteMessagesResult;
-    }
-
-    return this.conversationDomainService.delete(command.conversationId);
+    return blobDeleteResult.ok ? success(undefined) : blobDeleteResult;
   }
 }

@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
+import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
 import { LLMMessageType } from "../domain/objects/llm";
 import { convIntegrationSetup, type ConvIntegrationSetup } from "./conv-agent-it-setup";
@@ -312,6 +313,65 @@ test("rolls back both the user message and file rows when the composite append s
 
     expect(messageRows[0]?.count).toBe("0");
     expect(fileRows[0]?.count).toBe("0");
+  } finally {
+    await deleteConversationIfPresent(startedSetup, conversationId);
+  }
+});
+
+test("deletes the DB conversation graph transactionally and returns blob URLs for later cleanup", async () => {
+  const startedSetup = requireSetup();
+  let conversationId: string | undefined;
+  const imageBytes = readFileSync(IMAGE_PATH);
+
+  try {
+    const createResponse = await fetch(new URL("/conversations", startedSetup.server.url), {
+      method: "POST",
+    });
+
+    expect(createResponse.status).toBe(201);
+
+    const createdConversation = (await createResponse.json()) as { readonly id: string };
+    conversationId = createdConversation.id;
+
+    const appendResponse = await fetch(new URL(`/conversations/${conversationId}/chat`, startedSetup.server.url), {
+      method: "POST",
+      body: buildImageMessageFormData(imageBytes, "delete me"),
+    });
+
+    expect(appendResponse.status).toBe(204);
+
+    const graphStore = new PostgresDeleteConversationGraphStore(startedSetup.database);
+    const deleteResult = await graphStore.deleteConversationGraph(conversationId);
+
+    expect(deleteResult.ok).toBe(true);
+
+    if (!deleteResult.ok) {
+      throw new Error(deleteResult.error.kind);
+    }
+
+    expect(deleteResult.value.canonicalUrls).toHaveLength(1);
+    const deletedCanonicalUrls = deleteResult.value.canonicalUrls;
+
+    const conversationRows = await startedSetup.database<{ count: string }[]>`
+      select count(*)::text as count
+      from thoth.conversations
+      where id = ${conversationId}
+    `;
+    const messageRows = await startedSetup.database<{ count: string }[]>`
+      select count(*)::text as count
+      from thoth.messages
+      where conversation_id = ${conversationId}
+    `;
+    const fileRows = await startedSetup.database<{ count: string }[]>`
+      select count(*)::text as count
+      from thoth.files
+      where canonical_url = any(${deletedCanonicalUrls as string[]})
+    `;
+
+    expect(conversationRows[0]?.count).toBe("0");
+    expect(messageRows[0]?.count).toBe("0");
+    expect(fileRows[0]?.count).toBe("0");
+    conversationId = undefined;
   } finally {
     await deleteConversationIfPresent(startedSetup, conversationId);
   }

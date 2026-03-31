@@ -4,6 +4,7 @@ import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-reposito
 import { createPostgresDatabase } from "./adapter/postgres/postgres-database";
 import { PostgresConversationRepository } from "./adapter/postgres/postgres-conversation-repository";
 import { PostgresAppendUserMessageStore } from "./adapter/postgres/postgres-append-user-message-store";
+import { PostgresDeleteConversationGraphStore } from "./adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresFileRepository } from "./adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "./adapter/postgres/postgres-message-repository";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
@@ -15,6 +16,7 @@ import { ListConversationsFlow } from "./application/list-conversations-flow";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { AppendUserMessageDomainService } from "./domain/services/append-user-message-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
+import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
@@ -48,12 +50,14 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const messageRepository = new PostgresMessageRepository(database);
     const fileRepository = new PostgresFileRepository(database);
     const appendUserMessageStore = new PostgresAppendUserMessageStore(database);
+    const deleteConversationGraphStore = new PostgresDeleteConversationGraphStore(database);
     const blobRepository = new R2BlobRepository(input.blobStorage, {
       accessKeyId: input.blobStorage.accessKeyId,
       secretAccessKey: input.blobStorage.secretAccessKey,
     });
     const conversationDomainService = new ConversationDomainService(conversationRepository);
     const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
+    const deleteConversationGraphDomainService = new DeleteConversationGraphDomainService(deleteConversationGraphStore);
     const blobDomainService = new BlobDomainService(blobRepository);
     const llmDomainService = new LlmDomainService(new PlaceholderLlmRepository());
     const fileDomainService = new FileDomainService(fileRepository, blobDomainService);
@@ -65,7 +69,7 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         createConversation: new CreateConversationFlow(conversationDomainService),
         getConversation: new GetConversationFlow(conversationDomainService),
         listConversations: new ListConversationsFlow(conversationDomainService),
-        deleteConversation: new DeleteConversationFlow(conversationDomainService, messageDomainService, fileDomainService),
+        deleteConversation: new DeleteConversationFlow(deleteConversationGraphDomainService, blobDomainService),
         appendMessageToConversation: new AppendMessageToConversationFlow(
           conversationDomainService,
           appendUserMessageDomainService,

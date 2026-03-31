@@ -213,11 +213,7 @@ describe("message validation", () => {
 
   test("MessageDomainService creates the next message through the repository atomic insert path", async () => {
     const repository = new AtomicInsertOnlyMessageRepository();
-    const messageDomainService = new MessageDomainService(
-      repository,
-      new MessageContentDomainService(),
-      () => new Date("2026-03-16T12:00:00.000Z"),
-    );
+    const messageDomainService = new MessageDomainService(repository, new MessageContentDomainService(), () => new Date("2026-03-16T12:00:00.000Z"));
 
     const result = await messageDomainService.createNextMessage({
       conversationId: "conversation-1",
@@ -290,9 +286,7 @@ describe("message validation", () => {
   test("AppendMessageToConversationFlow deletes uploaded blobs when transactional persistence fails", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     const blobRepository = new InMemoryBlobRepository();
-    const appendUserMessageStore = new FailingAppendUserMessageStore(
-      new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"),
-    );
+    const appendUserMessageStore = new FailingAppendUserMessageStore(new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"));
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(appendUserMessageStore),
@@ -677,17 +671,9 @@ class InMemoryMessageRepository implements MessageRepository {
 
   async insertNextMessageRow(record: InsertNextMessageRecord) {
     const nextSequenceNumber =
-      [...this.messages.values()]
-        .filter((message) => message.conversationId === record.conversationId)
-        .reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0) + 1;
-    const message = mustCreateMessage(
-      `message-${this.messages.size + 1}`,
-      record.conversationId,
-      record.type,
-      nextSequenceNumber,
-      record.content,
-      record.createdAt.toISOString(),
-    );
+      [...this.messages.values()].filter((message) => message.conversationId === record.conversationId).reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0) +
+      1;
+    const message = mustCreateMessage(`message-${this.messages.size + 1}`, record.conversationId, record.type, nextSequenceNumber, record.content, record.createdAt.toISOString());
     this.messages.set(message.id, message);
     return success(message);
   }
@@ -737,20 +723,14 @@ class AtomicInsertOnlyMessageRepository implements MessageRepository {
 
   async insertNextMessageRow(record: InsertNextMessageRecord) {
     this.insertedRecords.push(record);
-    return success(
-      mustCreateMessage("message-1", record.conversationId, record.type, 1, record.content, record.createdAt.toISOString()),
-    );
+    return success(mustCreateMessage("message-1", record.conversationId, record.type, 1, record.content, record.createdAt.toISOString()));
   }
 
   async selectMessageRow(_messageId: string): Promise<Result<Message, NotFoundError | StoreError>> {
     throw new Error("selectMessageRow should not be called in this test.");
   }
 
-  async selectMessagePage(_request: {
-    readonly conversationId: string;
-    readonly pageNum: number;
-    readonly pageSize: number;
-  }): Promise<Result<Message[], StoreError>> {
+  async selectMessagePage(_request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<Message[], StoreError>> {
     throw new Error("selectMessagePage should not be called in this test.");
   }
 

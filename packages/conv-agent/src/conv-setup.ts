@@ -72,6 +72,7 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         appendMessageToConversation: new AppendMessageToConversationFlow(
           conversationDomainService,
           appendUserMessageDomainService,
+          messageDomainService,
           fileDomainService,
         ),
         getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),

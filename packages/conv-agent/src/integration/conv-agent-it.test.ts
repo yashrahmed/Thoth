@@ -166,6 +166,7 @@ test("allocates message sequence numbers transactionally for concurrent inserts 
       messageRepository.insertNextMessageRow({
         conversationId,
         type: LLMMessageType.User,
+        sequenceNumber: 1,
         content: "first",
         createdAt,
         updatedAt: createdAt,
@@ -173,14 +174,29 @@ test("allocates message sequence numbers transactionally for concurrent inserts 
       messageRepository.insertNextMessageRow({
         conversationId,
         type: LLMMessageType.User,
+        sequenceNumber: 1,
         content: "second",
         createdAt,
         updatedAt: createdAt,
       }),
     ]);
 
-    expect(firstInsertResult.ok).toBe(true);
-    expect(secondInsertResult.ok).toBe(true);
+    expect([firstInsertResult.ok, secondInsertResult.ok].sort()).toEqual([false, true]);
+    const successfulInsertResult = firstInsertResult.ok ? firstInsertResult : secondInsertResult;
+    const failedInsertResult = firstInsertResult.ok ? secondInsertResult : firstInsertResult;
+
+    if (!successfulInsertResult.ok) {
+      throw new Error("Expected one insert to succeed.");
+    }
+
+    expect(failedInsertResult).toEqual({
+      ok: false,
+      error: {
+        kind: "ValidationError",
+        fieldName: "sequenceNumber",
+        message: expect.any(String),
+      },
+    });
 
     const messagesResult = await messageRepository.selectAllMessagesByConversation(conversationId);
 
@@ -190,10 +206,9 @@ test("allocates message sequence numbers transactionally for concurrent inserts 
       throw new Error(messagesResult.error.message);
     }
 
-    expect(messagesResult.value).toHaveLength(2);
-    expect(messagesResult.value.map((message) => message.sequenceNumber)).toEqual([1, 2]);
-    expect(new Set(messagesResult.value.map((message) => message.id)).size).toBe(2);
-    expect(messagesResult.value.map((message) => message.content).sort()).toEqual(["first", "second"]);
+    expect(messagesResult.value).toHaveLength(1);
+    expect(messagesResult.value.map((message) => message.sequenceNumber)).toEqual([1]);
+    expect(messagesResult.value.map((message) => message.content)).toEqual([successfulInsertResult.value.content]);
   } finally {
     await deleteConversationIfPresent(startedSetup, conversationId);
   }
@@ -215,9 +230,14 @@ test("persists one user message plus file rows transactionally through the compo
 
     const store = new PostgresAppendUserMessageStore(startedSetup.database);
     const result = await store.persistUserMessageWithFiles({
-      conversationId,
-      type: LLMMessageType.User,
-      content: "hello",
+      message: {
+        conversationId,
+        type: LLMMessageType.User,
+        sequenceNumber: 1,
+        content: "hello",
+        createdAt: new Date("2026-03-30T12:00:00.000Z"),
+        updatedAt: new Date("2026-03-30T12:00:00.000Z"),
+      },
       files: [
         {
           canonicalUrl: "/files/a.txt",
@@ -275,9 +295,14 @@ test("rolls back both the user message and file rows when the composite append s
 
     const store = new PostgresAppendUserMessageStore(startedSetup.database);
     const result = await store.persistUserMessageWithFiles({
-      conversationId,
-      type: LLMMessageType.User,
-      content: "hello",
+      message: {
+        conversationId,
+        type: LLMMessageType.User,
+        sequenceNumber: 1,
+        content: "hello",
+        createdAt: new Date("2026-03-30T12:00:00.000Z"),
+        updatedAt: new Date("2026-03-30T12:00:00.000Z"),
+      },
       files: [
         {
           canonicalUrl: "/files/a.txt",
@@ -313,6 +338,60 @@ test("rolls back both the user message and file rows when the composite append s
 
     expect(messageRows[0]?.count).toBe("0");
     expect(fileRows[0]?.count).toBe("0");
+  } finally {
+    await deleteConversationIfPresent(startedSetup, conversationId);
+  }
+});
+
+test("rejects stale sequence numbers through the composite append store", async () => {
+  const startedSetup = requireSetup();
+  let conversationId: string | undefined;
+
+  try {
+    const createResponse = await fetch(new URL("/conversations", startedSetup.server.url), {
+      method: "POST",
+    });
+
+    expect(createResponse.status).toBe(201);
+
+    const createdConversation = (await createResponse.json()) as { readonly id: string };
+    conversationId = createdConversation.id;
+
+    const store = new PostgresAppendUserMessageStore(startedSetup.database);
+    const firstInsertResult = await store.persistUserMessageWithFiles({
+      message: {
+        conversationId,
+        type: LLMMessageType.User,
+        sequenceNumber: 1,
+        content: "hello",
+        createdAt: new Date("2026-03-30T12:00:00.000Z"),
+        updatedAt: new Date("2026-03-30T12:00:00.000Z"),
+      },
+      files: [],
+    });
+
+    expect(firstInsertResult.ok).toBe(true);
+
+    const staleInsertResult = await store.persistUserMessageWithFiles({
+      message: {
+        conversationId,
+        type: LLMMessageType.User,
+        sequenceNumber: 1,
+        content: "stale",
+        createdAt: new Date("2026-03-30T12:01:00.000Z"),
+        updatedAt: new Date("2026-03-30T12:01:00.000Z"),
+      },
+      files: [],
+    });
+
+    expect(staleInsertResult).toEqual({
+      ok: false,
+      error: {
+        kind: "ValidationError",
+        fieldName: "sequenceNumber",
+        message: expect.any(String),
+      },
+    });
   } finally {
     await deleteConversationIfPresent(startedSetup, conversationId);
   }

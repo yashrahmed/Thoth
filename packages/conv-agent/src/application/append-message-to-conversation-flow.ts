@@ -1,6 +1,7 @@
 import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
+import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { ValidationError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { failure, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
@@ -14,6 +15,7 @@ export class AppendMessageToConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
+    private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
   ) {}
 
@@ -40,10 +42,19 @@ export class AppendMessageToConversationFlow {
       return uploadFilesResult;
     }
 
-    const createUserMessageResult = await this.appendUserMessageDomainService.persistUserMessageWithFiles({
+    const nextMessageRecordResult = await this.messageDomainService.buildNextMessageRecord({
       conversationId: request.conversationId,
       type: request.type,
       content: request.content,
+    });
+
+    if (!nextMessageRecordResult.ok) {
+      const deleteUploadedBlobsResult = await this.fileDomainService.deleteUploadedBlobs({ files: uploadFilesResult.value });
+      return deleteUploadedBlobsResult.ok ? nextMessageRecordResult : deleteUploadedBlobsResult;
+    }
+
+    const createUserMessageResult = await this.appendUserMessageDomainService.persistUserMessageWithFiles({
+      message: nextMessageRecordResult.value,
       files: uploadFilesResult.value,
     });
 

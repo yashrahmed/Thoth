@@ -8,7 +8,7 @@ import type { DeleteConversationGraphStore, DeletedConversationGraph } from "./d
 import type { FileRepository } from "./domain/contracts/file-repository";
 import type { MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
-import { EntityType, LlmError, NotFoundError, StoreError, StoreOperation } from "./domain/objects/errors";
+import { EntityType, LlmError, NotFoundError, StoreError, StoreOperation, ValidationError } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
 import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
 import { type InsertNextMessageRecord, Message } from "./domain/objects/message";
@@ -262,6 +262,7 @@ describe("message validation", () => {
       {
         conversationId: "conversation-1",
         type: LLMMessageType.User,
+        sequenceNumber: 1,
         content: "hello",
         createdAt: new Date("2026-03-16T12:00:00.000Z"),
         updatedAt: new Date("2026-03-16T12:00:00.000Z"),
@@ -274,11 +275,12 @@ describe("message validation", () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
-    const appendUserMessageStore = new InMemoryAppendUserMessageStore(messageRepository, fileRepository, () => new Date("2026-03-16T12:00:00.000Z"));
+    const appendUserMessageStore = new InMemoryAppendUserMessageStore(messageRepository, fileRepository);
     const genericValidationService = new GenericValidationService();
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(appendUserMessageStore),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new FileDomainService(fileRepository, new BlobDomainService(blobRepository, genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
     );
 
@@ -300,9 +302,14 @@ describe("message validation", () => {
     expect(result.ok).toBe(true);
     expect(appendUserMessageStore.persistedInputs).toEqual([
       {
-        conversationId: "conversation-1",
-        type: LLMMessageType.User,
-        content: "hello",
+        message: {
+          conversationId: "conversation-1",
+          type: LLMMessageType.User,
+          sequenceNumber: 1,
+          content: "hello",
+          createdAt: new Date("2026-03-16T12:00:00.000Z"),
+          updatedAt: new Date("2026-03-16T12:00:00.000Z"),
+        },
         files: [
           {
             canonicalUrl: "/files/file-1-hello.txt",
@@ -323,6 +330,12 @@ describe("message validation", () => {
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(appendUserMessageStore),
+      new MessageDomainService(
+        new InMemoryMessageRepository(),
+        new MessageContentDomainService(genericValidationService),
+        genericValidationService,
+        () => new Date("2026-03-16T12:00:00.000Z"),
+      ),
       new FileDomainService(
         new InMemoryFileRepository(),
         new BlobDomainService(blobRepository, genericValidationService),
@@ -366,6 +379,12 @@ describe("message validation", () => {
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(new FailingAppendUserMessageStore(new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"))),
+      new MessageDomainService(
+        new InMemoryMessageRepository(),
+        new MessageContentDomainService(genericValidationService),
+        genericValidationService,
+        () => new Date("2026-03-16T12:00:00.000Z"),
+      ),
       new FileDomainService(
         new InMemoryFileRepository(),
         new BlobDomainService(blobRepository, genericValidationService),
@@ -847,7 +866,7 @@ function buildHandler(overrides?: {
   const messageRepository = overrides?.messageRepository ?? new InMemoryMessageRepository();
   const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
   const now = () => new Date("2026-03-16T12:00:00.000Z");
-  const appendUserMessageStore = overrides?.appendUserMessageStore ?? new InMemoryAppendUserMessageStore(messageRepository, fileRepository, now);
+  const appendUserMessageStore = overrides?.appendUserMessageStore ?? new InMemoryAppendUserMessageStore(messageRepository, fileRepository);
   const deleteConversationGraphStore =
     overrides?.deleteConversationGraphStore ?? new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository);
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
@@ -868,6 +887,7 @@ function buildHandler(overrides?: {
     appendMessageToConversation: new AppendMessageToConversationFlow(
       conversationDomainService,
       appendUserMessageDomainService,
+      messageDomainService,
       fileDomainService,
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
@@ -944,10 +964,22 @@ class InMemoryMessageRepository implements MessageRepository {
   }
 
   async insertNextMessageRow(record: InsertNextMessageRecord) {
-    const nextSequenceNumber =
-      [...this.messages.values()].filter((message) => message.conversationId === record.conversationId).reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0) +
-      1;
-    const message = mustCreateMessage(`message-${this.messages.size + 1}`, record.conversationId, record.type, nextSequenceNumber, record.content, record.createdAt.toISOString());
+    const latestSequenceNumber = [...this.messages.values()]
+      .filter((message) => message.conversationId === record.conversationId)
+      .reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0);
+
+    if (latestSequenceNumber !== record.sequenceNumber - 1) {
+      return failure(new ValidationError("sequenceNumber", `sequenceNumber must append after ${latestSequenceNumber}; received ${record.sequenceNumber}.`));
+    }
+
+    const message = mustCreateMessage(
+      `message-${this.messages.size + 1}`,
+      record.conversationId,
+      record.type,
+      record.sequenceNumber,
+      record.content,
+      record.createdAt.toISOString()
+    );
     this.messages.set(message.id, message);
     return success(message);
   }
@@ -997,7 +1029,7 @@ class AtomicInsertOnlyMessageRepository implements MessageRepository {
 
   async insertNextMessageRow(record: InsertNextMessageRecord) {
     this.insertedRecords.push(record);
-    return success(mustCreateMessage("message-1", record.conversationId, record.type, 1, record.content, record.createdAt.toISOString()));
+    return success(mustCreateMessage("message-1", record.conversationId, record.type, record.sequenceNumber, record.content, record.createdAt.toISOString()));
   }
 
   async selectMessageRow(_messageId: string): Promise<Result<Message, NotFoundError | StoreError>> {
@@ -1009,7 +1041,7 @@ class AtomicInsertOnlyMessageRepository implements MessageRepository {
   }
 
   async selectAllMessagesByConversation(_conversationId: string): Promise<Result<Message[], StoreError>> {
-    throw new Error("selectAllMessagesByConversation should not be called in this test.");
+    return success([]);
   }
 
   async deleteMessageRow(_messageId: string): Promise<Result<void, StoreError>> {
@@ -1027,19 +1059,11 @@ class InMemoryAppendUserMessageStore implements AppendUserMessageStore {
   constructor(
     private readonly messageRepository: InMemoryMessageRepository,
     private readonly fileRepository: InMemoryFileRepository,
-    private readonly now: () => Date,
   ) {}
 
-  async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, StoreError>> {
+  async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>> {
     this.persistedInputs.push(input);
-    const timestamp = this.now();
-    const messageResult = await this.messageRepository.insertNextMessageRow({
-      conversationId: input.conversationId,
-      type: input.type,
-      content: input.content,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
+    const messageResult = await this.messageRepository.insertNextMessageRow(input.message);
 
     if (!messageResult.ok) {
       return messageResult;
@@ -1052,8 +1076,8 @@ class InMemoryAppendUserMessageStore implements AppendUserMessageStore {
         filename: file.filename,
         mimeType: file.mimeType,
         sizeInBytes: file.sizeInBytes,
-        createdAt: timestamp,
-        updatedAt: timestamp,
+        createdAt: input.message.createdAt,
+        updatedAt: input.message.updatedAt,
       });
 
       if (fileResult.ok) {
@@ -1070,7 +1094,7 @@ class InMemoryAppendUserMessageStore implements AppendUserMessageStore {
 class FailingAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly error: StoreError) {}
 
-  async persistUserMessageWithFiles(_input: PersistUserMessageWithFilesInput): Promise<Result<Message, StoreError>> {
+  async persistUserMessageWithFiles(_input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>> {
     return failure(this.error);
   }
 }

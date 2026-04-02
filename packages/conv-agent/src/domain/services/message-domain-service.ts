@@ -1,5 +1,5 @@
 import type { MessageRepository } from "../contracts/message-repository";
-import type { CreateMessageInput, Message } from "../objects/message";
+import type { CreateMessageInput, InsertNextMessageRecord, Message } from "../objects/message";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, firstFailure } from "../objects/result";
@@ -55,7 +55,7 @@ export class MessageDomainService {
     return andThenAsync(await fileDomainService.deleteFilesOnMessages({ messageIds: [messageResult.value.id] }), () => this.delete(messageId));
   }
 
-  async createNextMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
+  async buildNextMessageRecord(request: CreateMessageInput): Promise<Result<InsertNextMessageRecord, ValidationError | StoreError>> {
     const validationResult = this.messageContentDomainService.validateMessageInput(request);
 
     if (!validationResult.ok) {
@@ -72,12 +72,36 @@ export class MessageDomainService {
       return timestampValidationResult;
     }
 
+    const allMessagesResult = await this.messageRepository.selectAllMessagesByConversation(request.conversationId);
+
+    if (!allMessagesResult.ok) {
+      return allMessagesResult;
+    }
+
+    const latestSequenceNumber = allMessagesResult.value.reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0);
+
+    return {
+      ok: true,
+      value: {
+        conversationId: request.conversationId,
+        type: request.type,
+        sequenceNumber: latestSequenceNumber + 1,
+        content: request.content,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    };
+  }
+
+  async createNextMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
+    const nextMessageRecordResult = await this.buildNextMessageRecord(request);
+
+    if (!nextMessageRecordResult.ok) {
+      return nextMessageRecordResult;
+    }
+
     return this.messageRepository.insertNextMessageRow({
-      conversationId: request.conversationId,
-      type: request.type,
-      content: request.content,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+      ...nextMessageRecordResult.value,
     });
   }
 }

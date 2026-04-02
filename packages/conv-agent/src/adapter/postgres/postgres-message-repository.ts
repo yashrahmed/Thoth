@@ -1,6 +1,6 @@
 import type { MessageRepository } from "../../domain/contracts/message-repository";
 import { type LLMMessageType } from "../../domain/objects/llm";
-import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
+import { EntityType, NotFoundError, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 import { type InsertNextMessageRecord, Message } from "../../domain/objects/message";
@@ -23,27 +23,26 @@ export class PostgresMessageRepository implements MessageRepository {
       const row = await this.sql.begin(async (tx) => {
         const sql = tx as unknown as PostgresDatabase;
 
-        const lockedConversationRows = await sql<{ id: string }[]>`
-          select id
-          from thoth.conversations
-          where id = ${record.conversationId}
-          for update
-        `;
-
-        if (!lockedConversationRows[0]) {
-          throw new Error("Conversation row could not be locked.");
-        }
-
-        const nextSequenceRows = await sql<{ next_sequence_number: number | string | bigint }[]>`
-          select coalesce(max(sequence_number), 0)::int + 1 as next_sequence_number
+        const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
+          select coalesce(max(sequence_number), 0)::int as latest_sequence_number
           from thoth.messages
           where conversation_id = ${record.conversationId}
         `;
 
-        const nextSequenceRow = nextSequenceRows[0];
+        const latestSequenceRow = latestSequenceRows[0];
 
-        if (!nextSequenceRow) {
-          throw new Error("Next message sequence row was not returned.");
+        if (!latestSequenceRow) {
+          throw new Error("Latest message sequence row was not returned.");
+        }
+
+        const expectedPreviousSequenceNumber = record.sequenceNumber - 1;
+        const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
+
+        if (latestSequenceNumber !== expectedPreviousSequenceNumber) {
+          throw new ValidationError(
+            "sequenceNumber",
+            `sequenceNumber must append after ${latestSequenceNumber}; received ${record.sequenceNumber}.`,
+          );
         }
 
         const rows = await sql<MessageRow[]>`
@@ -58,7 +57,7 @@ export class PostgresMessageRepository implements MessageRepository {
           values (
             ${record.conversationId},
             ${record.type},
-            ${Number(nextSequenceRow.next_sequence_number)},
+            ${record.sequenceNumber},
             ${record.content},
             ${record.createdAt.toISOString()},
             ${record.updatedAt.toISOString()}
@@ -78,6 +77,14 @@ export class PostgresMessageRepository implements MessageRepository {
 
       return mapRow(row, StoreOperation.Persist);
     } catch (error) {
+      if (error instanceof ValidationError) {
+        return failure(error);
+      }
+
+      if (isUniqueSequenceConstraintViolation(error)) {
+        return failure(new ValidationError("sequenceNumber", `sequenceNumber ${record.sequenceNumber} is no longer available.`));
+      }
+
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
@@ -221,4 +228,13 @@ function toDate(value: string | Date): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
+}
+
+function isUniqueSequenceConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505"
+  );
 }

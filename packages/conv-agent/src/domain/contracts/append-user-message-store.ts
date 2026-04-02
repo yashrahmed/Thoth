@@ -1,16 +1,13 @@
 import type { UploadedFileMetadata } from "../objects/file";
-import type { LLMMessageType } from "../objects/llm";
-import type { Message } from "../objects/message";
-import type { StoreError } from "../objects/errors";
+import type { InsertNextMessageRecord, Message } from "../objects/message";
+import type { StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
 
 export interface PersistUserMessageWithFilesInput {
-  readonly conversationId: string;
-  readonly type: LLMMessageType;
-  readonly content: string;
+  readonly message: InsertNextMessageRecord;
   readonly files: ReadonlyArray<UploadedFileMetadata>;
 }
 
 export interface AppendUserMessageStore {
-  persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, StoreError>>;
+  persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>>;
 }

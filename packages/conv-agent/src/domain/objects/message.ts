@@ -24,4 +24,4 @@ export class Message {
 }
 
 export type CreateMessageInput = Pick<Message, "conversationId" | "type" | "content">;
-export type InsertNextMessageRecord = Omit<Message, "id" | "sequenceNumber">;
+export type InsertNextMessageRecord = Omit<Message, "id">;

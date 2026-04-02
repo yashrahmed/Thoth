@@ -1,5 +1,5 @@
 import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
-import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
+import { EntityType, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
 import { Message } from "../../domain/objects/message";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
@@ -7,7 +7,7 @@ import type { PostgresDatabase } from "./postgres-database";
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
-  readonly type: PersistUserMessageWithFilesInput["type"];
+  readonly type: PersistUserMessageWithFilesInput["message"]["type"];
   readonly sequence_number: number;
   readonly content: string;
   readonly created_at: string | Date;
@@ -17,33 +17,32 @@ interface MessageRow {
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, StoreError>> {
+  async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>> {
     try {
       const row = await this.sql.begin(async (tx) => {
         const sql = tx as unknown as PostgresDatabase;
         const timestamp = new Date();
 
-        const lockedConversationRows = await sql<{ id: string }[]>`
-          select id
-          from thoth.conversations
-          where id = ${input.conversationId}
-          for update
+        const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
+          select coalesce(max(sequence_number), 0)::int as latest_sequence_number
+          from thoth.messages
+          where conversation_id = ${input.message.conversationId}
         `;
 
-        if (!lockedConversationRows[0]) {
-          throw new Error("Conversation row could not be locked.");
+        const latestSequenceRow = latestSequenceRows[0];
+
+        if (!latestSequenceRow) {
+          throw new Error("Latest message sequence row was not returned.");
         }
 
-        const nextSequenceRows = await sql<{ next_sequence_number: number | string | bigint }[]>`
-          select coalesce(max(sequence_number), 0)::int + 1 as next_sequence_number
-          from thoth.messages
-          where conversation_id = ${input.conversationId}
-        `;
+        const expectedPreviousSequenceNumber = input.message.sequenceNumber - 1;
+        const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
 
-        const nextSequenceRow = nextSequenceRows[0];
-
-        if (!nextSequenceRow) {
-          throw new Error("Next message sequence row was not returned.");
+        if (latestSequenceNumber !== expectedPreviousSequenceNumber) {
+          throw new ValidationError(
+            "sequenceNumber",
+            `sequenceNumber must append after ${latestSequenceNumber}; received ${input.message.sequenceNumber}.`,
+          );
         }
 
         const messageRows = await sql<MessageRow[]>`
@@ -56,12 +55,12 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             updated_at
           )
           values (
-            ${input.conversationId},
-            ${input.type},
-            ${Number(nextSequenceRow.next_sequence_number)},
-            ${input.content},
-            ${timestamp.toISOString()},
-            ${timestamp.toISOString()}
+            ${input.message.conversationId},
+            ${input.message.type},
+            ${input.message.sequenceNumber},
+            ${input.message.content},
+            ${input.message.createdAt.toISOString()},
+            ${input.message.updatedAt.toISOString()}
           )
           returning
             id,
@@ -107,6 +106,14 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
 
       return mapMessageRow(row);
     } catch (error) {
+      if (error instanceof ValidationError) {
+        return failure(error);
+      }
+
+      if (isUniqueSequenceConstraintViolation(error)) {
+        return failure(new ValidationError("sequenceNumber", `sequenceNumber ${input.message.sequenceNumber} is no longer available.`));
+      }
+
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
@@ -134,4 +141,13 @@ function toDate(value: string | Date): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
+}
+
+function isUniqueSequenceConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505"
+  );
 }

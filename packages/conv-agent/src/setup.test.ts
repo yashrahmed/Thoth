@@ -423,11 +423,13 @@ describe("message validation", () => {
   test("CompleteConversationFlow appends one assistant message when called directly", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+      new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -444,11 +446,13 @@ describe("message validation", () => {
   test("CompleteConversationFlow rejects empty conversations", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+      new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -468,11 +472,13 @@ describe("message validation", () => {
   test("CompleteConversationFlow rejects conversations whose latest message is already assistant", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+      new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -485,17 +491,20 @@ describe("message validation", () => {
       error: {
         kind: "ValidationError",
         fieldName: "conversationId",
-        message: "conversation cannot be completed when the latest message is already assistant.",
+        message: "conversation can only be completed when the latest message is user; received assistant.",
       },
     });
   });
 
   test("CompleteConversationFlow returns not found when the conversation is missing", async () => {
     const genericValidationService = new GenericValidationService();
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
     const flow = new CompleteConversationFlow(
       new ConversationDomainService(new InMemoryConversationRepository(), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
-      new MessageDomainService(new InMemoryMessageRepository(), new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+      new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
     const result = await flow.execute({ conversationId: "conversation-missing" });
@@ -513,11 +522,13 @@ describe("message validation", () => {
   test("CompleteConversationFlow returns LLM failures unchanged", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(failure(new LlmError("llm failed")))),
+      new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);

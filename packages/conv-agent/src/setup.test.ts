@@ -2,15 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "./domain/contracts/append-user-message-store";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
-import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
 import type { ConversationRepository } from "./domain/contracts/conversation-repository";
 import type { DeleteConversationGraphStore, DeletedConversationGraph } from "./domain/contracts/delete-conversation-graph-store";
 import type { FileRepository } from "./domain/contracts/file-repository";
 import type { MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
-import { EntityType, LlmError, NotFoundError, StoreError, StoreOperation } from "./domain/objects/errors";
+import { EntityType, NotFoundError, StoreError, StoreOperation } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
-import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
+import { LLMMessageType } from "./domain/objects/llm";
 import { type InsertNextMessageRecord, Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
@@ -19,7 +18,6 @@ import { ConversationDomainService } from "./domain/services/conversation-domain
 import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { GenericValidationService } from "./domain/services/generic-validation-service";
-import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
@@ -278,9 +276,7 @@ describe("message validation", () => {
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(appendUserMessageStore),
-      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new FileDomainService(fileRepository, new BlobDomainService(blobRepository, genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
-      new LlmDomainService(new InMemoryLlmCompletionService()),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -324,19 +320,12 @@ describe("message validation", () => {
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(appendUserMessageStore),
-      new MessageDomainService(
-        new InMemoryMessageRepository(),
-        new MessageContentDomainService(genericValidationService),
-        genericValidationService,
-        () => new Date("2026-03-16T12:00:00.000Z"),
-      ),
       new FileDomainService(
         new InMemoryFileRepository(),
         new BlobDomainService(blobRepository, genericValidationService),
         genericValidationService,
         () => new Date("2026-03-16T12:00:00.000Z"),
       ),
-      new LlmDomainService(new InMemoryLlmCompletionService()),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -374,19 +363,12 @@ describe("message validation", () => {
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(new FailingAppendUserMessageStore(new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"))),
-      new MessageDomainService(
-        new InMemoryMessageRepository(),
-        new MessageContentDomainService(genericValidationService),
-        genericValidationService,
-        () => new Date("2026-03-16T12:00:00.000Z"),
-      ),
       new FileDomainService(
         new InMemoryFileRepository(),
         new BlobDomainService(blobRepository, genericValidationService),
         genericValidationService,
         () => new Date("2026-03-16T12:00:00.000Z"),
       ),
-      new LlmDomainService(new InMemoryLlmCompletionService()),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -743,7 +725,6 @@ function buildHandler(overrides?: {
   readonly appendUserMessageStore?: AppendUserMessageStore;
   readonly deleteConversationGraphStore?: DeleteConversationGraphStore;
   readonly blobRepository?: InMemoryBlobRepository;
-  readonly llmCompletionService?: InMemoryLlmCompletionService;
 }) {
   const conversationRepository = overrides?.conversationRepository ?? new InMemoryConversationRepository();
   const messageRepository = overrides?.messageRepository ?? new InMemoryMessageRepository();
@@ -753,7 +734,6 @@ function buildHandler(overrides?: {
   const deleteConversationGraphStore =
     overrides?.deleteConversationGraphStore ?? new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository);
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
-  const llmCompletionService = overrides?.llmCompletionService ?? new InMemoryLlmCompletionService();
   const genericValidationService = new GenericValidationService();
   const conversationDomainService = new ConversationDomainService(conversationRepository, genericValidationService, now);
   const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
@@ -761,7 +741,6 @@ function buildHandler(overrides?: {
   const blobDomainService = new BlobDomainService(blobRepository, genericValidationService);
   const messageContentDomainService = new MessageContentDomainService(genericValidationService);
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService, now);
-  const llmDomainService = new LlmDomainService(llmCompletionService);
   const fileDomainService = new FileDomainService(fileRepository, blobDomainService, genericValidationService, now);
 
   return createConversationHttpHandler({
@@ -772,9 +751,7 @@ function buildHandler(overrides?: {
     appendMessageToConversation: new AppendMessageToConversationFlow(
       conversationDomainService,
       appendUserMessageDomainService,
-      messageDomainService,
       fileDomainService,
-      llmDomainService,
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });
@@ -1142,22 +1119,6 @@ class InMemoryBlobRepository implements BlobRepository {
     }
 
     return success(undefined);
-  }
-}
-
-class InMemoryLlmCompletionService implements LlmCompletionService {
-  result: Result<LlmCompletionResult, LlmError> | null = null;
-
-  async llmComplete(messages: ReadonlyArray<Message>) {
-    if (this.result) {
-      return this.result;
-    }
-
-    const latestMessage = messages.at(-1);
-
-    return success({
-      content: latestMessage?.content || "empty",
-    });
   }
 }
 

@@ -1,6 +1,5 @@
 import { R2BlobRepository } from "./adapter/blob/r2-blob-repository";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
-import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";
 import { createPostgresDatabase } from "./adapter/postgres/postgres-database";
 import { PostgresConversationRepository } from "./adapter/postgres/postgres-conversation-repository";
 import { PostgresAppendUserMessageStore } from "./adapter/postgres/postgres-append-user-message-store";
@@ -19,7 +18,6 @@ import { ConversationDomainService } from "./domain/services/conversation-domain
 import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { GenericValidationService } from "./domain/services/generic-validation-service";
-import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 
@@ -61,7 +59,6 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
     const deleteConversationGraphDomainService = new DeleteConversationGraphDomainService(deleteConversationGraphStore);
     const blobDomainService = new BlobDomainService(blobRepository, genericValidationService);
-    const llmDomainService = new LlmDomainService(new PlaceholderLlmRepository());
     const fileDomainService = new FileDomainService(fileRepository, blobDomainService, genericValidationService);
     const messageContentDomainService = new MessageContentDomainService(genericValidationService);
     const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
@@ -75,9 +72,7 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         appendMessageToConversation: new AppendMessageToConversationFlow(
           conversationDomainService,
           appendUserMessageDomainService,
-          messageDomainService,
           fileDomainService,
-          llmDomainService,
         ),
         getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
       }),

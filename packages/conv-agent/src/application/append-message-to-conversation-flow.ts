@@ -1,11 +1,9 @@
-import type { MessageDomainService } from "../domain/services/message-domain-service";
 import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
-import { failure, map, type Result } from "../domain/objects/result";
-import { LLM_MESSAGE_TYPES, LLMMessageType } from "../domain/objects/llm";
-import { type LlmDomainService } from "../domain/services/llm-domain-service";
+import { ValidationError, type NotFoundError, type StoreError } from "../domain/objects/errors";
+import { failure, type Result } from "../domain/objects/result";
+import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
 import { type AppendMessageRequest } from "../domain/objects/append-message-request";
 
 export { type AppendMessageRequest } from "../domain/objects/append-message-request";
@@ -16,12 +14,10 @@ export class AppendMessageToConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
-    private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
-    private readonly llmDomainService: LlmDomainService,
   ) {}
 
-  async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
+  async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
     const conversationResult = await this.conversationDomainService.findById(request.conversationId);
 
     if (!conversationResult.ok) {
@@ -56,25 +52,6 @@ export class AppendMessageToConversationFlow {
       return deleteUploadedBlobsResult.ok ? createUserMessageResult : deleteUploadedBlobsResult;
     }
 
-    const allMessagesResult = await this.messageDomainService.findAll(request.conversationId);
-
-    if (!allMessagesResult.ok) {
-      return allMessagesResult;
-    }
-
-    const llmResult = await this.llmDomainService.complete(allMessagesResult.value);
-
-    if (!llmResult.ok) {
-      return llmResult;
-    }
-
-    return map(
-      await this.messageDomainService.createNextMessage({
-        conversationId: request.conversationId,
-        type: LLMMessageType.Assistant,
-        content: llmResult.value.content,
-      }),
-      () => undefined,
-    );
+    return { ok: true, value: undefined };
   }
 }

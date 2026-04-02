@@ -2,14 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "./domain/contracts/append-user-message-store";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
+import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
 import type { ConversationRepository } from "./domain/contracts/conversation-repository";
 import type { DeleteConversationGraphStore, DeletedConversationGraph } from "./domain/contracts/delete-conversation-graph-store";
 import type { FileRepository } from "./domain/contracts/file-repository";
 import type { MessageRepository } from "./domain/contracts/message-repository";
 import { Conversation } from "./domain/objects/conversation";
-import { EntityType, NotFoundError, StoreError, StoreOperation } from "./domain/objects/errors";
+import { EntityType, LlmError, NotFoundError, StoreError, StoreOperation } from "./domain/objects/errors";
 import { File as StoredFile } from "./domain/objects/file";
-import { LLMMessageType } from "./domain/objects/llm";
+import { LLMMessageType, type LlmCompletionResult } from "./domain/objects/llm";
 import { type InsertNextMessageRecord, Message } from "./domain/objects/message";
 import { failure, success, type Result } from "./domain/objects/result";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
@@ -18,9 +19,11 @@ import { ConversationDomainService } from "./domain/services/conversation-domain
 import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { GenericValidationService } from "./domain/services/generic-validation-service";
+import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
+import { CompleteConversationFlow } from "./application/complete-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
 import { DeleteConversationFlow } from "./application/delete-conversation-flow";
 import { GetConversationFlow } from "./application/get-conversation-flow";
@@ -396,6 +399,120 @@ describe("message validation", () => {
       },
     });
     expect(blobRepository.deletedUrls).toEqual(["/files/file-1-hello.txt"]);
+  });
+
+  test("CompleteConversationFlow appends one assistant message when called directly", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const genericValidationService = new GenericValidationService();
+    const flow = new CompleteConversationFlow(
+      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({ conversationId: "conversation-1" });
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(messageRepository.get("message-2")).toEqual(
+      mustCreateMessage("message-2", "conversation-1", LLMMessageType.Assistant, 2, "assistant reply", "2026-03-16T12:00:00.000Z")
+    );
+  });
+
+  test("CompleteConversationFlow rejects empty conversations", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const genericValidationService = new GenericValidationService();
+    const flow = new CompleteConversationFlow(
+      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({ conversationId: "conversation-1" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "ValidationError",
+        fieldName: "conversationId",
+        message: "conversation must contain at least one message before requesting completion.",
+      },
+    });
+  });
+
+  test("CompleteConversationFlow rejects conversations whose latest message is already assistant", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const genericValidationService = new GenericValidationService();
+    const flow = new CompleteConversationFlow(
+      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.Assistant, 1, "done", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({ conversationId: "conversation-1" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "ValidationError",
+        fieldName: "conversationId",
+        message: "conversation cannot be completed when the latest message is already assistant.",
+      },
+    });
+  });
+
+  test("CompleteConversationFlow returns not found when the conversation is missing", async () => {
+    const genericValidationService = new GenericValidationService();
+    const flow = new CompleteConversationFlow(
+      new ConversationDomainService(new InMemoryConversationRepository(), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new MessageDomainService(new InMemoryMessageRepository(), new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
+    );
+
+    const result = await flow.execute({ conversationId: "conversation-missing" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "NotFoundError",
+        entityType: EntityType.Conversation,
+        id: "conversation-missing",
+      },
+    });
+  });
+
+  test("CompleteConversationFlow returns LLM failures unchanged", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const genericValidationService = new GenericValidationService();
+    const flow = new CompleteConversationFlow(
+      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmDomainService(new InMemoryLlmCompletionService(failure(new LlmError("llm failed")))),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({ conversationId: "conversation-1" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "LlmError",
+        message: "llm failed",
+      },
+    });
   });
 
   test("DeleteConversationFlow deletes the DB graph before blob cleanup", async () => {
@@ -1119,6 +1236,14 @@ class InMemoryBlobRepository implements BlobRepository {
     }
 
     return success(undefined);
+  }
+}
+
+class InMemoryLlmCompletionService implements LlmCompletionService {
+  constructor(private readonly result: Result<LlmCompletionResult, LlmError>) {}
+
+  async llmComplete(_messages: ReadonlyArray<Message>) {
+    return this.result;
   }
 }
 

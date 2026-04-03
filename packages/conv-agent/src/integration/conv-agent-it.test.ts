@@ -9,6 +9,9 @@ import { LLMMessageType } from "../domain/objects/llm";
 import { convIntegrationSetup, type ConvIntegrationSetup } from "./conv-agent-it-setup";
 
 const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
+const CLEANUP_TIMEOUT_MS = 5_000;
+const COMPLETION_TIMEOUT_MS = 5_000;
+const COMPLETION_POLL_INTERVAL_MS = 100;
 
 let setup: ConvIntegrationSetup | undefined;
 
@@ -49,6 +52,11 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
       expect(appendResponse.status).toBe(204);
       expect(await appendResponse.text()).toBe("");
     }
+
+    const allMessages = await waitForConversationMessages(startedSetup, createdConversation.id, 20);
+
+    expect(allMessages).toHaveLength(20);
+    expect(allMessages.some((message) => message.type === "assistant")).toBe(true);
 
     // Confirm the conversation itself is still readable before paging messages.
     const getConversationResponse = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url));
@@ -469,9 +477,56 @@ async function deleteConversationIfPresent(startedSetup: ConvIntegrationSetup, c
     return;
   }
 
-  await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url), {
-    method: "DELETE",
-  });
+  try {
+    await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url), {
+      method: "DELETE",
+      signal: AbortSignal.timeout(CLEANUP_TIMEOUT_MS),
+    });
+  } catch {
+    // Best-effort cleanup. The main test assertions should have already run.
+  }
+}
+
+async function waitForConversationMessages(
+  startedSetup: ConvIntegrationSetup,
+  conversationId: string,
+  expectedCount: number,
+): Promise<
+  Array<{
+    readonly conversationId: string;
+    readonly sequenceNumber: number;
+    readonly type: string;
+    readonly content: string;
+    readonly files: unknown[];
+  }>
+> {
+  const deadline = Date.now() + COMPLETION_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    const response = await fetch(
+      new URL(`/conversations/${conversationId}/chat?pageNum=1&pageSize=${expectedCount}`, startedSetup.server.url),
+    );
+
+    expect(response.status).toBe(200);
+
+    const page = (await response.json()) as {
+      readonly items: Array<{
+        readonly conversationId: string;
+        readonly sequenceNumber: number;
+        readonly type: string;
+        readonly content: string;
+        readonly files: unknown[];
+      }>;
+    };
+
+    if (page.items.length >= expectedCount) {
+      return page.items;
+    }
+
+    await Bun.sleep(COMPLETION_POLL_INTERVAL_MS);
+  }
+
+  throw new Error(`Timed out waiting for ${expectedCount} conversation messages.`);
 }
 
 function buildImageMessageFormData(imageBytes: Uint8Array, text: string): FormData {

@@ -17,6 +17,13 @@ export interface ConvAgentConfig {
     accessKeyId: string;
     secretAccessKey: string;
   };
+  llmDispatchQueue: {
+    endpoint?: string;
+    region: string;
+    queueUrl: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+  };
 }
 
 export interface KbCurateAgentConfig {
@@ -79,6 +86,7 @@ function parseConfig(value: unknown, blobStorageCredentials: BlobStorageCredenti
   const kbCurateAgent = requireObject(config.kbCurateAgent, "kbCurateAgent");
   const planningAgent = requireObject(config.planningAgent, "planningAgent");
   const convAgentBlobStorage = requireObject(convAgent.blobStorage, "convAgent.blobStorage");
+  const convAgentLlmDispatchQueue = requireObject(convAgent.llmDispatchQueue, "convAgent.llmDispatchQueue");
 
   return {
     proxy: {
@@ -94,6 +102,13 @@ function parseConfig(value: unknown, blobStorageCredentials: BlobStorageCredenti
         folder: requireString(convAgentBlobStorage.folder, "convAgent.blobStorage.folder"),
         accessKeyId: requireString(convAgentBlobStorage.accessKeyId ?? blobStorageCredentials.accessKeyId, "convAgent.blobStorage.accessKeyId"),
         secretAccessKey: requireString(convAgentBlobStorage.secretAccessKey ?? blobStorageCredentials.secretAccessKey, "convAgent.blobStorage.secretAccessKey"),
+      },
+      llmDispatchQueue: {
+        endpoint: optionalString(convAgentLlmDispatchQueue.endpoint),
+        region: requireString(convAgentLlmDispatchQueue.region, "convAgent.llmDispatchQueue.region"),
+        queueUrl: requireString(convAgentLlmDispatchQueue.queueUrl, "convAgent.llmDispatchQueue.queueUrl"),
+        accessKeyId: requireString(convAgentLlmDispatchQueue.accessKeyId, "convAgent.llmDispatchQueue.accessKeyId"),
+        secretAccessKey: requireString(convAgentLlmDispatchQueue.secretAccessKey, "convAgent.llmDispatchQueue.secretAccessKey"),
       },
     },
     kbCurateAgent: {

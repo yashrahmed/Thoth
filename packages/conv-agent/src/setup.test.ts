@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "./domain/contracts/append-user-message-store";
 import type { BlobRepository } from "./domain/contracts/blob-repository";
+import type { DispatchLlmCompletionInput, LLMCompletionDispatcher } from "./domain/contracts/llm-completion-dispatcher";
 import type { LlmCompletionService } from "./domain/contracts/llm-completion-service";
 import type { ConversationRepository } from "./domain/contracts/conversation-repository";
 import type { DeleteConversationGraphStore, DeletedConversationGraph } from "./domain/contracts/delete-conversation-graph-store";
@@ -19,6 +20,7 @@ import { ConversationDomainService } from "./domain/services/conversation-domain
 import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { GenericValidationService } from "./domain/services/generic-validation-service";
+import { LlmCompletionDispatchDomainService } from "./domain/services/llm-completion-dispatch-domain-service";
 import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
@@ -276,12 +278,14 @@ describe("message validation", () => {
     const fileRepository = new InMemoryFileRepository();
     const blobRepository = new InMemoryBlobRepository();
     const appendUserMessageStore = new InMemoryAppendUserMessageStore(messageRepository, fileRepository);
+    const llmCompletionDispatcher = new InMemoryLlmCompletionDispatcher();
     const genericValidationService = new GenericValidationService();
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(appendUserMessageStore),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new FileDomainService(fileRepository, new BlobDomainService(blobRepository, genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmCompletionDispatchDomainService(llmCompletionDispatcher),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -320,12 +324,14 @@ describe("message validation", () => {
         ],
       },
     ]);
+    expect(llmCompletionDispatcher.dispatchedInputs).toEqual([{ messageId: "message-1" }]);
   });
 
   test("AppendMessageToConversationFlow deletes uploaded blobs when transactional persistence fails", async () => {
     const conversationRepository = new InMemoryConversationRepository();
     const blobRepository = new InMemoryBlobRepository();
     const appendUserMessageStore = new FailingAppendUserMessageStore(new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"));
+    const llmCompletionDispatcher = new InMemoryLlmCompletionDispatcher();
     const genericValidationService = new GenericValidationService();
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
@@ -342,6 +348,7 @@ describe("message validation", () => {
         genericValidationService,
         () => new Date("2026-03-16T12:00:00.000Z"),
       ),
+      new LlmCompletionDispatchDomainService(llmCompletionDispatcher),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -369,6 +376,7 @@ describe("message validation", () => {
       },
     });
     expect(blobRepository.deletedUrls).toEqual(["/files/file-1-hello.txt"]);
+    expect(llmCompletionDispatcher.dispatchedInputs).toEqual([]);
   });
 
   test("AppendMessageToConversationFlow returns blob cleanup failure when transactional persistence and cleanup both fail", async () => {
@@ -376,6 +384,7 @@ describe("message validation", () => {
     const blobRepository = new InMemoryBlobRepository();
     blobRepository.removeBlobResult = failure(new StoreError(EntityType.File, StoreOperation.Remove, "blob cleanup failed"));
     const genericValidationService = new GenericValidationService();
+    const llmCompletionDispatcher = new InMemoryLlmCompletionDispatcher();
     const flow = new AppendMessageToConversationFlow(
       new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new AppendUserMessageDomainService(new FailingAppendUserMessageStore(new StoreError(EntityType.Message, StoreOperation.Persist, "transaction failed"))),
@@ -391,6 +400,7 @@ describe("message validation", () => {
         genericValidationService,
         () => new Date("2026-03-16T12:00:00.000Z"),
       ),
+      new LlmCompletionDispatchDomainService(llmCompletionDispatcher),
     );
 
     conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
@@ -418,6 +428,45 @@ describe("message validation", () => {
       },
     });
     expect(blobRepository.deletedUrls).toEqual(["/files/file-1-hello.txt"]);
+    expect(llmCompletionDispatcher.dispatchedInputs).toEqual([]);
+  });
+
+  test("AppendMessageToConversationFlow returns dispatch failures after persistence", async () => {
+    const conversationRepository = new InMemoryConversationRepository();
+    const messageRepository = new InMemoryMessageRepository();
+    const fileRepository = new InMemoryFileRepository();
+    const blobRepository = new InMemoryBlobRepository();
+    const appendUserMessageStore = new InMemoryAppendUserMessageStore(messageRepository, fileRepository);
+    const genericValidationService = new GenericValidationService();
+    const flow = new AppendMessageToConversationFlow(
+      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new AppendUserMessageDomainService(appendUserMessageStore),
+      new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new FileDomainService(fileRepository, new BlobDomainService(blobRepository, genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
+      new LlmCompletionDispatchDomainService(new FailingLlmCompletionDispatcher(new StoreError(EntityType.Message, StoreOperation.Persist, "dispatch failed"))),
+    );
+
+    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+
+    const result = await flow.execute({
+      conversationId: "conversation-1",
+      type: LLMMessageType.User,
+      content: "hello",
+      attachments: [],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "StoreError",
+        entityType: EntityType.Message,
+        operation: StoreOperation.Persist,
+        message: "dispatch failed",
+      },
+    });
+    expect(messageRepository.get("message-1")).toEqual(
+      mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z"),
+    );
   });
 
   test("CompleteConversationFlow appends one assistant message when called directly", async () => {
@@ -863,6 +912,7 @@ function buildHandler(overrides?: {
   readonly appendUserMessageStore?: AppendUserMessageStore;
   readonly deleteConversationGraphStore?: DeleteConversationGraphStore;
   readonly blobRepository?: InMemoryBlobRepository;
+  readonly llmCompletionDispatcher?: LLMCompletionDispatcher;
 }) {
   const conversationRepository = overrides?.conversationRepository ?? new InMemoryConversationRepository();
   const messageRepository = overrides?.messageRepository ?? new InMemoryMessageRepository();
@@ -872,6 +922,7 @@ function buildHandler(overrides?: {
   const deleteConversationGraphStore =
     overrides?.deleteConversationGraphStore ?? new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository);
   const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
+  const llmCompletionDispatcher = overrides?.llmCompletionDispatcher ?? new InMemoryLlmCompletionDispatcher();
   const genericValidationService = new GenericValidationService();
   const conversationDomainService = new ConversationDomainService(conversationRepository, genericValidationService, now);
   const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
@@ -891,6 +942,7 @@ function buildHandler(overrides?: {
       appendUserMessageDomainService,
       messageDomainService,
       fileDomainService,
+      new LlmCompletionDispatchDomainService(llmCompletionDispatcher),
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });
@@ -1097,6 +1149,23 @@ class FailingAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly error: StoreError) {}
 
   async persistUserMessageWithFiles(_input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>> {
+    return failure(this.error);
+  }
+}
+
+class InMemoryLlmCompletionDispatcher implements LLMCompletionDispatcher {
+  readonly dispatchedInputs: DispatchLlmCompletionInput[] = [];
+
+  async dispatch(input: DispatchLlmCompletionInput): Promise<Result<void, StoreError>> {
+    this.dispatchedInputs.push(input);
+    return success(undefined);
+  }
+}
+
+class FailingLlmCompletionDispatcher implements LLMCompletionDispatcher {
+  constructor(private readonly error: StoreError) {}
+
+  async dispatch(_input: DispatchLlmCompletionInput): Promise<Result<void, StoreError>> {
     return failure(this.error);
   }
 }

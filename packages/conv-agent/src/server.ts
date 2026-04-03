@@ -6,6 +6,7 @@ const { server } = await convSetup({
   port: config.port,
   databaseUrl: config.databaseUrl,
   blobStorage: config.blobStorage,
+  llmDispatchQueue: config.llmDispatchQueue,
 });
 
 console.log(`Thoth conv-agent running at http://localhost:${server.port}`);

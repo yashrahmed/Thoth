@@ -1,12 +1,17 @@
+import { SQSClient } from "@aws-sdk/client-sqs";
 import { R2BlobRepository } from "./adapter/blob/r2-blob-repository";
+import { SqsLlmCompletionListener } from "./adapter/inbound/sqs-llm-completion-listener";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
+import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";
 import { createPostgresDatabase } from "./adapter/postgres/postgres-database";
 import { PostgresConversationRepository } from "./adapter/postgres/postgres-conversation-repository";
 import { PostgresAppendUserMessageStore } from "./adapter/postgres/postgres-append-user-message-store";
 import { PostgresDeleteConversationGraphStore } from "./adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresFileRepository } from "./adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "./adapter/postgres/postgres-message-repository";
+import { SqsLlmCompletionDispatcher } from "./adapter/sqs/sqs-llm-completion-dispatcher";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
+import { CompleteConversationFlow } from "./application/complete-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
 import { DeleteConversationFlow } from "./application/delete-conversation-flow";
 import { GetConversationFlow } from "./application/get-conversation-flow";
@@ -18,6 +23,8 @@ import { ConversationDomainService } from "./domain/services/conversation-domain
 import { DeleteConversationGraphDomainService } from "./domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "./domain/services/file-domain-service";
 import { GenericValidationService } from "./domain/services/generic-validation-service";
+import { LlmCompletionDispatchDomainService } from "./domain/services/llm-completion-dispatch-domain-service";
+import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 
@@ -34,6 +41,13 @@ interface ConvSetupInput {
   readonly port: number;
   readonly databaseUrl: string;
   readonly blobStorage: ConvSetupBlobStorage;
+  readonly llmDispatchQueue: {
+    endpoint?: string;
+    region: string;
+    queueUrl: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+  };
 }
 
 export interface ConvSetupResult {
@@ -50,6 +64,14 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const fileRepository = new PostgresFileRepository(database);
     const appendUserMessageStore = new PostgresAppendUserMessageStore(database);
     const deleteConversationGraphStore = new PostgresDeleteConversationGraphStore(database);
+    const sqsClient = new SQSClient({
+      credentials: {
+        accessKeyId: input.llmDispatchQueue.accessKeyId,
+        secretAccessKey: input.llmDispatchQueue.secretAccessKey,
+      },
+      endpoint: input.llmDispatchQueue.endpoint,
+      region: input.llmDispatchQueue.region,
+    });
     const blobRepository = new R2BlobRepository(input.blobStorage, {
       accessKeyId: input.blobStorage.accessKeyId,
       secretAccessKey: input.blobStorage.secretAccessKey,
@@ -62,6 +84,17 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const fileDomainService = new FileDomainService(fileRepository, blobDomainService, genericValidationService);
     const messageContentDomainService = new MessageContentDomainService(genericValidationService);
     const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
+    const llmCompletionDispatcher = new SqsLlmCompletionDispatcher(sqsClient, input.llmDispatchQueue.queueUrl);
+    const llmCompletionDispatchDomainService = new LlmCompletionDispatchDomainService(llmCompletionDispatcher);
+    const completeConversationFlow = new CompleteConversationFlow(
+      messageDomainService,
+      new LlmDomainService(new PlaceholderLlmRepository()),
+      appendUserMessageDomainService,
+    );
+    const sqsLlmCompletionListener = new SqsLlmCompletionListener(sqsClient, input.llmDispatchQueue.queueUrl, completeConversationFlow);
+
+    sqsLlmCompletionListener.start();
+
     const server = Bun.serve({
       port: input.port,
       fetch: createConversationHttpHandler({
@@ -74,6 +107,7 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
           appendUserMessageDomainService,
           messageDomainService,
           fileDomainService,
+          llmCompletionDispatchDomainService,
         ),
         getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
       }),
@@ -90,6 +124,8 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
         stopped = true;
 
         try {
+          sqsClient.destroy();
+          await sqsLlmCompletionListener.stop();
           await server.stop(true);
         } finally {
           await database.end();

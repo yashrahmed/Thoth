@@ -1,0 +1,64 @@
+name: conv-agent-it
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: thoth_test
+      POSTGRES_USER: thoth
+      POSTGRES_PASSWORD: thoth
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "55432:5432"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - wal_compression=on
+      - -c
+      - max_connections=100
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thoth -d thoth_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  flyway:
+    image: redgate/flyway:11-alpine
+    platform: linux/amd64
+    profiles:
+      - migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_DEFAULT_SCHEMA: flyway
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/thoth_test
+      FLYWAY_SCHEMAS: flyway,thoth
+      FLYWAY_USER: thoth
+      FLYWAY_PASSWORD: thoth
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+    volumes:
+      - ../db/migrations:/flyway/sql:ro
+
+  s3mock:
+    image: adobe/s3mock:latest
+    ports:
+      - "59090:9090"
+
+  localstack:
+    image: localstack/localstack:3.0.2
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+      LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT: "1"
+      LOCALSTACK_HOST: localhost
+    ports:
+      - "54566:4566"

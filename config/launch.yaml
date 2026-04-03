@@ -12,6 +12,12 @@ convAgent:
     bucket: thoth-obj-store-dev
     region: auto
     folder: conv-agent
+  llmDispatchQueue:
+    endpoint: http://127.0.0.1:4566
+    region: us-east-1
+    queueUrl: http://127.0.0.1:4566/000000000000/thoth-llm-completions
+    accessKeyId: test
+    secretAccessKey: test
 
 kbCurateAgent:
   port: 3002

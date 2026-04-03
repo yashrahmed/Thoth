@@ -6,14 +6,13 @@
 3. Examine outbox for file uploads.
    1. This will require modeling a file independent of a message and a conversation and then each message_ids having a list of file_ids like before.
 4. Examine async options for LLM completion.
-   1. LLM completion contract must accept a conversation id.
-   2. Figure out a good option for a message queue.
-   3. Figure out how to lock down the conversation while a message is being processed.
-5. Trials for Google Auth.
-6. Deployment trials on Cloudflare.
-7. Integrate an actual LLM and make it useful at least locally.
-8. Supporting server side rendering of content.
-9. Supporting Oauth and multitenancy.
+   1. Use `SQS Standard` as the queue option for LLM dispatch (Issues with integration tests).
+5. Migrate file storage from `R2` to `S3`.
+6. Trials for Google Auth.
+7. Deployment trials on AWS.
+8. Integrate an actual LLM and make it useful at least locally.
+9. Supporting server side rendering of content.
+10. Supporting Oauth and multitenancy.
 
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.
 

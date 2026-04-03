@@ -421,21 +421,18 @@ describe("message validation", () => {
   });
 
   test("CompleteConversationFlow appends one assistant message when called directly", async () => {
-    const conversationRepository = new InMemoryConversationRepository();
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
-      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
-    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
     messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z")]);
 
-    const result = await flow.execute({ conversationId: "conversation-1" });
+    const result = await flow.execute({ messageId: "message-1" });
 
     expect(result).toEqual({ ok: true, value: undefined });
     expect(messageRepository.get("message-2")).toEqual(
@@ -443,98 +440,92 @@ describe("message validation", () => {
     );
   });
 
-  test("CompleteConversationFlow rejects empty conversations", async () => {
-    const conversationRepository = new InMemoryConversationRepository();
+  test("CompleteConversationFlow rejects stale trigger messages", async () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
-      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
-    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
+    messageRepository.seed([
+      mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z"),
+      mustCreateMessage("message-2", "conversation-1", LLMMessageType.User, 2, "newer", "2026-03-16T12:00:01.000Z"),
+    ]);
 
-    const result = await flow.execute({ conversationId: "conversation-1" });
+    const result = await flow.execute({ messageId: "message-1" });
 
     expect(result).toEqual({
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "conversationId",
-        message: "conversation must contain at least one message before requesting completion.",
+        fieldName: "messageId",
+        message: "messageId must reference the latest message; received message-1 but latest is message-2.",
       },
     });
   });
 
-  test("CompleteConversationFlow rejects conversations whose latest message is already assistant", async () => {
-    const conversationRepository = new InMemoryConversationRepository();
+  test("CompleteConversationFlow rejects non-user trigger messages", async () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
-      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
-    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
     messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.Assistant, 1, "done", "2026-03-16T12:00:00.000Z")]);
 
-    const result = await flow.execute({ conversationId: "conversation-1" });
+    const result = await flow.execute({ messageId: "message-1" });
 
     expect(result).toEqual({
       ok: false,
       error: {
         kind: "ValidationError",
-        fieldName: "conversationId",
-        message: "conversation can only be completed when the latest message is user; received assistant.",
+        fieldName: "messageId",
+        message: "messageId must reference a user message; received assistant.",
       },
     });
   });
 
-  test("CompleteConversationFlow returns not found when the conversation is missing", async () => {
+  test("CompleteConversationFlow returns not found when the trigger message is missing", async () => {
     const genericValidationService = new GenericValidationService();
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const flow = new CompleteConversationFlow(
-      new ConversationDomainService(new InMemoryConversationRepository(), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
-    const result = await flow.execute({ conversationId: "conversation-missing" });
+    const result = await flow.execute({ messageId: "message-missing" });
 
     expect(result).toEqual({
       ok: false,
       error: {
         kind: "NotFoundError",
-        entityType: EntityType.Conversation,
-        id: "conversation-missing",
+        entityType: EntityType.Message,
+        id: "message-missing",
       },
     });
   });
 
   test("CompleteConversationFlow returns LLM failures unchanged", async () => {
-    const conversationRepository = new InMemoryConversationRepository();
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
     const flow = new CompleteConversationFlow(
-      new ConversationDomainService(conversationRepository, genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(failure(new LlmError("llm failed")))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
     );
 
-    conversationRepository.seed([mustCreateConversation("conversation-1", "2026-03-16T12:00:00.000Z")]);
     messageRepository.seed([mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z")]);
 
-    const result = await flow.execute({ conversationId: "conversation-1" });
+    const result = await flow.execute({ messageId: "message-1" });
 
     expect(result).toEqual({
       ok: false,

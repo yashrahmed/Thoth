@@ -1,5 +1,4 @@
 import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
-import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { LlmDomainService } from "../domain/services/llm-domain-service";
 import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { LLMMessageType } from "../domain/objects/llm";
@@ -7,25 +6,25 @@ import { ValidationError, type LlmError, type NotFoundError, type StoreError } f
 import { type Result } from "../domain/objects/result";
 
 export interface CompleteConversationRequest {
-  readonly conversationId: string;
+  readonly messageId: string;
 }
 
 export class CompleteConversationFlow {
   constructor(
-    private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly llmDomainService: LlmDomainService,
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
   ) {}
 
   async execute(request: CompleteConversationRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
-    const conversationResult = await this.conversationDomainService.findById(request.conversationId);
+    const triggerMessageResult = await this.messageDomainService.findById(request.messageId);
 
-    if (!conversationResult.ok) {
-      return conversationResult;
+    if (!triggerMessageResult.ok) {
+      return triggerMessageResult;
     }
 
-    const allMessagesResult = await this.messageDomainService.findAll(request.conversationId);
+    const triggerMessage = triggerMessageResult.value;
+    const allMessagesResult = await this.messageDomainService.findAll(triggerMessage.conversationId);
 
     if (!allMessagesResult.ok) {
       return allMessagesResult;
@@ -36,14 +35,21 @@ export class CompleteConversationFlow {
     if (!latestMessage) {
       return {
         ok: false,
-        error: new ValidationError("conversationId", "conversation must contain at least one message before requesting completion."),
+        error: new ValidationError("messageId", "conversation must contain at least one message before requesting completion."),
       };
     }
 
-    if (latestMessage.type !== LLMMessageType.User) {
+    if (latestMessage.id !== triggerMessage.id) {
       return {
         ok: false,
-        error: new ValidationError("conversationId", `conversation can only be completed when the latest message is user; received ${latestMessage.type}.`),
+        error: new ValidationError("messageId", `messageId must reference the latest message; received ${triggerMessage.id} but latest is ${latestMessage.id}.`),
+      };
+    }
+
+    if (triggerMessage.type !== LLMMessageType.User) {
+      return {
+        ok: false,
+        error: new ValidationError("messageId", `messageId must reference a user message; received ${triggerMessage.type}.`),
       };
     }
 
@@ -54,7 +60,7 @@ export class CompleteConversationFlow {
     }
 
     const nextMessageRecordResult = await this.messageDomainService.buildNextMessageRecord({
-      conversationId: request.conversationId,
+      conversationId: triggerMessage.conversationId,
       type: LLMMessageType.Assistant,
       content: llmResult.value.content,
     });

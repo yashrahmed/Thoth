@@ -503,9 +503,7 @@ async function waitForConversationMessages(
   const deadline = Date.now() + COMPLETION_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
-    const response = await fetch(
-      new URL(`/conversations/${conversationId}/chat?pageNum=1&pageSize=${expectedCount}`, startedSetup.server.url),
-    );
+    const response = await fetch(new URL(`/conversations/${conversationId}/chat?pageNum=1&pageSize=${expectedCount}`, startedSetup.server.url));
 
     expect(response.status).toBe(200);
 

@@ -5,7 +5,7 @@ import { LLMMessageType } from "../domain/objects/llm";
 import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { type Result } from "../domain/objects/result";
 
-export interface CompleteConversationRequest {
+interface CompleteConversationRequest {
   readonly messageId: string;
 }
 

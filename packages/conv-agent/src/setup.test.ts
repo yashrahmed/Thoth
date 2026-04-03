@@ -464,9 +464,7 @@ describe("message validation", () => {
         message: "dispatch failed",
       },
     });
-    expect(messageRepository.get("message-1")).toEqual(
-      mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z"),
-    );
+    expect(messageRepository.get("message-1")).toEqual(mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z"));
   });
 
   test("CompleteConversationFlow appends one assistant message when called directly", async () => {
@@ -485,7 +483,7 @@ describe("message validation", () => {
 
     expect(result).toEqual({ ok: true, value: undefined });
     expect(messageRepository.get("message-2")).toEqual(
-      mustCreateMessage("message-2", "conversation-1", LLMMessageType.Assistant, 2, "assistant reply", "2026-03-16T12:00:00.000Z")
+      mustCreateMessage("message-2", "conversation-1", LLMMessageType.Assistant, 2, "assistant reply", "2026-03-16T12:00:00.000Z"),
     );
   });
 
@@ -1032,7 +1030,7 @@ class InMemoryMessageRepository implements MessageRepository {
       record.type,
       record.sequenceNumber,
       record.content,
-      record.createdAt.toISOString()
+      record.createdAt.toISOString(),
     );
     this.messages.set(message.id, message);
     return success(message);

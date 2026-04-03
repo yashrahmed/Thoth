@@ -14,10 +14,6 @@ export async function andThenAsync<T, E, U, F>(result: Result<T, E>, fn: (value:
   return result.ok ? fn(result.value) : result;
 }
 
-export function map<T, E, U>(result: Result<T, E>, fn: (value: T) => U): Result<U, E> {
-  return result.ok ? success(fn(result.value)) : result;
-}
-
 export async function traverseAsync<T, U, E>(items: ReadonlyArray<T>, fn: (item: T) => Promise<Result<U, E>>): Promise<Result<U[], E>> {
   const results: U[] = [];
 

@@ -39,10 +39,7 @@ export class PostgresMessageRepository implements MessageRepository {
         const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
 
         if (latestSequenceNumber !== expectedPreviousSequenceNumber) {
-          throw new ValidationError(
-            "sequenceNumber",
-            `sequenceNumber must append after ${latestSequenceNumber}; received ${record.sequenceNumber}.`,
-          );
+          throw new ValidationError("sequenceNumber", `sequenceNumber must append after ${latestSequenceNumber}; received ${record.sequenceNumber}.`);
         }
 
         const rows = await sql<MessageRow[]>`
@@ -231,10 +228,5 @@ function getErrorMessage(error: unknown): string {
 }
 
 function isUniqueSequenceConstraintViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }

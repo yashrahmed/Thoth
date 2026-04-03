@@ -86,11 +86,7 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
     const llmCompletionDispatcher = new SqsLlmCompletionDispatcher(sqsClient, input.llmDispatchQueue.queueUrl);
     const llmCompletionDispatchDomainService = new LlmCompletionDispatchDomainService(llmCompletionDispatcher);
-    const completeConversationFlow = new CompleteConversationFlow(
-      messageDomainService,
-      new LlmDomainService(new PlaceholderLlmRepository()),
-      appendUserMessageDomainService,
-    );
+    const completeConversationFlow = new CompleteConversationFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmRepository()), appendUserMessageDomainService);
     const sqsLlmCompletionListener = new SqsLlmCompletionListener(sqsClient, input.llmDispatchQueue.queueUrl, completeConversationFlow);
 
     sqsLlmCompletionListener.start();

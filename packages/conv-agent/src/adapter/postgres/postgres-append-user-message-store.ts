@@ -39,10 +39,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
 
         if (latestSequenceNumber !== expectedPreviousSequenceNumber) {
-          throw new ValidationError(
-            "sequenceNumber",
-            `sequenceNumber must append after ${latestSequenceNumber}; received ${input.message.sequenceNumber}.`,
-          );
+          throw new ValidationError("sequenceNumber", `sequenceNumber must append after ${latestSequenceNumber}; received ${input.message.sequenceNumber}.`);
         }
 
         const messageRows = await sql<MessageRow[]>`
@@ -144,10 +141,5 @@ function getErrorMessage(error: unknown): string {
 }
 
 function isUniqueSequenceConstraintViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }

@@ -1,22 +1,18 @@
 ### Track 1 - Developing the app in a traditional way.
 
-1. Examine transactions.
-   1. When the LLM service is split out, transactionally persist the outbox request with the triggering user turn.
-2. Examine async usage.
-3. Examine outbox for file uploads.
-   1. This will require modeling a file independent of a message and a conversation and then each message_ids having a list of file_ids like before.
-4. Examine async options for LLM completion.
+1. Examine async usage.
+2. Examine async options for LLM completion.
    1. Use `SQS Standard` as the queue option for LLM dispatch (Issues with integration tests).
-5. Migrate file storage from `R2` to `S3`.
-6. Trials for Google Auth.
-7. Deployment trials on AWS.
-8. Integrate an actual LLM and make it useful at least locally.
-9. Supporting server side rendering of content.
-10. Supporting Oauth and multitenancy.
+3. Migrate file storage from `R2` to `S3` and do a live test run.
+4. Trials for Google Auth.
+5. Deployment trials on AWS.
+6. Integrate an actual LLM and make it useful at least locally.
+7. Supporting server side rendering of content.
+8. Supporting Oauth and multitenancy.
 
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.
 
-1. Experiment to visualize the app's structure. **\***
+1. Experiment to visualize the app's structure.
 2. Develop a visualizer/editor.
 
 ### Track 3 - Develop techniques to encode world models and test cases.

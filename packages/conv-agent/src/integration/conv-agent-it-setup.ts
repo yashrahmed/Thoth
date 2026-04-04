@@ -9,11 +9,11 @@ const DATABASE_HOST = "127.0.0.1";
 const DATABASE_PORT = 55432;
 const BLOB_BUCKET = "thoth-test";
 const BLOB_FOLDER = "integration";
-const BLOB_REGION = "auto";
-const BLOB_ENDPOINT = "http://127.0.0.1:59090";
+const BLOB_REGION = "us-east-1";
 const SQS_REGION = "us-east-1";
 const SQS_QUEUE_NAME = "thoth-llm-completions-queue";
 const LOCALSTACK_ENDPOINT = "http://127.0.0.1:54566";
+const BLOB_ENDPOINT = LOCALSTACK_ENDPOINT;
 
 export interface ConvIntegrationSetup {
   readonly blobBucket: string;

@@ -1,4 +1,4 @@
-name: local-thoth-db
+name: thoth-local-launch
 
 services:
   postgres:
@@ -32,8 +32,8 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./_data:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d
+      - ./db/local/_data:/var/lib/postgresql/data
+      - ./db/local/init:/docker-entrypoint-initdb.d
 
   localstack:
     image: localstack/localstack:3.0.2
@@ -48,8 +48,8 @@ services:
     ports:
       - "4566:4566"
     volumes:
-      - ./blob-store:/var/lib/localstack
-      - ./localstack-init:/etc/localstack/init/ready.d
+      - ./db/local/blob-store:/var/lib/localstack
+      - ./db/local/localstack-init:/etc/localstack/init/ready.d
 
   flyway:
     image: redgate/flyway:11-alpine
@@ -67,4 +67,4 @@ services:
       FLYWAY_PASSWORD: ${LOCAL_POSTGRES_PASSWORD}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
     volumes:
-      - ../migrations:/flyway/sql
+      - ./db/migrations:/flyway/sql

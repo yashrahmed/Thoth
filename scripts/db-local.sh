@@ -4,7 +4,7 @@ set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
-COMPOSE_FILE="$REPO_ROOT/db/local/docker-compose.yml"
+COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 ENV_FILE="$REPO_ROOT/db/local/.env"
 COMMAND="${1:-}"
 LOCALSTACK_ENDPOINT="http://127.0.0.1:4566"

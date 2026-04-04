@@ -40,9 +40,8 @@ wait_for_http() {
 }
 
 start_stack() {
-  docker compose -f "$COMPOSE_FILE" up -d postgres s3mock localstack
+  docker compose -f "$COMPOSE_FILE" up -d postgres localstack
   wait_for_postgres
-  wait_for_http "http://127.0.0.1:59090" "S3Mock"
   wait_for_http "http://127.0.0.1:54566" "LocalStack"
   docker compose -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
 }

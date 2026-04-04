@@ -1,4 +1,4 @@
-name: conv-agent-it
+name: thoth-int-test-launch
 
 services:
   postgres:
@@ -48,15 +48,10 @@ services:
     volumes:
       - ../db/migrations:/flyway/sql:ro
 
-  s3mock:
-    image: adobe/s3mock:latest
-    ports:
-      - "59090:9090"
-
   localstack:
     image: localstack/localstack:3.0.2
     environment:
-      SERVICES: sqs
+      SERVICES: s3,sqs
       AWS_DEFAULT_REGION: us-east-1
       LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT: "1"
       LOCALSTACK_HOST: localhost

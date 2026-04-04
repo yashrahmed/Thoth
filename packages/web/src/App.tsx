@@ -503,24 +503,25 @@ function EmptyState(props: { readonly title: string; readonly body: string }) {
 
 function FileAttachmentView(props: { readonly file: ChatFile }) {
   const file = props.file;
-  const url = new URL(file.canonicalUrl, CONV_AGENT_URL).toString();
-
-  if (file.mimeType.startsWith("image/")) {
-    return <img src={url} alt={file.filename} style={inlineImageStyle} />;
-  }
-
-  if (file.mimeType.startsWith("audio/")) {
-    return (
-      <audio controls style={audioPlayerStyle}>
-        <source src={url} type={file.mimeType} />
-      </audio>
-    );
-  }
 
   return (
-    <a href={url} target="_blank" rel="noreferrer" style={fileChipStyle}>
-      {file.filename}
-    </a>
+    <div style={fileChipStyle}>
+      <span style={fileIconWrapStyle} aria-hidden="true">
+        <FileIcon />
+      </span>
+      <span style={fileNameStyle}>{file.filename}</span>
+    </div>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M9 13h6" />
+      <path d="M9 17h4" />
+    </svg>
   );
 }
 
@@ -902,18 +903,6 @@ const messageTextStyle: React.CSSProperties = {
   whiteSpace: "pre-wrap",
 };
 
-const inlineImageStyle: React.CSSProperties = {
-  display: "block",
-  maxWidth: "100%",
-  borderRadius: "16px",
-  marginTop: "8px",
-};
-
-const audioPlayerStyle: React.CSSProperties = {
-  width: "100%",
-  marginTop: "8px",
-};
-
 const fileListStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
@@ -937,7 +926,21 @@ const fileChipStyle: React.CSSProperties = {
   padding: "8px 12px",
   borderRadius: "999px",
   background: "rgba(255, 255, 255, 0.1)",
-  textDecoration: "none",
+  maxWidth: "100%",
+};
+
+const fileIconWrapStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "rgba(255, 248, 240, 0.82)",
+  flexShrink: 0,
+};
+
+const fileNameStyle: React.CSSProperties = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const composerStyle: React.CSSProperties = {

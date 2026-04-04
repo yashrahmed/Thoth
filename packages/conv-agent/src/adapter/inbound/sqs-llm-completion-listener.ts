@@ -1,5 +1,5 @@
 import { DeleteMessageCommand, ReceiveMessageCommand, type Message as SqsMessage, type SQSClient } from "@aws-sdk/client-sqs";
-import { CompleteConversationFlow } from "../../application/complete-conversation-flow";
+import { LlmCompletionFlow } from "../../application/llm-completion-flow";
 import { LlmError, NotFoundError, StoreError, ValidationError } from "../../domain/objects/errors";
 
 const RECEIVE_WAIT_TIME_SECONDS = 1;
@@ -11,7 +11,7 @@ export class SqsLlmCompletionListener {
   constructor(
     private readonly sqsClient: Pick<SQSClient, "send">,
     private readonly queueUrl: string,
-    private readonly completeConversationFlow: CompleteConversationFlow,
+    private readonly llmCompletionFlow: LlmCompletionFlow,
   ) {}
 
   start(): void {
@@ -63,7 +63,7 @@ export class SqsLlmCompletionListener {
       return;
     }
 
-    const result = await this.completeConversationFlow.execute({ messageId });
+    const result = await this.llmCompletionFlow.execute({ messageId });
 
     if (result.ok) {
       await this.deleteMessage(message.ReceiptHandle);

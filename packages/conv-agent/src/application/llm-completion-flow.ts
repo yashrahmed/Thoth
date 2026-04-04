@@ -5,18 +5,18 @@ import { LLMMessageType } from "../domain/objects/llm";
 import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { type Result } from "../domain/objects/result";
 
-interface CompleteConversationRequest {
+interface LlmCompletionRequest {
   readonly messageId: string;
 }
 
-export class CompleteConversationFlow {
+export class LlmCompletionFlow {
   constructor(
     private readonly messageDomainService: MessageDomainService,
     private readonly llmDomainService: LlmDomainService,
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
   ) {}
 
-  async execute(request: CompleteConversationRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
+  async execute(request: LlmCompletionRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
     const triggerMessageResult = await this.messageDomainService.findById(request.messageId);
 
     if (!triggerMessageResult.ok) {

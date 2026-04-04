@@ -25,11 +25,11 @@ import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
-import { CompleteConversationFlow } from "./application/complete-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
 import { DeleteConversationFlow } from "./application/delete-conversation-flow";
 import { GetConversationFlow } from "./application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "./application/get-messages-on-conversation-flow";
+import { LlmCompletionFlow } from "./application/llm-completion-flow";
 import { ListConversationsFlow } from "./application/list-conversations-flow";
 
 describe("message validation", () => {
@@ -467,11 +467,11 @@ describe("message validation", () => {
     expect(messageRepository.get("message-1")).toEqual(mustCreateMessage("message-1", "conversation-1", LLMMessageType.User, 1, "hello", "2026-03-16T12:00:00.000Z"));
   });
 
-  test("CompleteConversationFlow appends one assistant message when called directly", async () => {
+  test("LlmCompletionFlow appends one assistant message when called directly", async () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
-    const flow = new CompleteConversationFlow(
+    const flow = new LlmCompletionFlow(
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
@@ -487,11 +487,11 @@ describe("message validation", () => {
     );
   });
 
-  test("CompleteConversationFlow rejects stale trigger messages", async () => {
+  test("LlmCompletionFlow rejects stale trigger messages", async () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
-    const flow = new CompleteConversationFlow(
+    const flow = new LlmCompletionFlow(
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
@@ -514,11 +514,11 @@ describe("message validation", () => {
     });
   });
 
-  test("CompleteConversationFlow rejects non-user trigger messages", async () => {
+  test("LlmCompletionFlow rejects non-user trigger messages", async () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
-    const flow = new CompleteConversationFlow(
+    const flow = new LlmCompletionFlow(
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
@@ -538,11 +538,11 @@ describe("message validation", () => {
     });
   });
 
-  test("CompleteConversationFlow returns not found when the trigger message is missing", async () => {
+  test("LlmCompletionFlow returns not found when the trigger message is missing", async () => {
     const genericValidationService = new GenericValidationService();
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
-    const flow = new CompleteConversationFlow(
+    const flow = new LlmCompletionFlow(
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(success({ content: "assistant reply" }))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),
@@ -560,11 +560,11 @@ describe("message validation", () => {
     });
   });
 
-  test("CompleteConversationFlow returns LLM failures unchanged", async () => {
+  test("LlmCompletionFlow returns LLM failures unchanged", async () => {
     const messageRepository = new InMemoryMessageRepository();
     const fileRepository = new InMemoryFileRepository();
     const genericValidationService = new GenericValidationService();
-    const flow = new CompleteConversationFlow(
+    const flow = new LlmCompletionFlow(
       new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => new Date("2026-03-16T12:00:00.000Z")),
       new LlmDomainService(new InMemoryLlmCompletionService(failure(new LlmError("llm failed")))),
       new AppendUserMessageDomainService(new InMemoryAppendUserMessageStore(messageRepository, fileRepository)),

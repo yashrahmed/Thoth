@@ -11,12 +11,12 @@ import { PostgresFileRepository } from "./adapter/postgres/postgres-file-reposit
 import { PostgresMessageRepository } from "./adapter/postgres/postgres-message-repository";
 import { SqsLlmCompletionDispatcher } from "./adapter/sqs/sqs-llm-completion-dispatcher";
 import { AppendMessageToConversationFlow } from "./application/append-message-to-conversation-flow";
-import { CompleteConversationFlow } from "./application/complete-conversation-flow";
 import { CreateConversationFlow } from "./application/create-conversation-flow";
 import { DeleteConversationFlow } from "./application/delete-conversation-flow";
 import { GetConversationFlow } from "./application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "./application/get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "./application/list-conversations-flow";
+import { LlmCompletionFlow } from "./application/llm-completion-flow";
 import { BlobDomainService } from "./domain/services/blob-domain-service";
 import { AppendUserMessageDomainService } from "./domain/services/append-user-message-domain-service";
 import { ConversationDomainService } from "./domain/services/conversation-domain-service";
@@ -86,8 +86,8 @@ export async function convSetup(input: ConvSetupInput): Promise<ConvSetupResult>
     const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
     const llmCompletionDispatcher = new SqsLlmCompletionDispatcher(sqsClient, input.llmDispatchQueue.queueUrl);
     const llmCompletionDispatchDomainService = new LlmCompletionDispatchDomainService(llmCompletionDispatcher);
-    const completeConversationFlow = new CompleteConversationFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmRepository()), appendUserMessageDomainService);
-    const sqsLlmCompletionListener = new SqsLlmCompletionListener(sqsClient, input.llmDispatchQueue.queueUrl, completeConversationFlow);
+    const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmRepository()), appendUserMessageDomainService);
+    const sqsLlmCompletionListener = new SqsLlmCompletionListener(sqsClient, input.llmDispatchQueue.queueUrl, llmCompletionFlow);
 
     sqsLlmCompletionListener.start();
 

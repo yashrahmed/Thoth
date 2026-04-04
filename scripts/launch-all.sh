@@ -65,6 +65,38 @@ kill_service_pids() {
   return "$stopped"
 }
 
+wait_for_service_listener() {
+  service_name="$1"
+  pid_file="$2"
+  service_port="$3"
+  wrapper_pid="$4"
+  log_file="$5"
+  attempts=0
+
+  while [ "$attempts" -lt 30 ]; do
+    listener_pid="$(lsof -ti tcp:"$service_port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+
+    if [ -n "$listener_pid" ]; then
+      echo "$listener_pid" >"$pid_file"
+      echo "Started $service_name. Logs: $log_file"
+      return 0
+    fi
+
+    if ! kill -0 "$wrapper_pid" 2>/dev/null; then
+      rm -f "$pid_file"
+      echo "$service_name failed to start. Logs: $log_file"
+      return 1
+    fi
+
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  rm -f "$pid_file"
+  echo "$service_name did not bind port $service_port in time. Logs: $log_file"
+  return 1
+}
+
 start_service() {
   service_name="$1"
   package_name="$2"
@@ -96,7 +128,9 @@ start_service() {
     echo "$!" >"$pid_file"
   )
 
-  echo "Started $service_name. Logs: $log_file"
+  wrapper_pid="$(cat "$pid_file")"
+
+  wait_for_service_listener "$service_name" "$pid_file" "$service_port" "$wrapper_pid" "$log_file"
 }
 
 stop_service() {

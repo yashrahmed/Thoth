@@ -6,12 +6,26 @@ import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-app
 import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
 import { LLMMessageType } from "../domain/objects/llm";
-import { convIntegrationSetup, type ConvIntegrationSetup } from "./conv-agent-it-setup";
+import { setupAndLaunch, type SetupAndLaunchResult } from "../setup-and-launch";
 
 const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
 const CLEANUP_TIMEOUT_MS = 5_000;
 const COMPLETION_TIMEOUT_MS = 5_000;
 const COMPLETION_POLL_INTERVAL_MS = 100;
+const DATABASE_NAME = "thoth_test";
+const DATABASE_USERNAME = "thoth";
+const DATABASE_PASSWORD = "thoth";
+const DATABASE_HOST = "127.0.0.1";
+const DATABASE_PORT = 55432;
+const BLOB_BUCKET = "thoth-test";
+const BLOB_FOLDER = "integration";
+const BLOB_REGION = "us-east-1";
+const SQS_REGION = "us-east-1";
+const SQS_QUEUE_NAME = "thoth-llm-completions-queue";
+const LOCALSTACK_ENDPOINT = "http://127.0.0.1:54566";
+const BLOB_ENDPOINT = LOCALSTACK_ENDPOINT;
+
+type ConvIntegrationSetup = SetupAndLaunchResult;
 
 let setup: ConvIntegrationSetup | undefined;
 
@@ -464,6 +478,35 @@ test("deletes the DB conversation graph transactionally and returns blob URLs fo
   }
 });
 
+async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
+  return setupAndLaunch({
+    port: 0,
+    databaseUrl: buildDatabaseUrl(DATABASE_HOST, DATABASE_PORT),
+    blobStorage: {
+      accessKeyId: "test",
+      bucket: BLOB_BUCKET,
+      endpoint: BLOB_ENDPOINT,
+      folder: BLOB_FOLDER,
+      region: BLOB_REGION,
+      secretAccessKey: "test",
+      bootstrap: {
+        createBucket: true,
+        forcePathStyle: true,
+      },
+    },
+    llmDispatchQueue: {
+      endpoint: LOCALSTACK_ENDPOINT,
+      region: SQS_REGION,
+      accessKeyId: "test",
+      secretAccessKey: "test",
+      bootstrap: {
+        createQueue: true,
+        queueName: SQS_QUEUE_NAME,
+      },
+    },
+  });
+}
+
 function requireSetup(): ConvIntegrationSetup {
   if (!setup) {
     throw new Error("Integration setup was not started.");
@@ -544,4 +587,8 @@ function buildImageMessageFormData(imageBytes: Uint8Array, text: string): FormDa
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function buildDatabaseUrl(host: string, port: number): string {
+  return `postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${host}:${port}/${DATABASE_NAME}`;
 }

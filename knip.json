@@ -19,6 +19,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/config": {
+      "entry": ["src/index.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/domain/contracts": {

@@ -35,6 +35,22 @@ services:
       - ./_data:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d
 
+  localstack:
+    image: localstack/localstack:3.0.2
+    container_name: thoth-localstack-local
+    restart: unless-stopped
+    environment:
+      SERVICES: s3,sqs
+      AWS_DEFAULT_REGION: us-east-1
+      LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT: "1"
+      LOCALSTACK_HOST: localhost
+      PERSISTENCE: "1"
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./blob-store:/var/lib/localstack
+      - ./localstack-init:/etc/localstack/init/ready.d
+
   flyway:
     image: redgate/flyway:11-alpine
     platform: linux/amd64

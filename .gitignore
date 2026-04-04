@@ -31,6 +31,7 @@ config/*.yaml
 
 # Local database state
 db/local/_data/
+db/local/blob-store/
 
 # Claude Code local settings
 .claude/settings.local.json

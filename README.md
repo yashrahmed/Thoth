@@ -70,10 +70,12 @@ For the local full-stack workflow, [config/launch.yaml](/Users/yashrahmed/Docume
 - `bun run dev:local:start`
 - `bun run dev:local:stop`
 
-The local database launcher now uses command-based scripts as well:
+The local infrastructure launcher now brings up PostgreSQL plus LocalStack-backed `S3`/`SQS`:
 
 - `bun run db:local:start`
 - `bun run db:local:stop`
+
+Persisted LocalStack object-store data is bind-mounted under `db/local/blob-store/`.
 
 ## Planning
 

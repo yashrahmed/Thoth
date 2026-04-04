@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse } from "yaml";
 
 export interface ProxyConfig {
@@ -54,13 +54,37 @@ function getThothConfig(): ThothConfig {
     throw new Error("CONFIG_FILE is required.");
   }
 
-  const resolvedPath = resolve(process.cwd(), configFile);
+  const resolvedPath = resolveConfigFilePath(configFile);
   const rawConfig = readFileSync(resolvedPath, "utf8");
   const parsedConfig = parse(rawConfig);
 
   cachedConfig = parseConfig(parsedConfig, loadBlobStorageCredentials(dirname(resolvedPath)));
 
   return cachedConfig;
+}
+
+export function resolveConfigFilePath(configFile: string, startDirectory = process.cwd()): string {
+  if (isAbsolute(configFile)) {
+    return configFile;
+  }
+
+  let currentDirectory = resolve(startDirectory);
+
+  for (;;) {
+    const candidatePath = join(currentDirectory, configFile);
+
+    if (existsSync(candidatePath)) {
+      return candidatePath;
+    }
+
+    const parentDirectory = dirname(currentDirectory);
+
+    if (parentDirectory === currentDirectory) {
+      return resolve(startDirectory, configFile);
+    }
+
+    currentDirectory = parentDirectory;
+  }
 }
 
 export function getProxyConfig(): ProxyConfig {

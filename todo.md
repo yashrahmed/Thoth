@@ -22,6 +22,7 @@
 1. Check out relevant skills [here](https://github.com/mattpocock/skills/blob/main/prd-to-plan/SKILL.md). ****
 2. Tool to generate and visualize call graphs and trace application flows.
 3. Tool to generate **vertical** sequence diagrams.
+4. Collect these mechanisms into a separate editor project.
 
 ### Track 3 - Develop techniques to encode world models and test cases.
 

@@ -10,14 +10,6 @@
       "entry": ["src/setup.test.ts", "src/integration/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
-    "packages/kb-curate-agent": {
-      "entry": ["src/**/*server.ts"],
-      "project": ["src/**/*.ts"]
-    },
-    "packages/planning-agent": {
-      "entry": ["src/**/*server.ts"],
-      "project": ["src/**/*.ts"]
-    },
     "packages/config": {
       "entry": ["src/index.test.ts"],
       "project": ["src/**/*.ts"]

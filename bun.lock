@@ -37,13 +37,6 @@
         "@aws-sdk/client-s3": "^3.888.0",
       },
     },
-    "packages/kb-curate-agent": {
-      "name": "@thoth/kb-curate-agent",
-      "version": "0.0.1",
-      "dependencies": {
-        "@thoth/config": "workspace:*",
-      },
-    },
     "packages/message-proxy": {
       "name": "@thoth/message-proxy",
       "version": "0.0.1",
@@ -54,13 +47,6 @@
     "packages/mobile": {
       "name": "@thoth/mobile",
       "version": "0.0.1",
-    },
-    "packages/planning-agent": {
-      "name": "@thoth/planning-agent",
-      "version": "0.0.1",
-      "dependencies": {
-        "@thoth/config": "workspace:*",
-      },
     },
     "packages/web": {
       "name": "@thoth/web",
@@ -500,13 +486,11 @@
 
     "@thoth/conv-agent": ["@thoth/conv-agent@workspace:packages/conv-agent"],
 
-    "@thoth/kb-curate-agent": ["@thoth/kb-curate-agent@workspace:packages/kb-curate-agent"],
 
     "@thoth/message-proxy": ["@thoth/message-proxy@workspace:packages/message-proxy"],
 
     "@thoth/mobile": ["@thoth/mobile@workspace:packages/mobile"],
 
-    "@thoth/planning-agent": ["@thoth/planning-agent@workspace:packages/planning-agent"],
 
     "@thoth/web": ["@thoth/web@workspace:packages/web"],
 

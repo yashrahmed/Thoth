@@ -146,15 +146,11 @@ stop_service() {
 start_all_services() {
   start_service "message-proxy" "@thoth/message-proxy" "start" "$(read_port proxy)"
   start_service "conv-agent" "@thoth/conv-agent" "start" "$(read_port convAgent)"
-  start_service "kb-curate-agent" "@thoth/kb-curate-agent" "start" "$(read_port kbCurateAgent)"
-  start_service "planning-agent" "@thoth/planning-agent" "start" "$(read_port planningAgent)"
 }
 
 stop_all_services() {
   stop_service "message-proxy" "$(read_port proxy)"
   stop_service "conv-agent" "$(read_port convAgent)"
-  stop_service "kb-curate-agent" "$(read_port kbCurateAgent)"
-  stop_service "planning-agent" "$(read_port planningAgent)"
 }
 
 require_config() {

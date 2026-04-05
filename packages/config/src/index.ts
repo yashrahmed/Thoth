@@ -26,19 +26,9 @@ export interface ConvAgentConfig {
   };
 }
 
-export interface KbCurateAgentConfig {
-  port: number;
-}
-
-export interface PlanningAgentConfig {
-  port: number;
-}
-
 interface ThothConfig {
   proxy: ProxyConfig;
   convAgent: ConvAgentConfig;
-  kbCurateAgent: KbCurateAgentConfig;
-  planningAgent: PlanningAgentConfig;
 }
 
 let cachedConfig: ThothConfig | null = null;
@@ -95,20 +85,10 @@ export function getConvAgentConfig(): ConvAgentConfig {
   return getThothConfig().convAgent;
 }
 
-export function getKbCurateAgentConfig(): KbCurateAgentConfig {
-  return getThothConfig().kbCurateAgent;
-}
-
-export function getPlanningAgentConfig(): PlanningAgentConfig {
-  return getThothConfig().planningAgent;
-}
-
 function parseConfig(value: unknown, blobStorageCredentials: BlobStorageCredentials): ThothConfig {
   const config = requireObject(value, "config");
   const proxy = requireObject(config.proxy, "proxy");
   const convAgent = requireObject(config.convAgent, "convAgent");
-  const kbCurateAgent = requireObject(config.kbCurateAgent, "kbCurateAgent");
-  const planningAgent = requireObject(config.planningAgent, "planningAgent");
   const convAgentBlobStorage = requireObject(convAgent.blobStorage, "convAgent.blobStorage");
   const convAgentLlmDispatchQueue = requireObject(convAgent.llmDispatchQueue, "convAgent.llmDispatchQueue");
 
@@ -134,12 +114,6 @@ function parseConfig(value: unknown, blobStorageCredentials: BlobStorageCredenti
         accessKeyId: requireString(convAgentLlmDispatchQueue.accessKeyId, "convAgent.llmDispatchQueue.accessKeyId"),
         secretAccessKey: requireString(convAgentLlmDispatchQueue.secretAccessKey, "convAgent.llmDispatchQueue.secretAccessKey"),
       },
-    },
-    kbCurateAgent: {
-      port: requireNumber(kbCurateAgent.port, "kbCurateAgent.port"),
-    },
-    planningAgent: {
-      port: requireNumber(planningAgent.port, "planningAgent.port"),
     },
   };
 }

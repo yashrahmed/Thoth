@@ -13,8 +13,6 @@ An agent system that manages work and personal information.
 thoth/
 ├── packages/
 │   ├── conv-agent/                # Primary user-facing conversation service
-│   ├── kb-curate-agent/           # Background knowledge curation service
-│   ├── planning-agent/            # Planning-oriented service
 │   ├── domain/
 │   │   ├── entities/              # Shared domain entities
 │   │   └── contracts/             # Shared domain contracts
@@ -49,8 +47,6 @@ Each runtime currently reads its own config block:
 
 - `proxy.port`
 - `convAgent.port`
-- `kbCurateAgent.port`
-- `planningAgent.port`
 
 For local development:
 
@@ -76,18 +72,6 @@ The local infrastructure launcher now brings up PostgreSQL plus LocalStack-backe
 - `bun run db:local:stop`
 
 Persisted LocalStack object-store data is bind-mounted under `db/local/blob-store/`.
-
-## Planning
-
-Thoth now includes a dedicated `planning-agent` service for planning-oriented
-reasoning. The initial merge keeps it narrow and internal:
-
-- `frame` for intent and grounded planning structures
-- `plan` for pure planning and orchestration utilities
-- `sim` for grounded physics simulation checks
-
-The first version only exposes a health endpoint and shared modules. Public
-planning APIs and conversation-agent integration come next.
 
 ## Architecture
 

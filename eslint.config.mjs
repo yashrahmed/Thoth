@@ -18,6 +18,7 @@ export default tseslint.config(
       },
     },
     rules: {
+      complexity: ["warn", { max: 10 }],
       "no-undef": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",

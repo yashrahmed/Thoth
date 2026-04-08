@@ -26,6 +26,23 @@ const LOCALSTACK_ENDPOINT = "http://127.0.0.1:54566";
 const BLOB_ENDPOINT = LOCALSTACK_ENDPOINT;
 
 type ConvIntegrationSetup = SetupAndLaunchResult;
+type ConversationRecord = { readonly id: string };
+type ConversationMessageItem = {
+  readonly conversationId: string;
+  readonly sequenceNumber: number;
+  readonly type: string;
+  readonly content: string;
+  readonly files: Array<{
+    readonly filename: string;
+    readonly mimeType: string;
+    readonly sizeInBytes: number;
+  }>;
+};
+type ConversationMessagePage = {
+  readonly items: Array<ConversationMessageItem>;
+  readonly pageNum: number;
+  readonly pageSize: number;
+};
 
 let setup: ConvIntegrationSetup | undefined;
 
@@ -44,123 +61,21 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
   const imageBytes = readFileSync(IMAGE_PATH);
 
   try {
-    // Create a fresh conversation for the pagination scenario.
-    const createResponse = await fetch(new URL("/conversations", startedSetup.server.url), {
-      method: "POST",
-    });
-
-    expect(createResponse.status).toBe(201);
-
-    const createdConversation = await createResponse.json();
-
-    expect(createdConversation.id).toEqual(expect.any(String));
+    const createdConversation = await createConversation(startedSetup);
     conversationId = createdConversation.id;
-
-    // Append 10 image-backed user messages; each append also creates an assistant reply.
-    for (let index = 1; index <= 10; index += 1) {
-      const appendResponse = await fetch(new URL(`/conversations/${conversationId}/chat`, startedSetup.server.url), {
-        method: "POST",
-        body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`),
-      });
-
-      expect(appendResponse.status).toBe(204);
-      expect(await appendResponse.text()).toBe("");
-    }
-
+    await appendImageMessages(startedSetup, conversationId, imageBytes, 10);
     const allMessages = await waitForConversationMessages(startedSetup, createdConversation.id, 20);
 
     expect(allMessages).toHaveLength(20);
     expect(allMessages.some((message) => message.type === "assistant")).toBe(true);
-
-    // Confirm the conversation itself is still readable before paging messages.
-    const getConversationResponse = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url));
-
-    expect(getConversationResponse.status).toBe(200);
-
-    const fetchedConversation = await getConversationResponse.json();
-
-    expect(fetchedConversation.id).toBe(conversationId);
-
-    // Read the first 5 visible messages and assert alternating user/assistant output.
-    const firstPageResponse = await fetch(new URL(`/conversations/${conversationId}/chat?pageNum=1&pageSize=5`, startedSetup.server.url));
-
-    expect(firstPageResponse.status).toBe(200);
-
-    const firstPage = await firstPageResponse.json();
-
-    expect(firstPage.items).toHaveLength(5);
-    expect(firstPage.pageNum).toBe(1);
-    expect(firstPage.pageSize).toBe(5);
-
-    for (let index = 0; index < 5; index += 1) {
-      const expectedSequence = index + 1;
-      const expectedMessageIndex = Math.ceil(expectedSequence / 2);
-      const expectedType = expectedSequence % 2 === 1 ? "user" : "assistant";
-      expect(firstPage.items[index]?.conversationId).toBe(conversationId);
-      expect(firstPage.items[index]?.sequenceNumber).toBe(expectedSequence);
-      expect(firstPage.items[index]?.type).toBe(expectedType);
-      expect(firstPage.items[index]?.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
-      if (expectedType === "user") {
-        expect(firstPage.items[index]?.files).toHaveLength(1);
-        expect(firstPage.items[index]?.files[0]).toMatchObject({
-          filename: "lambo.jpg",
-          mimeType: "image/jpeg",
-          sizeInBytes: imageBytes.byteLength,
-        });
-      } else {
-        expect(firstPage.items[index]?.files).toEqual([]);
-      }
-    }
-
-    // Read the second 5 visible messages and assert the sequence continues.
-    const secondPageResponse = await fetch(new URL(`/conversations/${conversationId}/chat?pageNum=2&pageSize=5`, startedSetup.server.url));
-
-    expect(secondPageResponse.status).toBe(200);
-
-    const secondPage = await secondPageResponse.json();
-
-    expect(secondPage.items).toHaveLength(5);
-    expect(secondPage.pageNum).toBe(2);
-    expect(secondPage.pageSize).toBe(5);
-
-    for (let index = 0; index < 5; index += 1) {
-      const expectedSequence = index + 6;
-      const expectedMessageIndex = Math.ceil(expectedSequence / 2);
-      const expectedType = expectedSequence % 2 === 1 ? "user" : "assistant";
-      expect(secondPage.items[index]?.conversationId).toBe(conversationId);
-      expect(secondPage.items[index]?.sequenceNumber).toBe(expectedSequence);
-      expect(secondPage.items[index]?.type).toBe(expectedType);
-      expect(secondPage.items[index]?.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
-      if (expectedType === "user") {
-        expect(secondPage.items[index]?.files).toHaveLength(1);
-        expect(secondPage.items[index]?.files[0]).toMatchObject({
-          filename: "lambo.jpg",
-          mimeType: "image/jpeg",
-          sizeInBytes: imageBytes.byteLength,
-        });
-      } else {
-        expect(secondPage.items[index]?.files).toEqual([]);
-      }
-    }
-
-    // Delete the conversation and verify the API reports it as gone.
-    const deleteResponse = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url), {
-      method: "DELETE",
-    });
-
-    expect(deleteResponse.status).toBe(204);
+    await expectConversationExists(startedSetup, conversationId);
+    const firstPage = await fetchConversationMessagePage(startedSetup, conversationId, 1, 5);
+    assertConversationMessagePage(firstPage, conversationId, 1, imageBytes.byteLength);
+    const secondPage = await fetchConversationMessagePage(startedSetup, conversationId, 2, 5);
+    assertConversationMessagePage(secondPage, conversationId, 6, imageBytes.byteLength);
+    await deleteConversation(startedSetup, conversationId);
     conversationId = undefined;
-
-    const missingConversationResponse = await fetch(new URL(`/conversations/${createdConversation.id}`, startedSetup.server.url));
-
-    expect(missingConversationResponse.status).toBe(404);
-    expect(await missingConversationResponse.json()).toEqual({
-      error: {
-        entityType: "Conversation",
-        id: createdConversation.id,
-        kind: "NotFoundError",
-      },
-    });
+    await expectConversationMissing(startedSetup, createdConversation.id);
   } finally {
     // Clean up the conversation if the test failed before the explicit delete.
     await deleteConversationIfPresent(startedSetup, conversationId);
@@ -530,19 +445,102 @@ async function deleteConversationIfPresent(startedSetup: ConvIntegrationSetup, c
   }
 }
 
-async function waitForConversationMessages(
-  startedSetup: ConvIntegrationSetup,
-  conversationId: string,
-  expectedCount: number,
-): Promise<
-  Array<{
-    readonly conversationId: string;
-    readonly sequenceNumber: number;
-    readonly type: string;
-    readonly content: string;
-    readonly files: unknown[];
-  }>
-> {
+async function createConversation(startedSetup: ConvIntegrationSetup): Promise<ConversationRecord> {
+  const response = await fetch(new URL("/conversations", startedSetup.server.url), {
+    method: "POST",
+  });
+
+  expect(response.status).toBe(201);
+
+  const conversation = (await response.json()) as ConversationRecord;
+
+  expect(conversation.id).toEqual(expect.any(String));
+  return conversation;
+}
+
+async function appendImageMessages(startedSetup: ConvIntegrationSetup, conversationId: string, imageBytes: Uint8Array, count: number): Promise<void> {
+  for (let index = 1; index <= count; index += 1) {
+    const response = await fetch(new URL(`/conversations/${conversationId}/chat`, startedSetup.server.url), {
+      method: "POST",
+      body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`),
+    });
+
+    expect(response.status).toBe(204);
+    expect(await response.text()).toBe("");
+  }
+}
+
+async function expectConversationExists(startedSetup: ConvIntegrationSetup, conversationId: string): Promise<void> {
+  const response = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url));
+
+  expect(response.status).toBe(200);
+
+  const conversation = (await response.json()) as ConversationRecord;
+
+  expect(conversation.id).toBe(conversationId);
+}
+
+async function fetchConversationMessagePage(startedSetup: ConvIntegrationSetup, conversationId: string, pageNum: number, pageSize: number): Promise<ConversationMessagePage> {
+  const response = await fetch(new URL(`/conversations/${conversationId}/chat?pageNum=${pageNum}&pageSize=${pageSize}`, startedSetup.server.url));
+
+  expect(response.status).toBe(200);
+  return (await response.json()) as ConversationMessagePage;
+}
+
+function assertConversationMessagePage(page: ConversationMessagePage, conversationId: string, firstSequenceNumber: number, imageSizeInBytes: number): void {
+  expect(page.items).toHaveLength(5);
+  expect(page.pageNum).toBe(Math.ceil(firstSequenceNumber / 5));
+  expect(page.pageSize).toBe(5);
+
+  for (let index = 0; index < page.items.length; index += 1) {
+    assertConversationMessageItem(page.items[index], conversationId, firstSequenceNumber + index, imageSizeInBytes);
+  }
+}
+
+function assertConversationMessageItem(item: ConversationMessageItem | undefined, conversationId: string, expectedSequenceNumber: number, imageSizeInBytes: number): void {
+  const expectedMessageIndex = Math.ceil(expectedSequenceNumber / 2);
+  const expectedType = expectedSequenceNumber % 2 === 1 ? "user" : "assistant";
+
+  expect(item?.conversationId).toBe(conversationId);
+  expect(item?.sequenceNumber).toBe(expectedSequenceNumber);
+  expect(item?.type).toBe(expectedType);
+  expect(item?.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
+
+  if (expectedType === "assistant") {
+    expect(item?.files).toEqual([]);
+    return;
+  }
+
+  expect(item?.files).toHaveLength(1);
+  expect(item?.files[0]).toMatchObject({
+    filename: "lambo.jpg",
+    mimeType: "image/jpeg",
+    sizeInBytes: imageSizeInBytes,
+  });
+}
+
+async function deleteConversation(startedSetup: ConvIntegrationSetup, conversationId: string): Promise<void> {
+  const response = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url), {
+    method: "DELETE",
+  });
+
+  expect(response.status).toBe(204);
+}
+
+async function expectConversationMissing(startedSetup: ConvIntegrationSetup, conversationId: string): Promise<void> {
+  const response = await fetch(new URL(`/conversations/${conversationId}`, startedSetup.server.url));
+
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({
+    error: {
+      entityType: "Conversation",
+      id: conversationId,
+      kind: "NotFoundError",
+    },
+  });
+}
+
+async function waitForConversationMessages(startedSetup: ConvIntegrationSetup, conversationId: string, expectedCount: number): Promise<Array<ConversationMessageItem>> {
   const deadline = Date.now() + COMPLETION_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
@@ -550,15 +548,7 @@ async function waitForConversationMessages(
 
     expect(response.status).toBe(200);
 
-    const page = (await response.json()) as {
-      readonly items: Array<{
-        readonly conversationId: string;
-        readonly sequenceNumber: number;
-        readonly type: string;
-        readonly content: string;
-        readonly files: unknown[];
-      }>;
-    };
+    const page = (await response.json()) as ConversationMessagePage;
 
     if (page.items.length >= expectedCount) {
       return page.items;

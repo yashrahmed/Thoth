@@ -313,172 +313,315 @@ export function App() {
     <div style={shellStyle}>
       <style>{globalStyles}</style>
       <div className="chat-frame" style={frameStyle}>
-        <aside style={sidebarStyle}>
-          <div>
-            <p style={eyebrowStyle}>Thoth</p>
-            <h1 style={titleStyle}>Conversation UI</h1>
-            <p style={bodyStyle}>
-              Minimal chat client for <code>conv-agent</code>.
-            </p>
-          </div>
+        <ConversationSidebar
+          conversations={conversations}
+          conversationId={conversationId}
+          booting={booting}
+          sending={sending}
+          refreshing={refreshing}
+          loadingConversations={loadingConversations}
+          deletingConversationId={deletingConversationId}
+          error={error}
+          onSelectConversation={selectConversation}
+          onDeleteConversation={deleteConversation}
+          onCreateConversation={createConversation}
+          onRefresh={async () => {
+            await loadConversations();
 
-          <div style={statusPanelStyle}>
-            <StatusRow label="Endpoint" value={CONV_AGENT_URL} mono />
-            <StatusRow label="Conversation" value={conversationId || "Starting..."} mono />
-            <StatusRow label="State" value={booting ? "Booting" : sending ? "Sending" : refreshing ? "Syncing" : "Ready"} />
-          </div>
+            if (conversationId) {
+              await loadMessages(conversationId);
+            }
+          }}
+        />
 
-          <section style={conversationSectionStyle}>
-            <div style={conversationSectionHeaderStyle}>
-              <p style={sectionEyebrowStyle}>Threads</p>
-              <span style={sectionMetaStyle}>{loadingConversations ? "Loading..." : `${conversations.length} total`}</span>
-            </div>
-
-            <div style={conversationListStyle}>
-              {conversations.length === 0 ? (
-                <p style={conversationEmptyStyle}>No saved conversations yet.</p>
-              ) : (
-                conversations.map((conversation) => {
-                  const isActive = conversation.id === conversationId;
-
-                  return (
-                    <div key={conversation.id} style={isActive ? activeConversationButtonStyle : conversationButtonStyle}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void selectConversation(conversation.id);
-                        }}
-                        style={conversationSelectButtonStyle}
-                      >
-                        <span style={conversationButtonTitleStyle}>{formatConversationLabel(conversation.id)}</span>
-                        <span style={conversationButtonMetaStyle}>{formatTimestamp(conversation.updatedAt)}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void deleteConversation(conversation.id);
-                        }}
-                        disabled={deletingConversationId === conversation.id}
-                        aria-label={`Delete conversation ${conversation.id}`}
-                        style={deleteConversationButtonStyle}
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          <div style={sidebarActionsStyle}>
-            <button
-              type="button"
-              onClick={() => {
-                void createConversation();
-              }}
-              style={ghostButtonStyle}
-            >
-              New Conversation
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void loadConversations();
-                if (conversationId) {
-                  void loadMessages(conversationId);
-                }
-              }}
-              disabled={(!conversationId || refreshing) && !loadingConversations}
-              style={ghostButtonStyle}
-            >
-              Refresh
-            </button>
-          </div>
-
-          {error ? <p style={errorCardStyle}>{error}</p> : null}
-        </aside>
-
-        <main style={chatPanelStyle}>
-          <div ref={scrollerRef} style={messageListStyle}>
-            {booting ? (
-              <EmptyState title="Starting conversation" body="The UI is creating a fresh conversation and waiting for the service." />
-            ) : messages.length === 0 ? (
-              <EmptyState title="No messages yet" body="Send the first prompt to start the thread." />
-            ) : (
-              messages.map((message) => {
-                return (
-                  <article key={message.id} style={message.type === "user" ? userBubbleWrapStyle : assistantBubbleWrapStyle}>
-                    <div style={message.type === "user" ? userBubbleStyle : assistantBubbleStyle}>
-                      <div style={bubbleMetaStyle}>
-                        <span>{message.type === "user" ? "You" : "Assistant"}</span>
-                        <span>#{message.sequenceNumber}</span>
-                      </div>
-                      {message.content ? <p style={messageTextStyle}>{message.content}</p> : null}
-                      {message.files.length > 0 ? (
-                        <div style={fileListStyle}>
-                          <p style={attachmentLabelStyle}>Attachments</p>
-                          {message.files.map((file) => (
-                            <FileAttachmentView key={file.id} file={file} />
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </article>
-                );
-              })
-            )}
-          </div>
-
-          <form onSubmit={(event) => void sendMessage(event)} style={composerStyle}>
-            <label htmlFor="chat-input" style={composerLabelStyle}>
-              Message
-            </label>
-            <div style={attachmentToolbarStyle}>
-              <label style={attachmentPickerStyle}>
-                <input type="file" multiple onChange={handleFileSelection} disabled={booting || sending} style={visuallyHiddenInputStyle} />
-                Attach Files
-              </label>
-              {selectedFiles.length > 0 ? (
-                <span style={attachmentSummaryStyle}>
-                  {selectedFiles.length} file
-                  {selectedFiles.length === 1 ? "" : "s"} selected
-                </span>
-              ) : null}
-            </div>
-            {selectedFiles.length > 0 ? (
-              <div style={selectedFileListStyle}>
-                {selectedFiles.map((file, index) => (
-                  <div key={`${file.name}-${file.size}-${index}`} style={selectedFileChipStyle}>
-                    <div style={selectedFileMetaStyle}>
-                      <span style={selectedFileNameStyle}>{file.name}</span>
-                      <span style={selectedFileSizeStyle}>{formatFileSize(file.size)}</span>
-                    </div>
-                    <button type="button" onClick={() => removeSelectedFile(index)} style={selectedFileRemoveStyle} aria-label={`Remove ${file.name}`}>
-                      <CloseIcon />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <div className="composer-row" style={composerRowStyle}>
-              <textarea
-                id="chat-input"
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Ask Thoth something practical."
-                rows={3}
-                disabled={booting || sending}
-                style={composerInputStyle}
-              />
-              <button type="submit" disabled={booting || sending} style={primaryButtonStyle}>
-                {sending ? "Sending..." : "Send"}
-              </button>
-            </div>
-            {composerError ? <p style={composerErrorStyle}>{composerError}</p> : null}
-          </form>
-        </main>
+        <ChatPanel
+          scrollerRef={scrollerRef}
+          booting={booting}
+          sending={sending}
+          messages={messages}
+          draft={draft}
+          selectedFiles={selectedFiles}
+          composerError={composerError}
+          onDraftChange={setDraft}
+          onSendMessage={sendMessage}
+          onFileSelection={handleFileSelection}
+          onRemoveSelectedFile={removeSelectedFile}
+        />
       </div>
+    </div>
+  );
+}
+
+function ConversationSidebar(props: {
+  readonly conversations: ReadonlyArray<ConversationResponse>;
+  readonly conversationId: string;
+  readonly booting: boolean;
+  readonly sending: boolean;
+  readonly refreshing: boolean;
+  readonly loadingConversations: boolean;
+  readonly deletingConversationId: string;
+  readonly error: string;
+  readonly onSelectConversation: (conversationId: string) => Promise<void>;
+  readonly onDeleteConversation: (conversationId: string) => Promise<void>;
+  readonly onCreateConversation: () => Promise<void>;
+  readonly onRefresh: () => Promise<void>;
+}) {
+  return (
+    <aside style={sidebarStyle}>
+      <div>
+        <p style={eyebrowStyle}>Thoth</p>
+        <h1 style={titleStyle}>Conversation UI</h1>
+        <p style={bodyStyle}>
+          Minimal chat client for <code>conv-agent</code>.
+        </p>
+      </div>
+
+      <div style={statusPanelStyle}>
+        <StatusRow label="Endpoint" value={CONV_AGENT_URL} mono />
+        <StatusRow label="Conversation" value={props.conversationId || "Starting..."} mono />
+        <StatusRow label="State" value={formatUiState(props.booting, props.sending, props.refreshing)} />
+      </div>
+
+      <ConversationListSection
+        conversations={props.conversations}
+        conversationId={props.conversationId}
+        loadingConversations={props.loadingConversations}
+        deletingConversationId={props.deletingConversationId}
+        onSelectConversation={props.onSelectConversation}
+        onDeleteConversation={props.onDeleteConversation}
+      />
+
+      <div style={sidebarActionsStyle}>
+        <button
+          type="button"
+          onClick={() => {
+            void props.onCreateConversation();
+          }}
+          style={ghostButtonStyle}
+        >
+          New Conversation
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void props.onRefresh();
+          }}
+          disabled={(!props.conversationId || props.refreshing) && !props.loadingConversations}
+          style={ghostButtonStyle}
+        >
+          Refresh
+        </button>
+      </div>
+
+      {props.error ? <p style={errorCardStyle}>{props.error}</p> : null}
+    </aside>
+  );
+}
+
+function ConversationListSection(props: {
+  readonly conversations: ReadonlyArray<ConversationResponse>;
+  readonly conversationId: string;
+  readonly loadingConversations: boolean;
+  readonly deletingConversationId: string;
+  readonly onSelectConversation: (conversationId: string) => Promise<void>;
+  readonly onDeleteConversation: (conversationId: string) => Promise<void>;
+}) {
+  return (
+    <section style={conversationSectionStyle}>
+      <div style={conversationSectionHeaderStyle}>
+        <p style={sectionEyebrowStyle}>Threads</p>
+        <span style={sectionMetaStyle}>{props.loadingConversations ? "Loading..." : `${props.conversations.length} total`}</span>
+      </div>
+
+      <div style={conversationListStyle}>
+        {props.conversations.length === 0 ? (
+          <p style={conversationEmptyStyle}>No saved conversations yet.</p>
+        ) : (
+          props.conversations.map((conversation) => (
+            <ConversationListItem
+              key={conversation.id}
+              conversation={conversation}
+              isActive={conversation.id === props.conversationId}
+              isDeleting={props.deletingConversationId === conversation.id}
+              onSelect={props.onSelectConversation}
+              onDelete={props.onDeleteConversation}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ConversationListItem(props: {
+  readonly conversation: ConversationResponse;
+  readonly isActive: boolean;
+  readonly isDeleting: boolean;
+  readonly onSelect: (conversationId: string) => Promise<void>;
+  readonly onDelete: (conversationId: string) => Promise<void>;
+}) {
+  return (
+    <div style={props.isActive ? activeConversationButtonStyle : conversationButtonStyle}>
+      <button
+        type="button"
+        onClick={() => {
+          void props.onSelect(props.conversation.id);
+        }}
+        style={conversationSelectButtonStyle}
+      >
+        <span style={conversationButtonTitleStyle}>{formatConversationLabel(props.conversation.id)}</span>
+        <span style={conversationButtonMetaStyle}>{formatTimestamp(props.conversation.updatedAt)}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void props.onDelete(props.conversation.id);
+        }}
+        disabled={props.isDeleting}
+        aria-label={`Delete conversation ${props.conversation.id}`}
+        style={deleteConversationButtonStyle}
+      >
+        <TrashIcon />
+      </button>
+    </div>
+  );
+}
+
+function ChatPanel(props: {
+  readonly scrollerRef: React.RefObject<HTMLDivElement | null>;
+  readonly booting: boolean;
+  readonly sending: boolean;
+  readonly messages: ReadonlyArray<ChatMessage>;
+  readonly draft: string;
+  readonly selectedFiles: ReadonlyArray<File>;
+  readonly composerError: string;
+  readonly onDraftChange: (draft: string) => void;
+  readonly onSendMessage: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  readonly onFileSelection: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onRemoveSelectedFile: (index: number) => void;
+}) {
+  return (
+    <main style={chatPanelStyle}>
+      <MessageList scrollerRef={props.scrollerRef} booting={props.booting} messages={props.messages} />
+      <Composer
+        booting={props.booting}
+        sending={props.sending}
+        draft={props.draft}
+        selectedFiles={props.selectedFiles}
+        composerError={props.composerError}
+        onDraftChange={props.onDraftChange}
+        onSendMessage={props.onSendMessage}
+        onFileSelection={props.onFileSelection}
+        onRemoveSelectedFile={props.onRemoveSelectedFile}
+      />
+    </main>
+  );
+}
+
+function MessageList(props: { readonly scrollerRef: React.RefObject<HTMLDivElement | null>; readonly booting: boolean; readonly messages: ReadonlyArray<ChatMessage> }) {
+  return (
+    <div ref={props.scrollerRef} style={messageListStyle}>
+      {props.booting ? (
+        <EmptyState title="Starting conversation" body="The UI is creating a fresh conversation and waiting for the service." />
+      ) : props.messages.length === 0 ? (
+        <EmptyState title="No messages yet" body="Send the first prompt to start the thread." />
+      ) : (
+        props.messages.map((message) => <MessageBubble key={message.id} message={message} />)
+      )}
+    </div>
+  );
+}
+
+function MessageBubble(props: { readonly message: ChatMessage }) {
+  const isUserMessage = props.message.type === "user";
+
+  return (
+    <article style={isUserMessage ? userBubbleWrapStyle : assistantBubbleWrapStyle}>
+      <div style={isUserMessage ? userBubbleStyle : assistantBubbleStyle}>
+        <div style={bubbleMetaStyle}>
+          <span>{isUserMessage ? "You" : "Assistant"}</span>
+          <span>#{props.message.sequenceNumber}</span>
+        </div>
+        {props.message.content ? <p style={messageTextStyle}>{props.message.content}</p> : null}
+        {props.message.files.length > 0 ? (
+          <div style={fileListStyle}>
+            <p style={attachmentLabelStyle}>Attachments</p>
+            {props.message.files.map((file) => (
+              <FileAttachmentView key={file.id} file={file} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function Composer(props: {
+  readonly booting: boolean;
+  readonly sending: boolean;
+  readonly draft: string;
+  readonly selectedFiles: ReadonlyArray<File>;
+  readonly composerError: string;
+  readonly onDraftChange: (draft: string) => void;
+  readonly onSendMessage: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  readonly onFileSelection: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onRemoveSelectedFile: (index: number) => void;
+}) {
+  return (
+    <form onSubmit={(event) => void props.onSendMessage(event)} style={composerStyle}>
+      <label htmlFor="chat-input" style={composerLabelStyle}>
+        Message
+      </label>
+      <div style={attachmentToolbarStyle}>
+        <label style={attachmentPickerStyle}>
+          <input type="file" multiple onChange={props.onFileSelection} disabled={props.booting || props.sending} style={visuallyHiddenInputStyle} />
+          Attach Files
+        </label>
+        {props.selectedFiles.length > 0 ? (
+          <span style={attachmentSummaryStyle}>
+            {props.selectedFiles.length} file
+            {props.selectedFiles.length === 1 ? "" : "s"} selected
+          </span>
+        ) : null}
+      </div>
+      <SelectedFileList selectedFiles={props.selectedFiles} onRemoveSelectedFile={props.onRemoveSelectedFile} />
+      <div className="composer-row" style={composerRowStyle}>
+        <textarea
+          id="chat-input"
+          value={props.draft}
+          onChange={(event) => props.onDraftChange(event.target.value)}
+          placeholder="Ask Thoth something practical."
+          rows={3}
+          disabled={props.booting || props.sending}
+          style={composerInputStyle}
+        />
+        <button type="submit" disabled={props.booting || props.sending} style={primaryButtonStyle}>
+          {props.sending ? "Sending..." : "Send"}
+        </button>
+      </div>
+      {props.composerError ? <p style={composerErrorStyle}>{props.composerError}</p> : null}
+    </form>
+  );
+}
+
+function SelectedFileList(props: { readonly selectedFiles: ReadonlyArray<File>; readonly onRemoveSelectedFile: (index: number) => void }) {
+  if (props.selectedFiles.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={selectedFileListStyle}>
+      {props.selectedFiles.map((file, index) => (
+        <div key={`${file.name}-${file.size}-${index}`} style={selectedFileChipStyle}>
+          <div style={selectedFileMetaStyle}>
+            <span style={selectedFileNameStyle}>{file.name}</span>
+            <span style={selectedFileSizeStyle}>{formatFileSize(file.size)}</span>
+          </div>
+          <button type="button" onClick={() => props.onRemoveSelectedFile(index)} style={selectedFileRemoveStyle} aria-label={`Remove ${file.name}`}>
+            <CloseIcon />
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -579,6 +722,22 @@ function formatFileSize(sizeInBytes: number): string {
   }
 
   return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatUiState(booting: boolean, sending: boolean, refreshing: boolean): string {
+  if (booting) {
+    return "Booting";
+  }
+
+  if (sending) {
+    return "Sending";
+  }
+
+  if (refreshing) {
+    return "Syncing";
+  }
+
+  return "Ready";
 }
 
 const globalStyles = `

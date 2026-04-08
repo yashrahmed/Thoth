@@ -912,23 +912,16 @@ function buildHandler(overrides?: {
   readonly blobRepository?: InMemoryBlobRepository;
   readonly llmCompletionDispatcher?: LLMCompletionDispatcher;
 }) {
-  const conversationRepository = overrides?.conversationRepository ?? new InMemoryConversationRepository();
-  const messageRepository = overrides?.messageRepository ?? new InMemoryMessageRepository();
-  const fileRepository = overrides?.fileRepository ?? new InMemoryFileRepository();
+  const dependencies = resolveBuildHandlerDependencies(overrides);
   const now = () => new Date("2026-03-16T12:00:00.000Z");
-  const appendUserMessageStore = overrides?.appendUserMessageStore ?? new InMemoryAppendUserMessageStore(messageRepository, fileRepository);
-  const deleteConversationGraphStore =
-    overrides?.deleteConversationGraphStore ?? new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository);
-  const blobRepository = overrides?.blobRepository ?? new InMemoryBlobRepository();
-  const llmCompletionDispatcher = overrides?.llmCompletionDispatcher ?? new InMemoryLlmCompletionDispatcher();
   const genericValidationService = new GenericValidationService();
-  const conversationDomainService = new ConversationDomainService(conversationRepository, genericValidationService, now);
-  const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
-  const deleteConversationGraphDomainService = new DeleteConversationGraphDomainService(deleteConversationGraphStore);
-  const blobDomainService = new BlobDomainService(blobRepository, genericValidationService);
+  const conversationDomainService = new ConversationDomainService(dependencies.conversationRepository, genericValidationService, now);
+  const appendUserMessageDomainService = new AppendUserMessageDomainService(dependencies.appendUserMessageStore);
+  const deleteConversationGraphDomainService = new DeleteConversationGraphDomainService(dependencies.deleteConversationGraphStore);
+  const blobDomainService = new BlobDomainService(dependencies.blobRepository, genericValidationService);
   const messageContentDomainService = new MessageContentDomainService(genericValidationService);
-  const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService, now);
-  const fileDomainService = new FileDomainService(fileRepository, blobDomainService, genericValidationService, now);
+  const messageDomainService = new MessageDomainService(dependencies.messageRepository, messageContentDomainService, genericValidationService, now);
+  const fileDomainService = new FileDomainService(dependencies.fileRepository, blobDomainService, genericValidationService, now);
 
   return createConversationHttpHandler({
     createConversation: new CreateConversationFlow(conversationDomainService),
@@ -940,10 +933,36 @@ function buildHandler(overrides?: {
       appendUserMessageDomainService,
       messageDomainService,
       fileDomainService,
-      new LlmCompletionDispatchDomainService(llmCompletionDispatcher),
+      new LlmCompletionDispatchDomainService(dependencies.llmCompletionDispatcher),
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });
+}
+
+function resolveBuildHandlerDependencies(
+  overrides: {
+    readonly conversationRepository?: InMemoryConversationRepository;
+    readonly messageRepository?: InMemoryMessageRepository;
+    readonly fileRepository?: InMemoryFileRepository;
+    readonly appendUserMessageStore?: AppendUserMessageStore;
+    readonly deleteConversationGraphStore?: DeleteConversationGraphStore;
+    readonly blobRepository?: InMemoryBlobRepository;
+    readonly llmCompletionDispatcher?: LLMCompletionDispatcher;
+  } = {},
+) {
+  const conversationRepository = overrides.conversationRepository ?? new InMemoryConversationRepository();
+  const messageRepository = overrides.messageRepository ?? new InMemoryMessageRepository();
+  const fileRepository = overrides.fileRepository ?? new InMemoryFileRepository();
+
+  return {
+    conversationRepository,
+    messageRepository,
+    fileRepository,
+    appendUserMessageStore: overrides.appendUserMessageStore ?? new InMemoryAppendUserMessageStore(messageRepository, fileRepository),
+    deleteConversationGraphStore: overrides.deleteConversationGraphStore ?? new InMemoryDeleteConversationGraphStore(conversationRepository, messageRepository, fileRepository),
+    blobRepository: overrides.blobRepository ?? new InMemoryBlobRepository(),
+    llmCompletionDispatcher: overrides.llmCompletionDispatcher ?? new InMemoryLlmCompletionDispatcher(),
+  };
 }
 
 class InMemoryConversationRepository implements ConversationRepository {

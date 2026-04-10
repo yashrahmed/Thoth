@@ -19,10 +19,11 @@
 
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.
 
-1. Check out relevant skills [here](https://github.com/mattpocock/skills/blob/main/prd-to-plan/SKILL.md). ****
+1. Check out relevant skills [here](https://github.com/mattpocock/skills/blob/main/prd-to-plan/SKILL.md).
 2. Tool to generate and visualize call graphs and trace application flows.
 3. Tool to generate **vertical** sequence diagrams.
 4. Collect these mechanisms into a separate editor project.
+5. As of April 09, 2026, I am more inclined to focus on track 03 and instead develop LLM powered workflows to accomplish track 2's goals. I will start out with this and pivot back to developing editing and viz tools. I still think editing and viz tools have a place if only to help the engineer understand the LLM's output.
 
 ### Track 3 - Develop techniques to encode world models and test cases.
 

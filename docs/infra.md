@@ -3,10 +3,11 @@
 Current direction: use an all-AWS stack for the app, queue, and object
 storage.
 
-| Stack      | Components                                                 | Good For                                                    | Rough Monthly Cost | Tradeoffs                                              |
-| ---------- | ---------------------------------------------------------- | ----------------------------------------------------------- | -----------------: | ------------------------------------------------------ |
-| `All AWS`  | `App Runner` + `RDS PostgreSQL` + `S3` + `SQS Standard`    | Single-vendor deployment with the cheapest AWS queue option |          `$25-$80` | Higher base database cost than Neon and more AWS setup |
-| `All AWS+` | `App Runner` + `Aurora PostgreSQL` + `S3` + `SQS Standard` | AWS-native scaling with managed Postgres                    |         `$50-$150` | Higher cost floor than plain RDS                       |
+| Stack      | Components                                                       | Good For                                                           | Rough Monthly Cost | Tradeoffs                                                          |
+| ---------- | ---------------------------------------------------------------- | ------------------------------------------------------------------ | -----------------: | ------------------------------------------------------------------ |
+| `All AWS`  | `ECS Express Mode` + `RDS PostgreSQL` + `S3` + `SQS Standard`    | Closest App Runner replacement with low-ops AWS container hosting  |          `$25-$80` | Newer service model and still more AWS setup than hosted platforms |
+| `All AWS+` | `ECS on Fargate` + `Aurora PostgreSQL` + `S3` + `SQS Standard`   | More control over tasks, networking, and scaling on AWS           |         `$50-$150` | More operational surface area than ECS Express Mode                |
+| `All AWS++`| `Elastic Beanstalk` + `RDS PostgreSQL` + `S3` + `SQS Standard`   | Higher-level AWS web app deployment without managing ECS directly |          `$30-$90` | Less container-native and less flexible than the ECS options       |
 
 Notes:
 

@@ -1,20 +1,17 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Set credentials from env variables i.e. setup class must set the creds from env variables. The launch scripts must set the creds in an env file. ****
+1. Read and set credentials from env variables i.e. setup class must sreadet the creds from env variables. Deploy/launch jobs must set the creds as env variable. ****
 2. Migrate file storage from `R2` to `S3` and do a live test run. ****
-3. Deployment trials on AWS.
-   1. Figure out DNS, app runner deployment.
+3. Deployment trials on Cloudfalre.
 4. Examine async usage.
-5. Examine async options for LLM completion.
-   1. Use `SQS Standard` as the queue option for LLM dispatch (Issues with integration tests).
-6. Trials for Google Auth.
-7. Integrate an actual LLM and make it useful at least locally.
-8. Supporting server side rendering of content.
-9.  Supporting Oauth and multitenancy.
+5. Trials for Auth.
+6. Integrate an actual LLM and make it useful at least locally.
+7. Supporting server side rendering of content.
+8. Supporting Oauth and multitenancy.
 
 #### UI
-1. Build a basic by classy UI ****
+1. Build a basic but chat UI ****
 2. Provide support for attachment thumbnails.
 
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.

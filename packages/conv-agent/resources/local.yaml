@@ -1,6 +1,6 @@
-# Local launch config for `scripts/launch-all.sh`.
+# Local launch config for `local-launch/launch-all.sh`.
 # Loaded by passing `local` (the default) as the profile CLI argument to each runtime.
-# Credentials are sourced from environment variables — see config/local-secrets.env.example.
+# Credentials are sourced from environment variables — see local-launch/local-secrets.env.example.
 
 proxy:
   port: 3000

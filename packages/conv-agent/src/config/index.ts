@@ -6,7 +6,7 @@ export interface ProxyConfig {
   port: number;
 }
 
-export interface ConvAgentConfig {
+export interface ConvAgentServiceConfig {
   port: number;
   database: {
     url: string;
@@ -39,19 +39,20 @@ export interface ConvAgentCredentials {
   };
 }
 
-interface ThothConfig {
+interface ConvAgentProfileConfig {
   proxy: ProxyConfig;
-  convAgent: ConvAgentConfig;
+  convAgent: ConvAgentServiceConfig;
 }
 
 const PROFILE_PATTERN = /^[a-z0-9-]+$/;
+const PROFILE_CONFIG_DIR = "packages/conv-agent/resources";
 
-function getThothConfig(profile: string): ThothConfig {
+function getConvAgentProfileConfig(profile: string): ConvAgentProfileConfig {
   if (typeof profile !== "string" || profile.length === 0 || !PROFILE_PATTERN.test(profile)) {
     throw new Error(`profile must match ${PROFILE_PATTERN}; received ${JSON.stringify(profile)}.`);
   }
 
-  const configFile = `config/${profile}.yaml`;
+  const configFile = `${PROFILE_CONFIG_DIR}/${profile}.yaml`;
   const resolvedPath = resolveConfigFilePath(configFile);
 
   if (!existsSync(resolvedPath)) {
@@ -61,7 +62,7 @@ function getThothConfig(profile: string): ThothConfig {
   const rawConfig = readFileSync(resolvedPath, "utf8");
   const parsedConfig = parse(rawConfig);
 
-  return parseConfig(parsedConfig);
+  return parseConvAgentProfileConfig(parsedConfig);
 }
 
 export function resolveConfigFilePath(configFile: string, startDirectory = process.cwd()): string {
@@ -89,11 +90,11 @@ export function resolveConfigFilePath(configFile: string, startDirectory = proce
 }
 
 export function getProxyConfig(profile: string): ProxyConfig {
-  return getThothConfig(profile).proxy;
+  return getConvAgentProfileConfig(profile).proxy;
 }
 
-export function getConvAgentConfig(profile: string): ConvAgentConfig {
-  return getThothConfig(profile).convAgent;
+export function getConvAgentConfig(profile: string): ConvAgentServiceConfig {
+  return getConvAgentProfileConfig(profile).convAgent;
 }
 
 export function readConvAgentCredentials(env: Record<string, string | undefined>): ConvAgentCredentials {
@@ -123,7 +124,7 @@ function requireEnv(env: Record<string, string | undefined>, name: string): stri
   return value;
 }
 
-function parseConfig(value: unknown): ThothConfig {
+function parseConvAgentProfileConfig(value: unknown): ConvAgentProfileConfig {
   const config = requireObject(value, "config");
   const proxy = requireObject(config.proxy, "proxy");
   const convAgent = requireObject(config.convAgent, "convAgent");

@@ -42,26 +42,26 @@ thoth/
 
 ## Configuration
 
-Runtime configuration is loaded from a YAML file referenced by `CONFIG_FILE`.
-Each runtime currently reads its own config block:
+Runtime configuration is loaded from the selected profile YAML under `packages/conv-agent/resources`.
+Each runtime reads its own config block from the shared profile file:
 
 - `proxy.port`
 - `convAgent.port`
 
 For local development:
 
-1. Use [config/launch.yaml](/Users/yashrahmed/Documents/personal-github-repos/Thoth/config/launch.yaml) or another YAML file with the same per-service shape.
-2. Inject the config path when starting services.
+1. Use [local.yaml](/Users/yashrahmed/Documents/personal-github-repos/Thoth/packages/conv-agent/resources/local.yaml) or another YAML file with the same per-service shape.
+2. Pass the profile name when starting services.
 
 Examples:
 
-- `CONFIG_FILE=config/launch.yaml bun run --filter @thoth/conv-agent start`
-- `CONFIG_FILE=config/launch.yaml bun run --filter @thoth/message-proxy start`
+- `bun run --filter @thoth/conv-agent start -- local`
+- `bun run --filter @thoth/message-proxy start -- local`
 
-All server entrypoints fail fast if `CONFIG_FILE` is missing or the referenced
-YAML file is invalid.
+All server entrypoints fail fast if the selected profile file is missing or the
+YAML is invalid.
 
-For the local full-stack workflow, [config/launch.yaml](/Users/yashrahmed/Documents/personal-github-repos/Thoth/config/launch.yaml) is a committed non-secret launch config. The local launcher injects it automatically:
+For the local full-stack workflow, [local.yaml](/Users/yashrahmed/Documents/personal-github-repos/Thoth/packages/conv-agent/resources/local.yaml) is a committed non-secret launch config. The local launcher selects it automatically:
 
 - `bun run dev:local:start`
 - `bun run dev:local:stop`
@@ -71,7 +71,7 @@ The local infrastructure launcher now brings up PostgreSQL plus LocalStack-backe
 - `bun run db:local:start`
 - `bun run db:local:stop`
 
-Persisted LocalStack object-store data is bind-mounted under `db/local/blob-store/`.
+Persisted LocalStack object-store data is bind-mounted under `local-launch/data/blob-store/`.
 
 ## Architecture
 

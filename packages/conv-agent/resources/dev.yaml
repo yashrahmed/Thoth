@@ -1,8 +1,8 @@
-# Dev launch config for `scripts/launch-all.sh`.
+# Dev launch config for `local-launch/launch-all.sh`.
 # Loaded by passing `dev` as the profile CLI argument to each runtime.
 # Placeholder endpoints — fill in once dev infrastructure exists.
 # Credentials are sourced from environment variables — provide a
-# matching config/dev-secrets.env locally (see config/local-secrets.env.example for shape).
+# matching local-launch/dev-secrets.env locally (see local-launch/local-secrets.env.example for shape).
 
 proxy:
   port: 3000

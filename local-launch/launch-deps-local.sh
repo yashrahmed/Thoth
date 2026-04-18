@@ -5,14 +5,14 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
-ENV_FILE="$REPO_ROOT/db/local/.env"
+ENV_FILE="$REPO_ROOT/local-launch/data/.env"
 COMMAND="${1:-}"
 LOCALSTACK_ENDPOINT="http://127.0.0.1:4566"
 LOCAL_BLOB_BUCKET="thoth-local-blob-store"
 LOCAL_LLM_QUEUE_NAME="thoth-llm-completions"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./scripts/db-local.sh <start|stop|restart>"
+  echo "Usage: ./local-launch/launch-deps-local.sh <start|stop|restart>"
   exit 1
 fi
 
@@ -80,7 +80,7 @@ case "$COMMAND" in
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./scripts/db-local.sh <start|stop|restart>"
+    echo "Usage: ./local-launch/launch-deps-local.sh <start|stop|restart>"
     exit 1
     ;;
 esac

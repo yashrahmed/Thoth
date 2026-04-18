@@ -17,21 +17,14 @@
         "typescript-eslint": "^8.57.0",
       },
     },
-    "packages/config": {
-      "name": "@thoth/config",
-      "version": "0.0.1",
-      "dependencies": {
-        "yaml": "^2.8.1",
-      },
-    },
     "packages/conv-agent": {
       "name": "@thoth/conv-agent",
       "version": "0.0.1",
       "dependencies": {
         "@aws-sdk/client-sqs": "^3.888.0",
-        "@thoth/config": "workspace:*",
         "hono": "^4.12.9",
         "postgres": "^3.4.7",
+        "yaml": "^2.8.1",
       },
       "devDependencies": {
         "@aws-sdk/client-s3": "^3.888.0",
@@ -41,7 +34,7 @@
       "name": "@thoth/message-proxy",
       "version": "0.0.1",
       "dependencies": {
-        "@thoth/config": "workspace:*",
+        "@thoth/conv-agent": "workspace:*",
       },
     },
     "packages/mobile": {
@@ -482,15 +475,11 @@
 
     "@smithy/uuid": ["@smithy/uuid@1.1.2", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-O/IEdcCUKkubz60tFbGA7ceITTAJsty+lBjNoorP4Z6XRqaFb/OjQjZODophEcuq68nKm6/0r+6/lLQ+XVpk8g=="],
 
-    "@thoth/config": ["@thoth/config@workspace:packages/config"],
-
     "@thoth/conv-agent": ["@thoth/conv-agent@workspace:packages/conv-agent"],
-
 
     "@thoth/message-proxy": ["@thoth/message-proxy@workspace:packages/message-proxy"],
 
     "@thoth/mobile": ["@thoth/mobile@workspace:packages/mobile"],
-
 
     "@thoth/web": ["@thoth/web@workspace:packages/web"],
 

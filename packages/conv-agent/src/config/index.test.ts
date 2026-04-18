@@ -14,14 +14,14 @@ describe("resolveConfigFilePath", () => {
   test("finds a relative config path in a parent directory", () => {
     const rootDirectory = mkdtempSync(join(tmpdir(), "thoth-config-"));
     const nestedDirectory = join(rootDirectory, "packages", "conv-agent");
-    const configPath = join(rootDirectory, "config", "launch.yaml");
+    const configPath = join(rootDirectory, "packages", "conv-agent", "resources", "local.yaml");
 
-    mkdirSync(join(rootDirectory, "config"), { recursive: true });
+    mkdirSync(join(rootDirectory, "packages", "conv-agent", "resources"), { recursive: true });
     mkdirSync(nestedDirectory, { recursive: true });
     writeFileSync(configPath, "proxy:\n  port: 3000\n");
 
     try {
-      expect(resolveConfigFilePath("config/launch.yaml", nestedDirectory)).toBe(configPath);
+      expect(resolveConfigFilePath("packages/conv-agent/resources/local.yaml", nestedDirectory)).toBe(configPath);
     } finally {
       rmSync(rootDirectory, { force: true, recursive: true });
     }

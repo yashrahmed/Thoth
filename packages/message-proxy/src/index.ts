@@ -1,4 +1,4 @@
-import { getProxyConfig } from "@thoth/config";
+import { getProxyConfig } from "@thoth/conv-agent/config";
 
 const DEFAULT_HEADERS = {
   "access-control-allow-origin": "*",

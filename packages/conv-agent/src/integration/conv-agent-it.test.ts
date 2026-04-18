@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { readConvAgentCredentials } from "@thoth/config";
+import { readConvAgentCredentials } from "../config";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
 import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";

@@ -1,6 +1,6 @@
 import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { SQSClient } from "@aws-sdk/client-sqs";
-import type { ConvAgentCredentials } from "@thoth/config";
+import type { ConvAgentCredentials } from "./config";
 import { SqsLlmCompletionListener } from "./adapter/inbound/sqs-llm-completion-listener";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";

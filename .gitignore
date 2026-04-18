@@ -27,10 +27,12 @@ workspace/*
 !.env.example
 config/*-secrets.env
 !config/*-secrets.env.example
+local-launch/*-secrets.env
+!local-launch/*-secrets.env.example
 
 # Local database state
-db/local/_data/
-db/local/blob-store/
+local-launch/data/_data/
+local-launch/data/blob-store/
 
 # Claude Code local settings
 .claude/settings.local.json

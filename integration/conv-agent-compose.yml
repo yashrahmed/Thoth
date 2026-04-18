@@ -46,7 +46,7 @@ services:
       FLYWAY_PASSWORD: thoth
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
     volumes:
-      - ../db/migrations:/flyway/sql:ro
+      - ../packages/conv-agent/resources/db/migrations:/flyway/sql:ro
 
   localstack:
     image: localstack/localstack:3.0.2

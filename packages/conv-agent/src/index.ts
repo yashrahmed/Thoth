@@ -1,7 +1,9 @@
-import { getConvAgentConfig, readConvAgentCredentials } from "@thoth/config";
+import { getConvAgentConfig, readConvAgentCredentials } from "./config";
 import { setupAndLaunch } from "./setup-and-launch";
 
 export { setupAndLaunch } from "./setup-and-launch";
+export { getConvAgentConfig, getProxyConfig, readConvAgentCredentials, resolveConfigFilePath } from "./config";
+export type { ConvAgentCredentials, ConvAgentServiceConfig, ProxyConfig } from "./config";
 
 function parseProfileArg(argv: readonly string[]): string {
   // argv[0] is the Bun executable; argv[1] is the script path. Everything

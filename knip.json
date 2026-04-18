@@ -3,15 +3,11 @@
   "bun": false,
   "workspaces": {
     ".": {
-      "entry": ["scripts/**/*.ts"],
-      "project": ["scripts/**/*.ts"]
+      "entry": ["local-launch/**/*.ts"],
+      "project": ["local-launch/**/*.ts"]
     },
     "packages/conv-agent": {
       "entry": ["src/setup.test.ts", "src/integration/**/*.test.ts"],
-      "project": ["src/**/*.ts"]
-    },
-    "packages/config": {
-      "entry": ["src/index.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/domain/contracts": {

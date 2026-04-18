@@ -71,7 +71,7 @@ case "$ACTION" in
     run_tests
     ;;
   *)
-    echo "Usage: ./scripts/conv-agent-integration.sh <start|stop|restart|test>"
+    echo "Usage: ./integration/conv-agent-integration.sh <start|stop|restart|test>"
     exit 1
     ;;
 esac

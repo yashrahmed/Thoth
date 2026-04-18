@@ -7,12 +7,14 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
 COMMAND="${1:-}"
-PROFILE="${2:-local}"
-CONFIG_PATH="$REPO_ROOT/config/${PROFILE}.yaml"
-CREDS_FILE="$REPO_ROOT/config/${PROFILE}-secrets.env"
+DEFAULT_PROFILE="local"
+PROFILE="${2:-$DEFAULT_PROFILE}"
+CONFIG_PATH="$REPO_ROOT/packages/conv-agent/resources/${PROFILE}.yaml"
+CREDS_FILE="$REPO_ROOT/local-launch/${PROFILE}-secrets.env"
+LEGACY_CREDS_FILE="$REPO_ROOT/config/${PROFILE}-secrets.env"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./scripts/launch-all.sh <start|stop> [profile]"
+  echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
   exit 1
 fi
 
@@ -119,7 +121,7 @@ start_service() {
   port_pids="$(lsof -ti tcp:"$service_port" || true)"
   if [ -n "$port_pids" ]; then
     echo "$service_name could not start because port $service_port is already in use."
-    echo "Run ./scripts/launch-all.sh start to replace the existing process."
+    echo "Run ./local-launch/launch-all.sh start to replace the existing process."
     exit 1
   fi
 
@@ -162,8 +164,12 @@ require_config() {
 }
 
 load_credentials() {
+  if [ ! -f "$CREDS_FILE" ] && [ -f "$LEGACY_CREDS_FILE" ]; then
+    CREDS_FILE="$LEGACY_CREDS_FILE"
+  fi
+
   if [ ! -f "$CREDS_FILE" ]; then
-    echo "Missing credentials file: $CREDS_FILE. Copy config/${PROFILE}-secrets.env.example (if present) and fill in values."
+    echo "Missing credentials file: $CREDS_FILE. Copy local-launch/${PROFILE}-secrets.env.example (if present) and fill in values."
     exit 1
   fi
 
@@ -174,11 +180,11 @@ load_credentials() {
 }
 
 start_database() {
-  "$SCRIPT_DIR/db-local.sh" start
+  "$SCRIPT_DIR/launch-deps-local.sh" start
 }
 
 stop_database() {
-  "$SCRIPT_DIR/db-local.sh" stop
+  "$SCRIPT_DIR/launch-deps-local.sh" stop
 }
 
 case "$COMMAND" in
@@ -196,7 +202,7 @@ case "$COMMAND" in
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./scripts/launch-all.sh <start|stop> [profile]"
+    echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
     exit 1
     ;;
 esac

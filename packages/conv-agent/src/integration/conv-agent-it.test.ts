@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { readConvAgentCredentials } from "@thoth/config";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
 import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
@@ -46,13 +47,39 @@ type ConversationMessagePage = {
 
 let setup: ConvIntegrationSetup | undefined;
 
+const CREDENTIAL_ENV_VARS: Record<string, string> = {
+  BLOB_STORAGE_ACCESS_KEY_ID: "test",
+  BLOB_STORAGE_SECRET_ACCESS_KEY: "test",
+  LLM_DISPATCH_QUEUE_ACCESS_KEY_ID: "test",
+  LLM_DISPATCH_QUEUE_SECRET_ACCESS_KEY: "test",
+  DATABASE_USERNAME,
+  DATABASE_PASSWORD,
+};
+
+const originalCredentialEnv: Record<string, string | undefined> = {};
+
 beforeAll(async () => {
+  for (const [name, value] of Object.entries(CREDENTIAL_ENV_VARS)) {
+    originalCredentialEnv[name] = process.env[name];
+    process.env[name] = value;
+  }
+
   setup = await convIntegrationSetup();
 });
 
 afterAll(async () => {
   await setup?.stop();
   setup = undefined;
+
+  for (const name of Object.keys(CREDENTIAL_ENV_VARS)) {
+    const previous = originalCredentialEnv[name];
+
+    if (previous === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = previous;
+    }
+  }
 });
 
 test("creates 10 user messages plus assistant replies, paginates 5 at a time, and cleans up", async () => {
@@ -396,14 +423,14 @@ test("deletes the DB conversation graph transactionally and returns blob URLs fo
 async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
   return setupAndLaunch({
     port: 0,
-    databaseUrl: buildDatabaseUrl(DATABASE_HOST, DATABASE_PORT),
+    database: {
+      url: buildDatabaseUrl(DATABASE_HOST, DATABASE_PORT),
+    },
     blobStorage: {
-      accessKeyId: "test",
       bucket: BLOB_BUCKET,
       endpoint: BLOB_ENDPOINT,
       folder: BLOB_FOLDER,
       region: BLOB_REGION,
-      secretAccessKey: "test",
       bootstrap: {
         createBucket: true,
         forcePathStyle: true,
@@ -412,13 +439,12 @@ async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
     llmDispatchQueue: {
       endpoint: LOCALSTACK_ENDPOINT,
       region: SQS_REGION,
-      accessKeyId: "test",
-      secretAccessKey: "test",
       bootstrap: {
         createQueue: true,
         queueName: SQS_QUEUE_NAME,
       },
     },
+    credentials: readConvAgentCredentials(process.env),
   });
 }
 
@@ -580,5 +606,5 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 function buildDatabaseUrl(host: string, port: number): string {
-  return `postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${host}:${port}/${DATABASE_NAME}`;
+  return `postgres://${host}:${port}/${DATABASE_NAME}`;
 }

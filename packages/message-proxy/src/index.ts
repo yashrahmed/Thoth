@@ -48,11 +48,54 @@ function withCors(response: Response): Response {
   });
 }
 
+function parseProfileArg(argv: readonly string[]): string {
+  const args = argv.slice(2);
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+
+    if (arg === "--profile") {
+      const next = args[index + 1];
+
+      if (typeof next !== "string" || next.length === 0) {
+        throw new Error("--profile requires a value.");
+      }
+
+      return next;
+    }
+
+    if (arg.startsWith("--profile=")) {
+      const value = arg.slice("--profile=".length);
+
+      if (value.length === 0) {
+        throw new Error("--profile requires a value.");
+      }
+
+      return value;
+    }
+  }
+
+  const positional = args.filter((arg) => !arg.startsWith("--"));
+
+  if (positional.length > 1) {
+    throw new Error(`Expected at most one positional profile argument; received ${positional.length}.`);
+  }
+
+  const unknownFlag = args.find((arg) => arg.startsWith("--") && !arg.startsWith("--profile"));
+
+  if (unknownFlag !== undefined) {
+    throw new Error(`Unknown argument: ${unknownFlag}.`);
+  }
+
+  return positional[0] ?? "local";
+}
+
 if (import.meta.main) {
+  const profile = parseProfileArg(process.argv);
   const handler = createProxyFetchHandler();
 
   const server = Bun.serve({
-    port: getProxyConfig().port,
+    port: getProxyConfig(profile).port,
     fetch: handler,
   });
 

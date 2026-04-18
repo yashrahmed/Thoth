@@ -1,22 +1,20 @@
 # Local launch config for `scripts/launch-all.sh`.
-# Each runtime reads its own config block via `CONFIG_FILE`.
+# Loaded by passing `local` (the default) as the profile CLI argument to each runtime.
+# Credentials are sourced from environment variables — see config/local-secrets.env.example.
 
 proxy:
   port: 3000
 
 convAgent:
   port: 3001
-  databaseUrl: postgresql://thoth:thoth@127.0.0.1:5432/thoth
+  database:
+    url: postgresql://127.0.0.1:5432/thoth
   blobStorage:
     endpoint: http://127.0.0.1:4566
     bucket: thoth-local-blob-store
     region: us-east-1
     folder: conv-agent
-    accessKeyId: test
-    secretAccessKey: test
   llmDispatchQueue:
     endpoint: http://127.0.0.1:4566
     region: us-east-1
     queueUrl: http://127.0.0.1:4566/000000000000/thoth-llm-completions
-    accessKeyId: test
-    secretAccessKey: test

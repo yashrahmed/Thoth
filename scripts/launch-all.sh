@@ -6,11 +6,13 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
-CONFIG_PATH="$REPO_ROOT/config/launch.yaml"
 COMMAND="${1:-}"
+PROFILE="${2:-local}"
+CONFIG_PATH="$REPO_ROOT/config/${PROFILE}.yaml"
+CREDS_FILE="$REPO_ROOT/config/${PROFILE}-secrets.env"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./scripts/launch-all.sh <start|stop>"
+  echo "Usage: ./scripts/launch-all.sh <start|stop> [profile]"
   exit 1
 fi
 
@@ -123,8 +125,7 @@ start_service() {
 
   (
     cd "$REPO_ROOT"
-    export CONFIG_FILE="$CONFIG_PATH"
-    nohup bun run --filter "$package_name" "$service_command" >"$log_file" 2>&1 &
+    nohup bun run --filter "$package_name" "$service_command" -- "$PROFILE" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
 
@@ -155,9 +156,21 @@ stop_all_services() {
 
 require_config() {
   if [ ! -f "$CONFIG_PATH" ]; then
-    echo "Missing local launch config: $CONFIG_PATH"
+    echo "Missing launch config for profile '$PROFILE': $CONFIG_PATH"
     exit 1
   fi
+}
+
+load_credentials() {
+  if [ ! -f "$CREDS_FILE" ]; then
+    echo "Missing credentials file: $CREDS_FILE. Copy config/${PROFILE}-secrets.env.example (if present) and fill in values."
+    exit 1
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  . "$CREDS_FILE"
+  set +a
 }
 
 start_database() {
@@ -171,6 +184,7 @@ stop_database() {
 case "$COMMAND" in
   start)
     require_config
+    load_credentials
     stop_all_services
     stop_database
     start_database
@@ -182,7 +196,7 @@ case "$COMMAND" in
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./scripts/launch-all.sh <start|stop>"
+    echo "Usage: ./scripts/launch-all.sh <start|stop> [profile]"
     exit 1
     ;;
 esac

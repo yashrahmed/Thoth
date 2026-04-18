@@ -8,21 +8,34 @@ export interface ProxyConfig {
 
 export interface ConvAgentConfig {
   port: number;
-  databaseUrl: string;
+  database: {
+    url: string;
+  };
   blobStorage: {
     endpoint: string;
     bucket: string;
     region: string;
     folder: string;
-    accessKeyId: string;
-    secretAccessKey: string;
   };
   llmDispatchQueue: {
     endpoint?: string;
     region: string;
     queueUrl: string;
-    accessKeyId: string;
-    secretAccessKey: string;
+  };
+}
+
+export interface ConvAgentCredentials {
+  readonly blobStorage: {
+    readonly accessKeyId: string;
+    readonly secretAccessKey: string;
+  };
+  readonly llmDispatchQueue: {
+    readonly accessKeyId: string;
+    readonly secretAccessKey: string;
+  };
+  readonly database: {
+    readonly username: string;
+    readonly password: string;
   };
 }
 
@@ -31,26 +44,24 @@ interface ThothConfig {
   convAgent: ConvAgentConfig;
 }
 
-let cachedConfig: ThothConfig | null = null;
+const PROFILE_PATTERN = /^[a-z0-9-]+$/;
 
-function getThothConfig(): ThothConfig {
-  if (cachedConfig) {
-    return cachedConfig;
+function getThothConfig(profile: string): ThothConfig {
+  if (typeof profile !== "string" || profile.length === 0 || !PROFILE_PATTERN.test(profile)) {
+    throw new Error(`profile must match ${PROFILE_PATTERN}; received ${JSON.stringify(profile)}.`);
   }
 
-  const configFile = process.env.CONFIG_FILE;
-
-  if (!configFile) {
-    throw new Error("CONFIG_FILE is required.");
-  }
-
+  const configFile = `config/${profile}.yaml`;
   const resolvedPath = resolveConfigFilePath(configFile);
+
+  if (!existsSync(resolvedPath)) {
+    throw new Error(`Config file not found for profile "${profile}": ${resolvedPath}.`);
+  }
+
   const rawConfig = readFileSync(resolvedPath, "utf8");
   const parsedConfig = parse(rawConfig);
 
-  cachedConfig = parseConfig(parsedConfig, loadBlobStorageCredentials(dirname(resolvedPath)));
-
-  return cachedConfig;
+  return parseConfig(parsedConfig);
 }
 
 export function resolveConfigFilePath(configFile: string, startDirectory = process.cwd()): string {
@@ -77,18 +88,46 @@ export function resolveConfigFilePath(configFile: string, startDirectory = proce
   }
 }
 
-export function getProxyConfig(): ProxyConfig {
-  return getThothConfig().proxy;
+export function getProxyConfig(profile: string): ProxyConfig {
+  return getThothConfig(profile).proxy;
 }
 
-export function getConvAgentConfig(): ConvAgentConfig {
-  return getThothConfig().convAgent;
+export function getConvAgentConfig(profile: string): ConvAgentConfig {
+  return getThothConfig(profile).convAgent;
 }
 
-function parseConfig(value: unknown, blobStorageCredentials: BlobStorageCredentials): ThothConfig {
+export function readConvAgentCredentials(env: Record<string, string | undefined>): ConvAgentCredentials {
+  return {
+    blobStorage: {
+      accessKeyId: requireEnv(env, "BLOB_STORAGE_ACCESS_KEY_ID"),
+      secretAccessKey: requireEnv(env, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
+    },
+    llmDispatchQueue: {
+      accessKeyId: requireEnv(env, "LLM_DISPATCH_QUEUE_ACCESS_KEY_ID"),
+      secretAccessKey: requireEnv(env, "LLM_DISPATCH_QUEUE_SECRET_ACCESS_KEY"),
+    },
+    database: {
+      username: requireEnv(env, "DATABASE_USERNAME"),
+      password: requireEnv(env, "DATABASE_PASSWORD"),
+    },
+  };
+}
+
+function requireEnv(env: Record<string, string | undefined>, name: string): string {
+  const value = env[name];
+
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${name} is required.`);
+  }
+
+  return value;
+}
+
+function parseConfig(value: unknown): ThothConfig {
   const config = requireObject(value, "config");
   const proxy = requireObject(config.proxy, "proxy");
   const convAgent = requireObject(config.convAgent, "convAgent");
+  const convAgentDatabase = requireObject(convAgent.database, "convAgent.database");
   const convAgentBlobStorage = requireObject(convAgent.blobStorage, "convAgent.blobStorage");
   const convAgentLlmDispatchQueue = requireObject(convAgent.llmDispatchQueue, "convAgent.llmDispatchQueue");
 
@@ -98,21 +137,19 @@ function parseConfig(value: unknown, blobStorageCredentials: BlobStorageCredenti
     },
     convAgent: {
       port: requireNumber(convAgent.port, "convAgent.port"),
-      databaseUrl: requireString(convAgent.databaseUrl, "convAgent.databaseUrl"),
+      database: {
+        url: requireString(convAgentDatabase.url, "convAgent.database.url"),
+      },
       blobStorage: {
         endpoint: requireString(convAgentBlobStorage.endpoint, "convAgent.blobStorage.endpoint"),
         bucket: requireString(convAgentBlobStorage.bucket, "convAgent.blobStorage.bucket"),
         region: requireString(convAgentBlobStorage.region, "convAgent.blobStorage.region"),
         folder: requireString(convAgentBlobStorage.folder, "convAgent.blobStorage.folder"),
-        accessKeyId: requireString(convAgentBlobStorage.accessKeyId ?? blobStorageCredentials.accessKeyId, "convAgent.blobStorage.accessKeyId"),
-        secretAccessKey: requireString(convAgentBlobStorage.secretAccessKey ?? blobStorageCredentials.secretAccessKey, "convAgent.blobStorage.secretAccessKey"),
       },
       llmDispatchQueue: {
         endpoint: optionalString(convAgentLlmDispatchQueue.endpoint),
         region: requireString(convAgentLlmDispatchQueue.region, "convAgent.llmDispatchQueue.region"),
         queueUrl: requireString(convAgentLlmDispatchQueue.queueUrl, "convAgent.llmDispatchQueue.queueUrl"),
-        accessKeyId: requireString(convAgentLlmDispatchQueue.accessKeyId, "convAgent.llmDispatchQueue.accessKeyId"),
-        secretAccessKey: requireString(convAgentLlmDispatchQueue.secretAccessKey, "convAgent.llmDispatchQueue.secretAccessKey"),
       },
     },
   };
@@ -140,27 +177,6 @@ function requireString(value: unknown, fieldName: string): string {
   }
 
   return value;
-}
-
-interface BlobStorageCredentials {
-  readonly accessKeyId?: string;
-  readonly secretAccessKey?: string;
-}
-
-function loadBlobStorageCredentials(configDir: string): BlobStorageCredentials {
-  const credentialsPath = join(configDir, "cloudflare-creds.yaml");
-
-  if (!existsSync(credentialsPath)) {
-    return {};
-  }
-
-  const parsedValue = parse(readFileSync(credentialsPath, "utf8"));
-  const credentials = requireObject(parsedValue, "cloudflare-creds");
-
-  return {
-    accessKeyId: optionalString(credentials.R2_ACCESS_KEY_ID),
-    secretAccessKey: optionalString(credentials.R2_SECRET_ACCESS_KEY),
-  };
 }
 
 function optionalString(value: unknown): string | undefined {

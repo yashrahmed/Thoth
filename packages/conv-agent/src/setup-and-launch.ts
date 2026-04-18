@@ -1,5 +1,6 @@
 import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { SQSClient } from "@aws-sdk/client-sqs";
+import type { ConvAgentCredentials } from "@thoth/config";
 import { SqsLlmCompletionListener } from "./adapter/inbound/sqs-llm-completion-listener";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";
@@ -34,8 +35,6 @@ interface SetupAndLaunchBlobStorageConfig {
   readonly bucket: string;
   readonly region: string;
   readonly folder: string;
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
   readonly bootstrap?: {
     readonly createBucket?: boolean;
     readonly forcePathStyle?: boolean;
@@ -46,8 +45,6 @@ interface SetupAndLaunchLlmDispatchQueueConfig {
   readonly endpoint?: string;
   readonly region: string;
   readonly queueUrl?: string;
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
   readonly bootstrap?: {
     readonly createQueue?: boolean;
     readonly queueName?: string;
@@ -56,9 +53,12 @@ interface SetupAndLaunchLlmDispatchQueueConfig {
 
 interface SetupAndLaunchInput {
   readonly port: number;
-  readonly databaseUrl: string;
+  readonly database: {
+    readonly url: string;
+  };
   readonly blobStorage: SetupAndLaunchBlobStorageConfig;
   readonly llmDispatchQueue: SetupAndLaunchLlmDispatchQueueConfig;
+  readonly credentials: ConvAgentCredentials;
 }
 
 export interface SetupAndLaunchResult {
@@ -68,15 +68,15 @@ export interface SetupAndLaunchResult {
 }
 
 export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupAndLaunchResult> {
-  const database = createPostgresDatabase(input.databaseUrl);
+  const database = createPostgresDatabase(input.database.url, input.credentials.database);
   let sqsClient: SQSClient | undefined;
   let blobBootstrapClient: S3Client | undefined;
 
   try {
     sqsClient = new SQSClient({
       credentials: {
-        accessKeyId: input.llmDispatchQueue.accessKeyId,
-        secretAccessKey: input.llmDispatchQueue.secretAccessKey,
+        accessKeyId: input.credentials.llmDispatchQueue.accessKeyId,
+        secretAccessKey: input.credentials.llmDispatchQueue.secretAccessKey,
       },
       endpoint: input.llmDispatchQueue.endpoint,
       region: input.llmDispatchQueue.region,
@@ -85,8 +85,8 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
     if (input.blobStorage.bootstrap?.createBucket) {
       blobBootstrapClient = new S3Client({
         credentials: {
-          accessKeyId: input.blobStorage.accessKeyId,
-          secretAccessKey: input.blobStorage.secretAccessKey,
+          accessKeyId: input.credentials.blobStorage.accessKeyId,
+          secretAccessKey: input.credentials.blobStorage.secretAccessKey,
         },
         endpoint: input.blobStorage.endpoint,
         forcePathStyle: input.blobStorage.bootstrap.forcePathStyle ?? false,
@@ -107,8 +107,8 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
     const appendUserMessageStore = new PostgresAppendUserMessageStore(database);
     const deleteConversationGraphStore = new PostgresDeleteConversationGraphStore(database);
     const blobRepository = new R2BlobRepository(input.blobStorage, {
-      accessKeyId: input.blobStorage.accessKeyId,
-      secretAccessKey: input.blobStorage.secretAccessKey,
+      accessKeyId: input.credentials.blobStorage.accessKeyId,
+      secretAccessKey: input.credentials.blobStorage.secretAccessKey,
     });
     const genericValidationService = new GenericValidationService();
     const conversationDomainService = new ConversationDomainService(conversationRepository, genericValidationService);

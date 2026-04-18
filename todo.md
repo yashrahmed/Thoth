@@ -1,7 +1,7 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Read and set credentials from env variables i.e. setup class must sreadet the creds from env variables. Deploy/launch jobs must set the creds as env variable. ****
+1. Read and set credentials from env variables i.e. setup class must sreadet the creds from env variables. Deploy/launch jobs must set the creds as env variable. Add support for **profile** selection ****
 2. Migrate file storage from `R2` to `S3` and do a live test run. ****
 3. Deployment trials on Cloudfalre.
 4. Examine async usage.

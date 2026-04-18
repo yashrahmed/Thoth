@@ -1,0 +1,21 @@
+# Dev launch config for `scripts/launch-all.sh`.
+# Loaded by passing `dev` as the profile CLI argument to each runtime.
+# Placeholder endpoints — fill in once dev infrastructure exists.
+# Credentials are sourced from environment variables — provide a
+# matching config/dev-secrets.env locally (see config/local-secrets.env.example for shape).
+
+proxy:
+  port: 3000
+
+convAgent:
+  port: 3001
+  database:
+    url: postgresql://dev-db.example.com:5432/thoth
+  blobStorage:
+    endpoint: https://dev-blob.example.com
+    bucket: thoth-dev-blob-store
+    region: us-east-1
+    folder: conv-agent
+  llmDispatchQueue:
+    region: us-east-1
+    queueUrl: https://sqs.us-east-1.amazonaws.com/000000000000/thoth-dev-llm-completions

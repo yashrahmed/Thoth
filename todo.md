@@ -1,9 +1,9 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Read and set credentials from env variables i.e. setup class must sreadet the creds from env variables. Deploy/launch jobs must set the creds as env variable. Add support for **profile** selection ****
-2. Migrate file storage from `R2` to `S3` and do a live test run. ****
-3. Deployment trials on Cloudfalre.
+1. Migrate file storage from `S3` back to `R2`. Move to using cloudflare queue and do a local test run. ****
+2. Run local against actual Cloudflare services.
+3. Deployment trials on Cloudflare.
 4. Examine async usage.
 5. Trials for Auth.
 6. Integrate an actual LLM and make it useful at least locally.

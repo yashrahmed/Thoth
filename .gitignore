@@ -32,7 +32,8 @@ local-launch/*-secrets.env
 
 # Local database state
 local-launch/data/_data/
-local-launch/data/blob-store/
+local-launch/data/localstack/
+local-launch/data/minio/
 
 # Claude Code local settings
 .claude/settings.local.json

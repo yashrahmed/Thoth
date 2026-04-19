@@ -71,7 +71,7 @@ The local infrastructure launcher now brings up PostgreSQL plus LocalStack-backe
 - `bun run db:local:start`
 - `bun run db:local:stop`
 
-Persisted LocalStack object-store data is bind-mounted under `local-launch/data/blob-store/`.
+Persisted MinIO object-store data is bind-mounted under `local-launch/data/minio/`.
 
 ## Architecture
 

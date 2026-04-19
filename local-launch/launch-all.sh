@@ -12,6 +12,11 @@ PROFILE="${2:-$DEFAULT_PROFILE}"
 CONFIG_PATH="$REPO_ROOT/packages/conv-agent/resources/${PROFILE}.yaml"
 CREDS_FILE="$REPO_ROOT/local-launch/${PROFILE}-secrets.env"
 LEGACY_CREDS_FILE="$REPO_ROOT/config/${PROFILE}-secrets.env"
+COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+COMPOSE_ENV_FILE="$SCRIPT_DIR/data/.env"
+LOCALSTACK_ENDPOINT="http://127.0.0.1:4566"
+MINIO_ENDPOINT="http://127.0.0.1:9000"
+LOCAL_LLM_QUEUE_NAME="thoth-llm-completions"
 
 if [ -z "$COMMAND" ]; then
   echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
@@ -179,12 +184,57 @@ load_credentials() {
   set +a
 }
 
+wait_for_dependencies() {
+  attempts=0
+
+  while ! curl -sS -o /dev/null -f "$MINIO_ENDPOINT/minio/health/live"; do
+    attempts=$((attempts + 1))
+
+    if [ "$attempts" -ge 60 ]; then
+      echo "MinIO did not become ready in time."
+      exit 1
+    fi
+
+    sleep 1
+  done
+
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" wait minio-setup >/dev/null
+
+  attempts=0
+
+  while ! curl -sS -o /dev/null "$LOCALSTACK_ENDPOINT"; do
+    attempts=$((attempts + 1))
+
+    if [ "$attempts" -ge 60 ]; then
+      echo "LocalStack did not become ready in time."
+      exit 1
+    fi
+
+    sleep 1
+  done
+
+  attempts=0
+
+  while ! docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" exec -T localstack awslocal sqs get-queue-url --queue-name "$LOCAL_LLM_QUEUE_NAME" >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+
+    if [ "$attempts" -ge 60 ]; then
+      echo "LocalStack SQS queue did not become ready in time."
+      exit 1
+    fi
+
+    sleep 1
+  done
+}
+
 start_database() {
-  "$SCRIPT_DIR/launch-deps-local.sh" start
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d postgres localstack minio minio-setup
+  wait_for_dependencies
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
 }
 
 stop_database() {
-  "$SCRIPT_DIR/launch-deps-local.sh" stop
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" down
 }
 
 case "$COMMAND" in

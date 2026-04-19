@@ -10,7 +10,7 @@ convAgent:
   database:
     url: postgresql://127.0.0.1:5432/thoth
   blobStorage:
-    endpoint: http://127.0.0.1:4566
+    endpoint: http://127.0.0.1:9000
     bucket: thoth-local-blob-store
     region: us-east-1
     folder: conv-agent

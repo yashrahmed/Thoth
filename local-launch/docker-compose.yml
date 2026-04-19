@@ -40,7 +40,7 @@ services:
     container_name: thoth-localstack-local
     restart: unless-stopped
     environment:
-      SERVICES: s3,sqs
+      SERVICES: sqs
       AWS_DEFAULT_REGION: us-east-1
       LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT: "1"
       LOCALSTACK_HOST: localhost
@@ -48,8 +48,36 @@ services:
     ports:
       - "4566:4566"
     volumes:
-      - ./data/blob-store:/var/lib/localstack
+      - ./data/localstack:/var/lib/localstack
       - ./data/localstack-init:/etc/localstack/init/ready.d
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: thoth-minio-local
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_REGION: us-east-1
+    command: server /data --console-address :9001
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data/minio:/data
+
+  minio-setup:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: thoth-minio-setup
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until mc alias set local http://minio:9000 minioadmin minioadmin >/dev/null 2>&1; do
+          sleep 1
+        done
+        mc mb --ignore-existing local/thoth-local-blob-store
 
   flyway:
     image: redgate/flyway:11-alpine

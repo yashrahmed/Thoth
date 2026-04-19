@@ -1,14 +1,15 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Migrate file storage from `S3` back to `R2`. Move to using cloudflare queue and do a local test run. ****
-2. Run local against actual Cloudflare services.
-3. Deployment trials on Cloudflare.
-4. Examine async usage.
-5. Trials for Auth.
-6. Integrate an actual LLM and make it useful at least locally.
-7. Supporting server side rendering of content.
-8. Supporting Oauth and multitenancy.
+1. Move to using cloudflare queue and do a local and dev test run. ****
+2. Test R2 on dev profile. ****
+3. Run local against actual Cloudflare services.
+4. Deployment trials on Cloudflare.
+5. Examine async usage.
+6. Trials for Auth.
+7. Integrate an actual LLM and make it useful at least locally.
+8. Supporting server side rendering of content.
+9.  Supporting Oauth and multitenancy.
 
 #### UI
 1. Build a basic but chat UI ****

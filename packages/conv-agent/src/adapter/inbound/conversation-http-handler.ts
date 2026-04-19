@@ -7,11 +7,11 @@ import {
   type Attachment,
 } from "../../application/append-message-to-conversation-flow";
 import type { CreateConversationFlow } from "../../application/create-conversation-flow";
-import type { Conversation } from "../../domain/objects/conversation";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
-import { type GetMessagesOnConversationFlow, type MessageWithFiles } from "../../application/get-messages-on-conversation-flow";
+import { type GetMessagesOnConversationFlow } from "../../application/get-messages-on-conversation-flow";
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
+import { ConversationResponse, MessageResponse, PageResponse } from "../../domain/objects/response-types";
 
 interface TransportValidationError {
   readonly kind: "ValidationError";
@@ -78,7 +78,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, result.error);
     }
 
-    return c.json(toConversationResponse(result.value), 201);
+    return c.json(ConversationResponse.fromConversation(result.value), 201);
   });
 
   app.get("/conversations", async (c) => {
@@ -90,11 +90,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, result.error);
     }
 
-    return c.json({
-      items: result.value.map(toConversationResponse),
-      pageNum,
-      pageSize,
-    });
+    return c.json(new PageResponse(result.value.map(ConversationResponse.fromConversation), pageNum, pageSize));
   });
 
   app.post("/conversations/:id/chat", async (c) => {
@@ -124,11 +120,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, result.error);
     }
 
-    return c.json({
-      items: result.value.map(toMessageResponse),
-      pageNum,
-      pageSize,
-    });
+    return c.json(new PageResponse(result.value.map(MessageResponse.fromMessageWithFiles), pageNum, pageSize));
   });
 
   app.get("/conversations/:id", async (c) => {
@@ -139,7 +131,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, result.error);
     }
 
-    return c.json(toConversationResponse(result.value));
+    return c.json(ConversationResponse.fromConversation(result.value));
   });
 
   app.delete("/conversations/:id", async (c) => {
@@ -166,35 +158,6 @@ function mapError(c: { json: (data: unknown, status: number) => Response }, erro
   }
 
   return c.json({ error }, 500);
-}
-
-function toConversationResponse(conversation: Conversation) {
-  return {
-    id: conversation.id,
-    createdAt: conversation.createdAt.toISOString(),
-    updatedAt: conversation.updatedAt.toISOString(),
-  };
-}
-
-function toMessageResponse(message: MessageWithFiles) {
-  return {
-    id: message.id,
-    conversationId: message.conversationId,
-    type: message.type,
-    sequenceNumber: message.sequenceNumber,
-    content: message.content,
-    files: message.files.map((file) => ({
-      id: file.id,
-      canonicalUrl: file.canonicalUrl,
-      filename: file.filename,
-      mimeType: file.mimeType,
-      sizeInBytes: file.sizeInBytes,
-      createdAt: file.createdAt.toISOString(),
-      updatedAt: file.updatedAt.toISOString(),
-    })),
-    createdAt: message.createdAt.toISOString(),
-    updatedAt: message.updatedAt.toISOString(),
-  };
 }
 
 async function parseAppendMessageRequest(req: Request, conversationId: string): Promise<TransportResult<ApplicationAppendMessageRequest>> {

@@ -6,9 +6,9 @@ import type { MessageDomainService } from "../domain/services/message-domain-ser
 import { ValidationError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { failure, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
-import { type AppendMessageRequest } from "../domain/objects/append-message-request";
+import { type AppendMessageRequest } from "../domain/objects/request-types";
 
-export { type AppendMessageRequest } from "../domain/objects/append-message-request";
+export { type AppendMessageRequest } from "../domain/objects/request-types";
 export { type Attachment } from "../domain/objects/attachment";
 export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 

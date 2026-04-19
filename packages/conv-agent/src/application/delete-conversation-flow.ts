@@ -3,7 +3,7 @@ import type { DeleteConversationGraphDomainService } from "../domain/services/de
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import { success, traverseAsync } from "../domain/objects/result";
-import type { DeleteConversationRequest } from "../domain/objects/delete-conversation-request";
+import type { DeleteConversationRequest } from "../domain/objects/request-types";
 
 export class DeleteConversationFlow {
   constructor(

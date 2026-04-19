@@ -1,5 +1,5 @@
-import type { LLMMessageType } from "./llm";
 import type { Attachment } from "./attachment";
+import type { LLMMessageType } from "./llm";
 
 export class AppendMessageRequest {
   readonly conversationId: string;
@@ -12,5 +12,21 @@ export class AppendMessageRequest {
     this.type = type;
     this.content = content;
     this.attachments = attachments;
+  }
+}
+
+export class DeleteConversationRequest {
+  readonly conversationId: string;
+
+  constructor(conversationId: string) {
+    this.conversationId = conversationId;
+  }
+}
+
+export class GetConversationRequest {
+  readonly conversationId: string;
+
+  constructor(conversationId: string) {
+    this.conversationId = conversationId;
   }
 }

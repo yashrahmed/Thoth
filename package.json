@@ -5,8 +5,8 @@
     "packages/*"
   ],
   "scripts": {
-    "db:local:up": "docker compose --env-file local-launch/data/.env -f docker-compose.yml up -d postgres",
-    "db:local:migrate": "docker compose --env-file local-launch/data/.env -f docker-compose.yml up -d postgres && docker compose --env-file local-launch/data/.env -f docker-compose.yml --profile migrations run --rm flyway migrate",
+    "db:local:up": "docker compose --env-file local-launch/data/.env -f local-launch/docker-compose.yml up -d postgres",
+    "db:local:migrate": "docker compose --env-file local-launch/data/.env -f local-launch/docker-compose.yml up -d postgres && docker compose --env-file local-launch/data/.env -f local-launch/docker-compose.yml --profile migrations run --rm flyway migrate",
     "dev:local:start": "./local-launch/launch-all.sh start",
     "dev:local:stop": "./local-launch/launch-all.sh stop",
     "dev:proxy": "bun run --filter @thoth/message-proxy dev",

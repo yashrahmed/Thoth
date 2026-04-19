@@ -9,7 +9,7 @@ import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
 import { type AppendMessageRequest } from "../domain/objects/request-types";
 
 export { type AppendMessageRequest } from "../domain/objects/request-types";
-export { type Attachment } from "../domain/objects/attachment";
+export { type Attachment } from "../domain/objects/request-types";
 export const MESSAGE_TYPES = LLM_MESSAGE_TYPES;
 
 export class AppendMessageToConversationFlow {

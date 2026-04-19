@@ -1,4 +1,4 @@
-import type { InsertNextMessageRecord, Message } from "../objects/message";
+import type { InsertNextMessageRecord, Message } from "../objects/message-types";
 import type { NotFoundError, StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
 

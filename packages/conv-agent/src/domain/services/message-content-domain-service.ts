@@ -1,6 +1,6 @@
 import { ValidationError } from "../objects/errors";
 import { LLM_MESSAGE_TYPES, type LLMMessageType } from "../objects/llm";
-import type { CreateMessageInput, Message } from "../objects/message";
+import type { CreateMessageInput, Message } from "../objects/message-types";
 import { failure, success, type Result } from "../objects/result";
 import { GenericValidationService } from "./generic-validation-service";
 

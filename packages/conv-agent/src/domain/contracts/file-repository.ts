@@ -1,4 +1,4 @@
-import type { File } from "../objects/file";
+import type { File } from "../objects/message-types";
 import type { NotFoundError, StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 

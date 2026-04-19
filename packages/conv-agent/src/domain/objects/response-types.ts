@@ -1,7 +1,6 @@
 import type { Conversation } from "./conversation";
-import type { File } from "./file";
 import type { LLMMessageType } from "./llm";
-import type { MessageWithFiles } from "./message";
+import type { File, MessageWithFiles } from "./message-types";
 
 export class ConversationResponse {
   readonly id: string;

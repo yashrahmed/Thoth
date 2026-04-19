@@ -1,5 +1,16 @@
-import type { Attachment } from "./attachment";
 import type { LLMMessageType } from "./llm";
+
+export class Attachment {
+  readonly content: ArrayBuffer;
+  readonly filename: string;
+  readonly mimeType: string;
+
+  constructor(content: ArrayBuffer, filename: string, mimeType: string) {
+    this.content = content;
+    this.filename = filename;
+    this.mimeType = mimeType;
+  }
+}
 
 export class AppendMessageRequest {
   readonly conversationId: string;

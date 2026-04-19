@@ -1,5 +1,5 @@
 import type { FileRepository } from "../../domain/contracts/file-repository";
-import { File } from "../../domain/objects/file";
+import { File } from "../../domain/objects/message-types";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";

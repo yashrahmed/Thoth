@@ -3,7 +3,7 @@ import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import { type InsertNextMessageRecord, Message } from "../../domain/objects/message";
+import { type InsertNextMessageRecord, Message } from "../../domain/objects/message-types";
 
 interface MessageRow {
   readonly id: string;

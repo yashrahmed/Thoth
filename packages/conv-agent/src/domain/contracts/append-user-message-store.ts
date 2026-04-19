@@ -1,5 +1,5 @@
-import type { UploadedFileMetadata } from "../objects/file";
-import type { InsertNextMessageRecord, Message } from "../objects/message";
+import type { UploadedFileMetadata } from "../objects/message-types";
+import type { InsertNextMessageRecord, Message } from "../objects/message-types";
 import type { StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
 

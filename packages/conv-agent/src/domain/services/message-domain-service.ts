@@ -1,5 +1,5 @@
 import type { MessageRepository } from "../contracts/message-repository";
-import type { CreateMessageInput, InsertNextMessageRecord, Message } from "../objects/message";
+import type { CreateMessageInput, InsertNextMessageRecord, Message } from "../objects/message-types";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, firstFailure } from "../objects/result";

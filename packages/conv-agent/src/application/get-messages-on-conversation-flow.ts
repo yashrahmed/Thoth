@@ -1,7 +1,7 @@
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import { type MessageDomainService } from "../domain/services/message-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import type { MessageWithFiles } from "../domain/objects/message";
+import type { MessageWithFiles } from "../domain/objects/message-types";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import { firstFailure, success } from "../domain/objects/result";

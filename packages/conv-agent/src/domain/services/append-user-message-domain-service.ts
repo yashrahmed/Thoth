@@ -1,6 +1,6 @@
 import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "../contracts/append-user-message-store";
 import type { StoreError, ValidationError } from "../objects/errors";
-import type { Message } from "../objects/message";
+import type { Message } from "../objects/message-types";
 import type { Result } from "../objects/result";
 
 export class AppendUserMessageDomainService {

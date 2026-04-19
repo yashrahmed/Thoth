@@ -1,6 +1,6 @@
 import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
 import { EntityType, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
-import { Message } from "../../domain/objects/message";
+import { Message } from "../../domain/objects/message-types";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 

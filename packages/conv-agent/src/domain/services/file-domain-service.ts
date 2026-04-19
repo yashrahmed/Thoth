@@ -1,4 +1,4 @@
-import type { File as FileEntity, UploadedFileMetadata } from "../objects/file";
+import type { File as FileEntity, UploadedFileMetadata } from "../objects/message-types";
 import type { FileRepository } from "../contracts/file-repository";
 import { EntityType, NotFoundError, StoreError, StoreOperation, type ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";

@@ -1,5 +1,4 @@
 import type { LLMMessageType } from "./llm";
-import type { File } from "./file";
 
 export type MessageWithFiles = Message & { readonly files: ReadonlyArray<File> };
 
@@ -24,4 +23,29 @@ export class Message {
 }
 
 export type CreateMessageInput = Pick<Message, "conversationId" | "type" | "content">;
+
 export type InsertNextMessageRecord = Omit<Message, "id">;
+
+export class File {
+  readonly id: string;
+  readonly messageId: string;
+  readonly canonicalUrl: string;
+  readonly filename: string;
+  readonly mimeType: string;
+  readonly sizeInBytes: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+
+  constructor(id: string, messageId: string, canonicalUrl: string, filename: string, mimeType: string, sizeInBytes: number, createdAt: Date, updatedAt: Date) {
+    this.id = id;
+    this.messageId = messageId;
+    this.canonicalUrl = canonicalUrl;
+    this.filename = filename;
+    this.mimeType = mimeType;
+    this.sizeInBytes = sizeInBytes;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+}
+
+export type UploadedFileMetadata = Pick<File, "canonicalUrl" | "filename" | "mimeType" | "sizeInBytes">;

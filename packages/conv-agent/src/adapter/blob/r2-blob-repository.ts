@@ -32,11 +32,12 @@ export class R2BlobRepository implements BlobRepository {
   async putBlob(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, StoreError>> {
     const canonicalPath = this.getCanonicalPath(request.filename);
     const objectKey = this.getObjectKey(canonicalPath);
+    const canonicalUri = `/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(objectKey)}`;
 
     try {
       const response = await this.signedFetch({
         method: BlobRequestMethod.Put,
-        objectKey,
+        canonicalUri,
         body: request.content,
         contentType: request.mimeType,
       });
@@ -53,12 +54,10 @@ export class R2BlobRepository implements BlobRepository {
 
   async removeBlob(url: string): Promise<Result<void, StoreError>> {
     const objectKey = this.getObjectKey(url);
+    const canonicalUri = `/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(objectKey)}`;
 
     try {
-      const response = await this.signedFetch({
-        method: BlobRequestMethod.Delete,
-        objectKey,
-      });
+      const response = await this.signedFetch({ method: BlobRequestMethod.Delete, canonicalUri });
 
       if (!response.ok) {
         return failure(new StoreError(EntityType.File, StoreOperation.Remove, await getResponseMessage(response)));
@@ -72,7 +71,7 @@ export class R2BlobRepository implements BlobRepository {
 
   private async signedFetch(input: {
     readonly method: BlobRequestMethod;
-    readonly objectKey: string;
+    readonly canonicalUri: string;
     readonly body?: ArrayBuffer;
     readonly contentType?: string;
   }): Promise<Response> {
@@ -80,7 +79,6 @@ export class R2BlobRepository implements BlobRepository {
     const amzDate = toAmzDate(now);
     const dateStamp = toDateStamp(now);
     const endpointUrl = new URL(this.config.endpoint);
-    const canonicalUri = `/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(input.objectKey)}`;
     const bodyHash = input.body ? sha256Hex(Buffer.from(input.body)) : "UNSIGNED-PAYLOAD";
     const canonicalHeaders = [
       input.contentType ? `content-type:${input.contentType}` : null,
@@ -91,14 +89,14 @@ export class R2BlobRepository implements BlobRepository {
       .filter((value): value is string => value !== null)
       .join("\n");
     const signedHeaders = [input.contentType ? "content-type" : null, "host", "x-amz-content-sha256", "x-amz-date"].filter((value): value is string => value !== null).join(";");
-    const canonicalRequest = [input.method, canonicalUri, "", `${canonicalHeaders}\n`, signedHeaders, bodyHash].join("\n");
+    const canonicalRequest = [input.method, input.canonicalUri, "", `${canonicalHeaders}\n`, signedHeaders, bodyHash].join("\n");
     const credentialScope = `${dateStamp}/${this.config.region}/s3/aws4_request`;
     const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
     const signingKey = getSignatureKey(this.credentials.secretAccessKey, dateStamp, this.config.region, "s3");
     const signature = hmacSha256Hex(signingKey, stringToSign);
     const authorization = [`AWS4-HMAC-SHA256 Credential=${this.credentials.accessKeyId}/${credentialScope}`, `SignedHeaders=${signedHeaders}`, `Signature=${signature}`].join(", ");
 
-    return fetch(`${this.config.endpoint}${canonicalUri}`, {
+    return fetch(`${this.config.endpoint}${input.canonicalUri}`, {
       method: input.method,
       headers: {
         ...(input.contentType ? { "content-type": input.contentType } : {}),

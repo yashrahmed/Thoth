@@ -1,4 +1,3 @@
-import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { SQSClient } from "@aws-sdk/client-sqs";
 import type { ConvAgentCredentials } from "./config";
 import { SqsLlmCompletionListener } from "./adapter/inbound/sqs-llm-completion-listener";
@@ -35,10 +34,6 @@ interface SetupAndLaunchBlobStorageConfig {
   readonly bucket: string;
   readonly region: string;
   readonly folder: string;
-  readonly bootstrap?: {
-    readonly createBucket?: boolean;
-    readonly forcePathStyle?: boolean;
-  };
 }
 
 interface SetupAndLaunchLlmDispatchQueueConfig {
@@ -70,7 +65,6 @@ export interface SetupAndLaunchResult {
 export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupAndLaunchResult> {
   const database = createPostgresDatabase(input.database.url, input.credentials.database);
   let sqsClient: SQSClient | undefined;
-  let blobBootstrapClient: S3Client | undefined;
 
   try {
     sqsClient = new SQSClient({
@@ -82,23 +76,10 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
       region: input.llmDispatchQueue.region,
     });
 
-    if (input.blobStorage.bootstrap?.createBucket) {
-      blobBootstrapClient = new S3Client({
-        credentials: {
-          accessKeyId: input.credentials.blobStorage.accessKeyId,
-          secretAccessKey: input.credentials.blobStorage.secretAccessKey,
-        },
-        endpoint: input.blobStorage.endpoint,
-        forcePathStyle: input.blobStorage.bootstrap.forcePathStyle ?? false,
-        region: input.blobStorage.region,
-      });
-
-      await blobBootstrapClient.send(
-        new CreateBucketCommand({
-          Bucket: input.blobStorage.bucket,
-        }),
-      );
-    }
+    const blobRepository = new R2BlobRepository(input.blobStorage, {
+      accessKeyId: input.credentials.blobStorage.accessKeyId,
+      secretAccessKey: input.credentials.blobStorage.secretAccessKey,
+    });
 
     const queueUrl = await resolveQueueUrl(input.llmDispatchQueue);
     const conversationRepository = new PostgresConversationRepository(database);
@@ -106,10 +87,6 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
     const fileRepository = new PostgresFileRepository(database);
     const appendUserMessageStore = new PostgresAppendUserMessageStore(database);
     const deleteConversationGraphStore = new PostgresDeleteConversationGraphStore(database);
-    const blobRepository = new R2BlobRepository(input.blobStorage, {
-      accessKeyId: input.credentials.blobStorage.accessKeyId,
-      secretAccessKey: input.credentials.blobStorage.secretAccessKey,
-    });
     const genericValidationService = new GenericValidationService();
     const conversationDomainService = new ConversationDomainService(conversationRepository, genericValidationService);
     const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
@@ -155,7 +132,6 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
         stopped = true;
 
         try {
-          blobBootstrapClient?.destroy();
           sqsClient?.destroy();
           await sqsLlmCompletionListener.stop();
           await server.stop(true);
@@ -165,7 +141,6 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
       },
     };
   } catch (error) {
-    blobBootstrapClient?.destroy();
     sqsClient?.destroy();
     await database.end();
     throw error;

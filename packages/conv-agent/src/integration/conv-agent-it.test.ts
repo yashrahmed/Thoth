@@ -431,10 +431,6 @@ async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
       endpoint: BLOB_ENDPOINT,
       folder: BLOB_FOLDER,
       region: BLOB_REGION,
-      bootstrap: {
-        createBucket: true,
-        forcePathStyle: true,
-      },
     },
     llmDispatchQueue: {
       endpoint: LOCALSTACK_ENDPOINT,

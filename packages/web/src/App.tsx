@@ -1,4 +1,17 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  FileArchive,
+  FileCode,
+  FileImage,
+  FileMusic,
+  FileQuestionMark,
+  FileSpreadsheet,
+  FileText,
+  FileType,
+  FileVideoCamera,
+  Presentation,
+  type LucideIcon,
+} from "lucide-react";
 
 type ConversationResponse = {
   readonly id: string;
@@ -42,6 +55,57 @@ type MessagePageResponse = {
 const CONV_AGENT_URL = import.meta.env.VITE_CONV_AGENT_URL?.trim() || "http://localhost:3001";
 const MESSAGE_PAGE_SIZE = 50;
 const CONVERSATION_PAGE_SIZE = 40;
+const IMAGE_FILE_EXTENSIONS = new Set(["avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "svg", "tif", "tiff", "webp"]);
+const CODE_FILE_EXTENSIONS = new Set([
+  "c",
+  "cc",
+  "cjs",
+  "cpp",
+  "css",
+  "go",
+  "graphql",
+  "gql",
+  "h",
+  "hpp",
+  "htm",
+  "html",
+  "java",
+  "js",
+  "jsx",
+  "json",
+  "lua",
+  "mjs",
+  "mts",
+  "php",
+  "py",
+  "rb",
+  "rs",
+  "sass",
+  "scss",
+  "sh",
+  "sql",
+  "swift",
+  "toml",
+  "ts",
+  "tsx",
+  "xml",
+  "yaml",
+  "yml",
+  "zsh",
+]);
+const TEXT_FILE_EXTENSIONS = new Set(["conf", "env", "ini", "log", "md", "rtf", "txt"]);
+const SPREADSHEET_FILE_EXTENSIONS = new Set(["csv", "numbers", "ods", "tsv", "xls", "xlsx"]);
+const PRESENTATION_FILE_EXTENSIONS = new Set(["key", "odp", "ppt", "pptx"]);
+const ARCHIVE_FILE_EXTENSIONS = new Set(["7z", "bz2", "gz", "rar", "tar", "tgz", "xz", "zip"]);
+const AUDIO_FILE_EXTENSIONS = new Set(["aac", "aiff", "flac", "m4a", "mp3", "ogg", "wav"]);
+const VIDEO_FILE_EXTENSIONS = new Set(["avi", "m4v", "mkv", "mov", "mp4", "webm"]);
+const FONT_FILE_EXTENSIONS = new Set(["otf", "ttf", "woff", "woff2"]);
+
+type AttachmentIconDescriptor = {
+  readonly Icon: LucideIcon;
+  readonly label: string;
+  readonly color: string;
+};
 
 export function App() {
   const [conversations, setConversations] = useState<ReadonlyArray<ConversationResponse>>([]);
@@ -611,17 +675,25 @@ function SelectedFileList(props: { readonly selectedFiles: ReadonlyArray<File>; 
 
   return (
     <div style={selectedFileListStyle}>
-      {props.selectedFiles.map((file, index) => (
-        <div key={`${file.name}-${file.size}-${index}`} style={selectedFileChipStyle}>
-          <div style={selectedFileMetaStyle}>
-            <span style={selectedFileNameStyle}>{file.name}</span>
-            <span style={selectedFileSizeStyle}>{formatFileSize(file.size)}</span>
+      {props.selectedFiles.map((file, index) => {
+        const icon = resolveAttachmentIcon({ filename: file.name, mimeType: file.type });
+        const Icon = icon.Icon;
+
+        return (
+          <div key={`${file.name}-${file.size}-${index}`} style={selectedFileChipStyle}>
+            <span style={{ ...selectedFileIconWrapStyle, color: icon.color }} title={icon.label} aria-hidden="true">
+              <Icon size={18} strokeWidth={1.9} />
+            </span>
+            <div style={selectedFileMetaStyle}>
+              <span style={selectedFileNameStyle}>{file.name}</span>
+              <span style={selectedFileSizeStyle}>{formatFileSize(file.size)}</span>
+            </div>
+            <button type="button" onClick={() => props.onRemoveSelectedFile(index)} style={selectedFileRemoveStyle} aria-label={`Remove ${file.name}`}>
+              <CloseIcon />
+            </button>
           </div>
-          <button type="button" onClick={() => props.onRemoveSelectedFile(index)} style={selectedFileRemoveStyle} aria-label={`Remove ${file.name}`}>
-            <CloseIcon />
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -646,25 +718,16 @@ function EmptyState(props: { readonly title: string; readonly body: string }) {
 
 function FileAttachmentView(props: { readonly file: ChatFile }) {
   const file = props.file;
+  const icon = resolveAttachmentIcon({ filename: file.filename, mimeType: file.mimeType });
+  const Icon = icon.Icon;
 
   return (
     <div style={fileChipStyle}>
-      <span style={fileIconWrapStyle} aria-hidden="true">
-        <FileIcon />
+      <span style={{ ...fileIconWrapStyle, color: icon.color }} title={icon.label} aria-hidden="true">
+        <Icon size={16} strokeWidth={1.9} />
       </span>
       <span style={fileNameStyle}>{file.filename}</span>
     </div>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
-      <path d="M9 13h6" />
-      <path d="M9 17h4" />
-    </svg>
   );
 }
 
@@ -687,6 +750,84 @@ function CloseIcon() {
       <path d="M18 6L6 18" />
     </svg>
   );
+}
+
+function resolveAttachmentIcon(file: { readonly filename: string; readonly mimeType: string }): AttachmentIconDescriptor {
+  const mimeType = normalizeMimeType(file.mimeType);
+  const extension = getFileExtension(file.filename);
+
+  if (mimeType.startsWith("image/") || IMAGE_FILE_EXTENSIONS.has(extension)) {
+    return { Icon: FileImage, label: "Image file", color: "#8ee7c8" };
+  }
+
+  if (mimeType === "application/pdf" || extension === "pdf") {
+    return { Icon: FileText, label: "PDF file", color: "#ffb4a8" };
+  }
+
+  if (mimeType.startsWith("audio/") || AUDIO_FILE_EXTENSIONS.has(extension)) {
+    return { Icon: FileMusic, label: "Audio file", color: "#f0abfc" };
+  }
+
+  if (mimeType.startsWith("video/") || VIDEO_FILE_EXTENSIONS.has(extension)) {
+    return { Icon: FileVideoCamera, label: "Video file", color: "#fdba74" };
+  }
+
+  if (isSpreadsheetFile(mimeType, extension)) {
+    return { Icon: FileSpreadsheet, label: "Spreadsheet file", color: "#67e8f9" };
+  }
+
+  if (isPresentationFile(mimeType, extension)) {
+    return { Icon: Presentation, label: "Presentation file", color: "#fde68a" };
+  }
+
+  if (isArchiveFile(mimeType, extension)) {
+    return { Icon: FileArchive, label: "Archive file", color: "#c4b5fd" };
+  }
+
+  if (isCodeFile(mimeType, extension)) {
+    return { Icon: FileCode, label: "Code file", color: "#93c5fd" };
+  }
+
+  if (mimeType.startsWith("text/") || TEXT_FILE_EXTENSIONS.has(extension)) {
+    return { Icon: FileText, label: "Text file", color: "#f8d7a4" };
+  }
+
+  if (mimeType.startsWith("font/") || FONT_FILE_EXTENSIONS.has(extension)) {
+    return { Icon: FileType, label: "Font file", color: "#facc15" };
+  }
+
+  return { Icon: FileQuestionMark, label: "File", color: "rgba(255, 248, 240, 0.78)" };
+}
+
+function normalizeMimeType(mimeType: string): string {
+  return mimeType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}
+
+function getFileExtension(filename: string): string {
+  const normalizedFilename = filename.trim().toLowerCase();
+  const extensionStart = normalizedFilename.lastIndexOf(".");
+
+  if (extensionStart <= 0 || extensionStart === normalizedFilename.length - 1) {
+    return "";
+  }
+
+  return normalizedFilename.slice(extensionStart + 1);
+}
+
+function isSpreadsheetFile(mimeType: string, extension: string): boolean {
+  return SPREADSHEET_FILE_EXTENSIONS.has(extension) || mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType === "text/csv";
+}
+
+function isPresentationFile(mimeType: string, extension: string): boolean {
+  return PRESENTATION_FILE_EXTENSIONS.has(extension) || mimeType.includes("presentation") || mimeType.includes("powerpoint");
+}
+
+function isArchiveFile(mimeType: string, extension: string): boolean {
+  return ARCHIVE_FILE_EXTENSIONS.has(extension) || mimeType.includes("zip") || mimeType.includes("tar") || mimeType.includes("compressed") || mimeType.includes("archive");
+}
+
+function isCodeFile(mimeType: string, extension: string): boolean {
+  return CODE_FILE_EXTENSIONS.has(extension) || mimeType.includes("json") || mimeType.includes("xml") || mimeType.includes("yaml") || mimeType.includes("toml") || mimeType.includes("javascript");
 }
 
 function formatConversationLabel(id: string): string {
@@ -1153,13 +1294,24 @@ const selectedFileListStyle: React.CSSProperties = {
 
 const selectedFileChipStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gridTemplateColumns: "auto minmax(0, 1fr) auto",
   gap: "10px",
   alignItems: "center",
   padding: "10px 12px",
   borderRadius: "16px",
   background: "rgba(255, 248, 240, 0.06)",
   border: "1px solid rgba(255, 214, 179, 0.12)",
+};
+
+const selectedFileIconWrapStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "28px",
+  height: "28px",
+  borderRadius: "8px",
+  background: "rgba(255, 255, 255, 0.08)",
+  flexShrink: 0,
 };
 
 const selectedFileMetaStyle: React.CSSProperties = {

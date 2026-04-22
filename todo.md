@@ -2,22 +2,17 @@
 
 #### Backend
 1. Figure out a solution for file URLs.
-   1. On the UI, icons are rendered based on attachment types.
-   2. A new port and adapter to generated signed urls for files which are then passed on to the LLM in the completion flow.
+   1. A new port and adapter to generated signed urls for files which are then passed on to the LLM in the completion flow.
+   2. Build 1 and test the generated URLs.
 2. Move to using cloudflare queue and do a local test run.
-3. Test R2 on dev profile.
-4. Integrate an actual LLM and make it useful at least locally.
-_________
-5. Run local against actual Cloudflare services.
-6. Deployment trials on Cloudflare.
-7. Examine async usage.
-8. Trials for Auth.
-10. Supporting server side rendering of content.
-11. Supporting Oauth and multitenancy.
+3. Run local against actual Cloudflare services.
+4. Integrate an actual LLM and make it useful locally.
+5. Deployment trials on Cloudflare.
+6. Examine async usage.
+7. Trials for Auth + Supporting Oauth and multitenancy.
 
 #### UI
 1. Build a basic but chat UI.
-2. Provide support for attachment thumbnails.
 
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.
  ```I will move this into a new project. I wish to be able to build a graph where the node describes the code components```.

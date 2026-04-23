@@ -1,15 +1,9 @@
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, randomUUID } from "node:crypto";
+import type { BlobStorageConfig } from "../../config";
 import type { BlobRepository } from "../../domain/contracts/blob-repository";
 import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
-
-interface R2BlobConfig {
-  readonly endpoint: string;
-  readonly bucket: string;
-  readonly region: string;
-  readonly folder: string;
-}
 
 interface R2BlobCredentials {
   readonly accessKeyId: string;
@@ -25,7 +19,7 @@ enum BlobRequestMethod {
 
 export class R2BlobRepository implements BlobRepository {
   constructor(
-    private readonly config: R2BlobConfig,
+    private readonly config: BlobStorageConfig,
     private readonly credentials: R2BlobCredentials,
   ) {}
 

@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse } from "yaml";
+import type { BlobStorageConfig } from "./blob-storage-config";
+
+export type { BlobStorageConfig } from "./blob-storage-config";
 
 export interface ProxyConfig {
   port: number;
@@ -11,12 +14,7 @@ export interface ConvAgentServiceConfig {
   database: {
     url: string;
   };
-  blobStorage: {
-    endpoint: string;
-    bucket: string;
-    region: string;
-    folder: string;
-  };
+  blobStorage: BlobStorageConfig;
   llmDispatchQueue: {
     endpoint?: string;
     region: string;
@@ -38,6 +36,8 @@ export interface ConvAgentCredentials {
     readonly password: string;
   };
 }
+
+export type BlobStorageCredentials = ConvAgentCredentials["blobStorage"];
 
 interface ConvAgentProfileConfig {
   proxy: ProxyConfig;
@@ -99,10 +99,7 @@ export function getConvAgentConfig(profile: string): ConvAgentServiceConfig {
 
 export function readConvAgentCredentials(env: Record<string, string | undefined>): ConvAgentCredentials {
   return {
-    blobStorage: {
-      accessKeyId: requireEnv(env, "BLOB_STORAGE_ACCESS_KEY_ID"),
-      secretAccessKey: requireEnv(env, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
-    },
+    blobStorage: readBlobStorageCredentials(env),
     llmDispatchQueue: {
       accessKeyId: requireEnv(env, "LLM_DISPATCH_QUEUE_ACCESS_KEY_ID"),
       secretAccessKey: requireEnv(env, "LLM_DISPATCH_QUEUE_SECRET_ACCESS_KEY"),
@@ -111,6 +108,13 @@ export function readConvAgentCredentials(env: Record<string, string | undefined>
       username: requireEnv(env, "DATABASE_USERNAME"),
       password: requireEnv(env, "DATABASE_PASSWORD"),
     },
+  };
+}
+
+export function readBlobStorageCredentials(env: Record<string, string | undefined>): BlobStorageCredentials {
+  return {
+    accessKeyId: requireEnv(env, "BLOB_STORAGE_ACCESS_KEY_ID"),
+    secretAccessKey: requireEnv(env, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
   };
 }
 

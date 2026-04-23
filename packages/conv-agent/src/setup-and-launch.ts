@@ -1,5 +1,5 @@
 import { SQSClient } from "@aws-sdk/client-sqs";
-import type { ConvAgentCredentials } from "./config";
+import type { BlobStorageConfig, ConvAgentCredentials } from "./config";
 import { SqsLlmCompletionListener } from "./adapter/inbound/sqs-llm-completion-listener";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";
@@ -29,13 +29,6 @@ import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 
-interface SetupAndLaunchBlobStorageConfig {
-  readonly endpoint: string;
-  readonly bucket: string;
-  readonly region: string;
-  readonly folder: string;
-}
-
 interface SetupAndLaunchLlmDispatchQueueConfig {
   readonly endpoint?: string;
   readonly region: string;
@@ -51,7 +44,7 @@ interface SetupAndLaunchInput {
   readonly database: {
     readonly url: string;
   };
-  readonly blobStorage: SetupAndLaunchBlobStorageConfig;
+  readonly blobStorage: BlobStorageConfig;
   readonly llmDispatchQueue: SetupAndLaunchLlmDispatchQueueConfig;
   readonly credentials: ConvAgentCredentials;
 }

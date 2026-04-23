@@ -36,6 +36,7 @@ local-launch/data/localstack/
 local-launch/data/minio/
 
 # Claude Code local settings
+.claude/settings.json
 .claude/settings.local.json
 
 # Editor / OS noise

@@ -1,15 +1,12 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Figure out a solution for file URLs.
-   1. A new port and adapter to generated signed urls for files which are then passed on to the LLM in the completion flow.
-   2. Build 1 and test the generated URLs.
-2. Move to using cloudflare queue and do a local test run.
-3. Run local against actual Cloudflare services.
-4. Integrate an actual LLM and make it useful locally.
-5. Deployment trials on Cloudflare.
-6. Examine async usage.
-7. Trials for Auth + Supporting Oauth and multitenancy.
+1. Move to using cloudflare queue / worker and do a local test run. ***
+2. Launch app locally in dev mode (i.e actual Cloudflare services).
+3. Integrate an actual LLM and make it useful locally.
+4. Deployment trials on Cloudflare.
+5. Examine async usage.
+6. Trials for Auth + Supporting Oauth and multitenancy.
 
 #### UI
 1. Build a basic but chat UI.

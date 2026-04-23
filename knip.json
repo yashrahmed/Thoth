@@ -7,7 +7,7 @@
       "project": ["local-launch/**/*.ts"]
     },
     "packages/conv-agent": {
-      "entry": ["src/setup.test.ts", "src/integration/**/*.test.ts"],
+      "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/domain/contracts": {
@@ -15,10 +15,6 @@
     },
     "packages/domain/entities": {
       "project": ["**/*.ts"]
-    },
-    "packages/message-proxy": {
-      "entry": ["src/**/*.test.ts"],
-      "project": ["src/**/*.ts"]
     },
     "packages/mobile": {
       "entry": ["src/index.ts"],

@@ -12,11 +12,10 @@ An agent system that manages work and personal information.
 ```
 thoth/
 ├── packages/
-│   ├── conv-agent/                # Primary user-facing conversation service
+│   ├── conv-agent/                # Conversation service and proxy entrypoints
 │   ├── domain/
 │   │   ├── entities/              # Shared domain entities
 │   │   └── contracts/             # Shared domain contracts
-│   ├── message-proxy/             # HTTP API, WebSocket, proxy layer
 │   ├── web/                       # React web app
 │   ├── mobile/                    # React Native mobile app
 │   └── ...                        # Additional adapters and packages as needed
@@ -56,7 +55,7 @@ For local development:
 Examples:
 
 - `bun run --filter @thoth/conv-agent start -- local`
-- `bun run --filter @thoth/message-proxy start -- local`
+- `bun run --filter @thoth/conv-agent proxy:start -- local`
 
 All server entrypoints fail fast if the selected profile file is missing or the
 YAML is invalid.

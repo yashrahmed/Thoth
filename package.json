@@ -9,7 +9,7 @@
     "db:local:migrate": "docker compose --env-file local-launch/data/.env -f local-launch/docker-compose.yml up -d postgres && docker compose --env-file local-launch/data/.env -f local-launch/docker-compose.yml --profile migrations run --rm flyway migrate",
     "dev:local:start": "./local-launch/launch-all.sh start",
     "dev:local:stop": "./local-launch/launch-all.sh stop",
-    "dev:proxy": "bun run --filter @thoth/message-proxy dev",
+    "dev:proxy": "bun run --filter @thoth/conv-agent proxy:dev",
     "dev:web": "bun run --filter @thoth/web dev",
     "graph:conv-agent": "bun local-launch/generate-conv-call-graph.ts",
     "format": "bun x prettier . --write",

@@ -152,7 +152,7 @@ stop_service() {
 }
 
 start_all_services() {
-  start_service "message-proxy" "@thoth/message-proxy" "start" "$(read_port proxy)"
+  start_service "message-proxy" "@thoth/conv-agent" "proxy:start" "$(read_port proxy)"
   start_service "conv-agent" "@thoth/conv-agent" "start" "$(read_port convAgent)"
 }
 

@@ -8,8 +8,6 @@ import { firstFailure, success } from "../domain/objects/result";
 import { LLMMessageType } from "../domain/objects/llm";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
 
-export type { MessageWithFiles };
-
 export class GetMessagesOnConversationFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,

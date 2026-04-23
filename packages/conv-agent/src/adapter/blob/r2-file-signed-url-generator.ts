@@ -1,6 +1,6 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import type { BlobStorageConfig } from "../../config";
+import type { BlobStorageConfig } from "../../config/config";
 import type { CreateSignedUrlOptions, FileSignedUrlGenerator } from "../../domain/contracts/file-signed-url-generator";
 import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
 import type { File as DomainFile } from "../../domain/objects/message-types";

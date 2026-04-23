@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { readConvAgentCredentials } from "../config";
+import { ConvAgentConfig } from "../config/config";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
 import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
@@ -421,27 +421,33 @@ test("deletes the DB conversation graph transactionally and returns blob URLs fo
 });
 
 async function convIntegrationSetup(): Promise<ConvIntegrationSetup> {
-  return setupAndLaunch({
-    port: 0,
-    database: {
+  const config = new ConvAgentConfig(
+    0,
+    {
+      credentials: null,
       url: buildDatabaseUrl(DATABASE_HOST, DATABASE_PORT),
     },
-    blobStorage: {
+    {
       bucket: BLOB_BUCKET,
+      credentials: null,
       endpoint: BLOB_ENDPOINT,
       folder: BLOB_FOLDER,
       region: BLOB_REGION,
     },
-    llmDispatchQueue: {
-      endpoint: LOCALSTACK_ENDPOINT,
-      region: SQS_REGION,
+    {
       bootstrap: {
         createQueue: true,
         queueName: SQS_QUEUE_NAME,
       },
+      credentials: null,
+      endpoint: LOCALSTACK_ENDPOINT,
+      region: SQS_REGION,
     },
-    credentials: readConvAgentCredentials(process.env),
-  });
+  );
+
+  config.populateCredentials(process.env);
+
+  return setupAndLaunch(config);
 }
 
 function requireSetup(): ConvIntegrationSetup {

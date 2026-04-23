@@ -11,8 +11,8 @@
       "default": "./src/index.ts"
     },
     "./config": {
-      "types": "./src/config/index.ts",
-      "default": "./src/config/index.ts"
+      "types": "./src/config/config.ts",
+      "default": "./src/config/config.ts"
     }
   },
   "scripts": {
@@ -21,7 +21,7 @@
     "proxy:dev": "bun run --watch src/proxy/index.ts",
     "proxy:start": "bun run src/proxy/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test src/setup.test.ts src/config/index.test.ts src/proxy/index.test.ts src/adapter/blob/*.test.ts",
+    "test": "bun test src/setup.test.ts src/config/config.test.ts src/proxy/index.test.ts src/adapter/blob/*.test.ts",
     "test:integration": "bun test --timeout 180000 src/integration/conv-agent-it.test.ts",
     "test:integration:raw": "bun test --timeout 180000 src/integration/conv-agent-it.test.ts",
     "typecheck": "bun x tsc --noEmit"

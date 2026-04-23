@@ -1,47 +1,73 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse } from "yaml";
-import type { BlobStorageConfig } from "./blob-storage-config";
 
-export type { BlobStorageConfig } from "./blob-storage-config";
-
-export interface ProxyConfig {
-  port: number;
+export interface BlobStorageConfig {
+  readonly endpoint: string;
+  readonly bucket: string;
+  readonly region: string;
+  readonly folder: string;
 }
 
-export interface ConvAgentServiceConfig {
-  port: number;
-  database: {
-    url: string;
-  };
-  blobStorage: BlobStorageConfig;
-  llmDispatchQueue: {
-    endpoint?: string;
-    region: string;
-    queueUrl: string;
-  };
+interface AccessKeyCredentials {
+  accessKeyId: string;
+  secretAccessKey: string;
 }
 
-export interface ConvAgentCredentials {
-  readonly blobStorage: {
-    readonly accessKeyId: string;
-    readonly secretAccessKey: string;
-  };
-  readonly llmDispatchQueue: {
-    readonly accessKeyId: string;
-    readonly secretAccessKey: string;
-  };
-  readonly database: {
-    readonly username: string;
-    readonly password: string;
-  };
+interface DatabaseCredentials {
+  username: string;
+  password: string;
 }
 
-export type BlobStorageCredentials = ConvAgentCredentials["blobStorage"];
+export interface ConvAgentDatabaseConfig {
+  readonly url: string;
+  credentials: DatabaseCredentials | null;
+}
+
+export interface ConvAgentBlobStorageConfig extends BlobStorageConfig {
+  credentials: AccessKeyCredentials | null;
+}
+
+export interface ConvAgentLlmDispatchQueueConfig {
+  readonly endpoint?: string;
+  readonly region: string;
+  readonly queueUrl?: string;
+  readonly bootstrap?: {
+    readonly createQueue?: boolean;
+    readonly queueName?: string;
+  };
+  credentials: AccessKeyCredentials | null;
+}
+
+export class ConvAgentConfig {
+  constructor(
+    readonly port: number,
+    readonly database: ConvAgentDatabaseConfig,
+    readonly blobStorage: ConvAgentBlobStorageConfig,
+    readonly llmDispatchQueue: ConvAgentLlmDispatchQueueConfig,
+  ) {}
+
+  populateCredentials(env: Record<string, string | undefined>): void {
+    this.blobStorage.credentials = {
+      accessKeyId: requireEnv(env, "BLOB_STORAGE_ACCESS_KEY_ID"),
+      secretAccessKey: requireEnv(env, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
+    };
+    this.llmDispatchQueue.credentials = {
+      accessKeyId: requireEnv(env, "LLM_DISPATCH_QUEUE_ACCESS_KEY_ID"),
+      secretAccessKey: requireEnv(env, "LLM_DISPATCH_QUEUE_SECRET_ACCESS_KEY"),
+    };
+    this.database.credentials = {
+      username: requireEnv(env, "DATABASE_USERNAME"),
+      password: requireEnv(env, "DATABASE_PASSWORD"),
+    };
+  }
+}
 
 interface ConvAgentProfileConfig {
-  proxy: ProxyConfig;
-  convAgent: ConvAgentServiceConfig;
+  proxy: {
+    port: number;
+  };
+  convAgent: ConvAgentConfig;
 }
 
 const PROFILE_PATTERN = /^[a-z0-9-]+$/;
@@ -89,33 +115,12 @@ export function resolveConfigFilePath(configFile: string, startDirectory = proce
   }
 }
 
-export function getProxyConfig(profile: string): ProxyConfig {
-  return getConvAgentProfileConfig(profile).proxy;
+export function getProxyPort(profile: string): number {
+  return getConvAgentProfileConfig(profile).proxy.port;
 }
 
-export function getConvAgentConfig(profile: string): ConvAgentServiceConfig {
+export function getConvAgentConfig(profile: string): ConvAgentConfig {
   return getConvAgentProfileConfig(profile).convAgent;
-}
-
-export function readConvAgentCredentials(env: Record<string, string | undefined>): ConvAgentCredentials {
-  return {
-    blobStorage: readBlobStorageCredentials(env),
-    llmDispatchQueue: {
-      accessKeyId: requireEnv(env, "LLM_DISPATCH_QUEUE_ACCESS_KEY_ID"),
-      secretAccessKey: requireEnv(env, "LLM_DISPATCH_QUEUE_SECRET_ACCESS_KEY"),
-    },
-    database: {
-      username: requireEnv(env, "DATABASE_USERNAME"),
-      password: requireEnv(env, "DATABASE_PASSWORD"),
-    },
-  };
-}
-
-export function readBlobStorageCredentials(env: Record<string, string | undefined>): BlobStorageCredentials {
-  return {
-    accessKeyId: requireEnv(env, "BLOB_STORAGE_ACCESS_KEY_ID"),
-    secretAccessKey: requireEnv(env, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
-  };
 }
 
 function requireEnv(env: Record<string, string | undefined>, name: string): string {
@@ -140,23 +145,26 @@ function parseConvAgentProfileConfig(value: unknown): ConvAgentProfileConfig {
     proxy: {
       port: requireNumber(proxy.port, "proxy.port"),
     },
-    convAgent: {
-      port: requireNumber(convAgent.port, "convAgent.port"),
-      database: {
+    convAgent: new ConvAgentConfig(
+      requireNumber(convAgent.port, "convAgent.port"),
+      {
+        credentials: null,
         url: requireString(convAgentDatabase.url, "convAgent.database.url"),
       },
-      blobStorage: {
-        endpoint: requireString(convAgentBlobStorage.endpoint, "convAgent.blobStorage.endpoint"),
+      {
         bucket: requireString(convAgentBlobStorage.bucket, "convAgent.blobStorage.bucket"),
-        region: requireString(convAgentBlobStorage.region, "convAgent.blobStorage.region"),
+        credentials: null,
+        endpoint: requireString(convAgentBlobStorage.endpoint, "convAgent.blobStorage.endpoint"),
         folder: requireString(convAgentBlobStorage.folder, "convAgent.blobStorage.folder"),
+        region: requireString(convAgentBlobStorage.region, "convAgent.blobStorage.region"),
       },
-      llmDispatchQueue: {
+      {
+        credentials: null,
         endpoint: optionalString(convAgentLlmDispatchQueue.endpoint),
-        region: requireString(convAgentLlmDispatchQueue.region, "convAgent.llmDispatchQueue.region"),
         queueUrl: requireString(convAgentLlmDispatchQueue.queueUrl, "convAgent.llmDispatchQueue.queueUrl"),
+        region: requireString(convAgentLlmDispatchQueue.region, "convAgent.llmDispatchQueue.region"),
       },
-    },
+    ),
   };
 }
 

@@ -11,7 +11,6 @@
     "dev:local:stop": "./local-launch/launch-all.sh stop",
     "dev:proxy": "bun run --filter @thoth/conv-agent proxy:dev",
     "dev:web": "bun run --filter @thoth/web dev",
-    "graph:conv-agent": "bun local-launch/generate-conv-call-graph.ts",
     "format": "bun x prettier . --write",
     "format:check": "bun x prettier . --check",
     "lint": "bun x eslint .",

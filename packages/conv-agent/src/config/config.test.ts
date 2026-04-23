@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { readConvAgentCredentials, resolveConfigFilePath } from "./index";
+import { ConvAgentConfig, getConvAgentConfig, resolveConfigFilePath } from "./config";
 
 describe("resolveConfigFilePath", () => {
   test("returns an absolute path unchanged", () => {
@@ -28,7 +28,7 @@ describe("resolveConfigFilePath", () => {
   });
 });
 
-describe("readConvAgentCredentials", () => {
+describe("ConvAgentConfig credentials", () => {
   const REQUIRED_KEYS = [
     "BLOB_STORAGE_ACCESS_KEY_ID",
     "BLOB_STORAGE_SECRET_ACCESS_KEY",
@@ -49,21 +49,75 @@ describe("readConvAgentCredentials", () => {
     };
   }
 
-  test("returns a shaped credentials object when all keys are set", () => {
-    expect(readConvAgentCredentials(buildEnv())).toEqual({
+  function buildConfig(): ConvAgentConfig {
+    return new ConvAgentConfig(
+      3001,
+      {
+        credentials: null,
+        url: "postgres://localhost/thoth",
+      },
+      {
+        bucket: "bucket",
+        credentials: null,
+        endpoint: "http://localhost:9000",
+        folder: "conv-agent",
+        region: "us-east-1",
+      },
+      {
+        credentials: null,
+        queueUrl: "http://localhost:4566/queue",
+        region: "us-east-1",
+      },
+    );
+  }
+
+  test("profile config starts with null credentials", () => {
+    const config = getConvAgentConfig("local");
+
+    expect(config.database.credentials).toBeNull();
+    expect(config.blobStorage.credentials).toBeNull();
+    expect(config.llmDispatchQueue.credentials).toBeNull();
+  });
+
+  test("populates credential properties when all keys are set", () => {
+    const config = buildConfig();
+
+    config.populateCredentials(buildEnv());
+
+    expect(config).toMatchObject({
       blobStorage: {
-        accessKeyId: "blob-id",
-        secretAccessKey: "blob-secret",
+        credentials: {
+          accessKeyId: "blob-id",
+          secretAccessKey: "blob-secret",
+        },
       },
       llmDispatchQueue: {
-        accessKeyId: "queue-id",
-        secretAccessKey: "queue-secret",
+        credentials: {
+          accessKeyId: "queue-id",
+          secretAccessKey: "queue-secret",
+        },
       },
       database: {
-        username: "dbuser",
-        password: "dbpass",
+        credentials: {
+          username: "dbuser",
+          password: "dbpass",
+        },
       },
     });
+  });
+
+  test("keeps later credential properties null when population fails early", () => {
+    const config = buildConfig();
+    const env = buildEnv();
+    delete env.LLM_DISPATCH_QUEUE_ACCESS_KEY_ID;
+
+    expect(() => config.populateCredentials(env)).toThrow("LLM_DISPATCH_QUEUE_ACCESS_KEY_ID is required.");
+    expect(config.blobStorage.credentials).toEqual({
+      accessKeyId: "blob-id",
+      secretAccessKey: "blob-secret",
+    });
+    expect(config.llmDispatchQueue.credentials).toBeNull();
+    expect(config.database.credentials).toBeNull();
   });
 
   for (const key of REQUIRED_KEYS) {
@@ -71,14 +125,14 @@ describe("readConvAgentCredentials", () => {
       const env = buildEnv();
       delete env[key];
 
-      expect(() => readConvAgentCredentials(env)).toThrow(`${key} is required.`);
+      expect(() => buildConfig().populateCredentials(env)).toThrow(`${key} is required.`);
     });
 
     test(`throws when ${key} is an empty string`, () => {
       const env = buildEnv();
       env[key] = "";
 
-      expect(() => readConvAgentCredentials(env)).toThrow(`${key} is required.`);
+      expect(() => buildConfig().populateCredentials(env)).toThrow(`${key} is required.`);
     });
   }
 });

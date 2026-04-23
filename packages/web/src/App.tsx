@@ -107,6 +107,54 @@ type AttachmentIconDescriptor = {
   readonly color: string;
 };
 
+type AttachmentIconRule = {
+  readonly matches: (mimeType: string, extension: string) => boolean;
+  readonly descriptor: AttachmentIconDescriptor;
+};
+
+const ATTACHMENT_ICON_RULES: ReadonlyArray<AttachmentIconRule> = [
+  {
+    matches: (mimeType, extension) => mimeType.startsWith("image/") || IMAGE_FILE_EXTENSIONS.has(extension),
+    descriptor: { Icon: FileImage, label: "Image file", color: "#8ee7c8" },
+  },
+  {
+    matches: (mimeType, extension) => mimeType === "application/pdf" || extension === "pdf",
+    descriptor: { Icon: FileText, label: "PDF file", color: "#ffb4a8" },
+  },
+  {
+    matches: (mimeType, extension) => mimeType.startsWith("audio/") || AUDIO_FILE_EXTENSIONS.has(extension),
+    descriptor: { Icon: FileMusic, label: "Audio file", color: "#f0abfc" },
+  },
+  {
+    matches: (mimeType, extension) => mimeType.startsWith("video/") || VIDEO_FILE_EXTENSIONS.has(extension),
+    descriptor: { Icon: FileVideoCamera, label: "Video file", color: "#fdba74" },
+  },
+  {
+    matches: isSpreadsheetFile,
+    descriptor: { Icon: FileSpreadsheet, label: "Spreadsheet file", color: "#67e8f9" },
+  },
+  {
+    matches: isPresentationFile,
+    descriptor: { Icon: Presentation, label: "Presentation file", color: "#fde68a" },
+  },
+  {
+    matches: isArchiveFile,
+    descriptor: { Icon: FileArchive, label: "Archive file", color: "#c4b5fd" },
+  },
+  {
+    matches: isCodeFile,
+    descriptor: { Icon: FileCode, label: "Code file", color: "#93c5fd" },
+  },
+  {
+    matches: (mimeType, extension) => mimeType.startsWith("text/") || TEXT_FILE_EXTENSIONS.has(extension),
+    descriptor: { Icon: FileText, label: "Text file", color: "#f8d7a4" },
+  },
+  {
+    matches: (mimeType, extension) => mimeType.startsWith("font/") || FONT_FILE_EXTENSIONS.has(extension),
+    descriptor: { Icon: FileType, label: "Font file", color: "#facc15" },
+  },
+];
+
 export function App() {
   const [conversations, setConversations] = useState<ReadonlyArray<ConversationResponse>>([]);
   const [conversationId, setConversationId] = useState<string>("");
@@ -755,45 +803,10 @@ function CloseIcon() {
 function resolveAttachmentIcon(file: { readonly filename: string; readonly mimeType: string }): AttachmentIconDescriptor {
   const mimeType = normalizeMimeType(file.mimeType);
   const extension = getFileExtension(file.filename);
+  const rule = ATTACHMENT_ICON_RULES.find((candidate) => candidate.matches(mimeType, extension));
 
-  if (mimeType.startsWith("image/") || IMAGE_FILE_EXTENSIONS.has(extension)) {
-    return { Icon: FileImage, label: "Image file", color: "#8ee7c8" };
-  }
-
-  if (mimeType === "application/pdf" || extension === "pdf") {
-    return { Icon: FileText, label: "PDF file", color: "#ffb4a8" };
-  }
-
-  if (mimeType.startsWith("audio/") || AUDIO_FILE_EXTENSIONS.has(extension)) {
-    return { Icon: FileMusic, label: "Audio file", color: "#f0abfc" };
-  }
-
-  if (mimeType.startsWith("video/") || VIDEO_FILE_EXTENSIONS.has(extension)) {
-    return { Icon: FileVideoCamera, label: "Video file", color: "#fdba74" };
-  }
-
-  if (isSpreadsheetFile(mimeType, extension)) {
-    return { Icon: FileSpreadsheet, label: "Spreadsheet file", color: "#67e8f9" };
-  }
-
-  if (isPresentationFile(mimeType, extension)) {
-    return { Icon: Presentation, label: "Presentation file", color: "#fde68a" };
-  }
-
-  if (isArchiveFile(mimeType, extension)) {
-    return { Icon: FileArchive, label: "Archive file", color: "#c4b5fd" };
-  }
-
-  if (isCodeFile(mimeType, extension)) {
-    return { Icon: FileCode, label: "Code file", color: "#93c5fd" };
-  }
-
-  if (mimeType.startsWith("text/") || TEXT_FILE_EXTENSIONS.has(extension)) {
-    return { Icon: FileText, label: "Text file", color: "#f8d7a4" };
-  }
-
-  if (mimeType.startsWith("font/") || FONT_FILE_EXTENSIONS.has(extension)) {
-    return { Icon: FileType, label: "Font file", color: "#facc15" };
+  if (rule) {
+    return rule.descriptor;
   }
 
   return { Icon: FileQuestionMark, label: "File", color: "rgba(255, 248, 240, 0.78)" };

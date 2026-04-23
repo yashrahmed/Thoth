@@ -1,4 +1,4 @@
-import { getProxyConfig } from "../config";
+import { getProxyPort } from "../config/config";
 
 const DEFAULT_HEADERS = {
   "access-control-allow-origin": "*",
@@ -95,7 +95,7 @@ if (import.meta.main) {
   const handler = createProxyFetchHandler();
 
   const server = Bun.serve({
-    port: getProxyConfig(profile).port,
+    port: getProxyPort(profile),
     fetch: handler,
   });
 

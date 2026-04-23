@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import type { BlobStorageConfig } from "../../config";
+import type { BlobStorageConfig } from "../../config/config";
 import type { BlobRepository } from "../../domain/contracts/blob-repository";
 import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";

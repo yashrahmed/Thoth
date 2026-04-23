@@ -1,5 +1,5 @@
 import { SQSClient } from "@aws-sdk/client-sqs";
-import type { BlobStorageConfig, ConvAgentCredentials } from "./config";
+import type { ConvAgentBlobStorageConfig, ConvAgentConfig, ConvAgentDatabaseConfig, ConvAgentLlmDispatchQueueConfig } from "./config/config";
 import { SqsLlmCompletionListener } from "./adapter/inbound/sqs-llm-completion-listener";
 import { createConversationHttpHandler } from "./adapter/inbound/conversation-http-handler";
 import { PlaceholderLlmRepository } from "./adapter/llm/placeholder-llm-repository";
@@ -29,52 +29,35 @@ import { LlmDomainService } from "./domain/services/llm-domain-service";
 import { MessageContentDomainService } from "./domain/services/message-content-domain-service";
 import { MessageDomainService } from "./domain/services/message-domain-service";
 
-interface SetupAndLaunchLlmDispatchQueueConfig {
-  readonly endpoint?: string;
-  readonly region: string;
-  readonly queueUrl?: string;
-  readonly bootstrap?: {
-    readonly createQueue?: boolean;
-    readonly queueName?: string;
-  };
-}
-
-interface SetupAndLaunchInput {
-  readonly port: number;
-  readonly database: {
-    readonly url: string;
-  };
-  readonly blobStorage: BlobStorageConfig;
-  readonly llmDispatchQueue: SetupAndLaunchLlmDispatchQueueConfig;
-  readonly credentials: ConvAgentCredentials;
-}
-
 export interface SetupAndLaunchResult {
   readonly database: PostgresDatabase;
   readonly server: Bun.Server<undefined>;
   stop(): Promise<void>;
 }
 
-export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupAndLaunchResult> {
-  const database = createPostgresDatabase(input.database.url, input.credentials.database);
+export async function setupAndLaunch(config: ConvAgentConfig): Promise<SetupAndLaunchResult> {
+  const databaseCredentials = requireDatabaseCredentials(config.database);
+  const llmDispatchQueueCredentials = requireAccessKeyCredentials(config.llmDispatchQueue, "llmDispatchQueue");
+  const blobStorageCredentials = requireAccessKeyCredentials(config.blobStorage, "blobStorage");
+  const database = createPostgresDatabase(config.database.url, databaseCredentials);
   let sqsClient: SQSClient | undefined;
 
   try {
     sqsClient = new SQSClient({
       credentials: {
-        accessKeyId: input.credentials.llmDispatchQueue.accessKeyId,
-        secretAccessKey: input.credentials.llmDispatchQueue.secretAccessKey,
+        accessKeyId: llmDispatchQueueCredentials.accessKeyId,
+        secretAccessKey: llmDispatchQueueCredentials.secretAccessKey,
       },
-      endpoint: input.llmDispatchQueue.endpoint,
-      region: input.llmDispatchQueue.region,
+      endpoint: config.llmDispatchQueue.endpoint,
+      region: config.llmDispatchQueue.region,
     });
 
-    const blobRepository = new R2BlobRepository(input.blobStorage, {
-      accessKeyId: input.credentials.blobStorage.accessKeyId,
-      secretAccessKey: input.credentials.blobStorage.secretAccessKey,
+    const blobRepository = new R2BlobRepository(config.blobStorage, {
+      accessKeyId: blobStorageCredentials.accessKeyId,
+      secretAccessKey: blobStorageCredentials.secretAccessKey,
     });
 
-    const queueUrl = await resolveQueueUrl(input.llmDispatchQueue);
+    const queueUrl = await resolveQueueUrl(config.llmDispatchQueue);
     const conversationRepository = new PostgresConversationRepository(database);
     const messageRepository = new PostgresMessageRepository(database);
     const fileRepository = new PostgresFileRepository(database);
@@ -96,7 +79,7 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
     sqsLlmCompletionListener.start();
 
     const server = Bun.serve({
-      port: input.port,
+      port: config.port,
       fetch: createConversationHttpHandler({
         createConversation: new CreateConversationFlow(conversationDomainService),
         getConversation: new GetConversationFlow(conversationDomainService),
@@ -140,7 +123,26 @@ export async function setupAndLaunch(input: SetupAndLaunchInput): Promise<SetupA
   }
 }
 
-async function resolveQueueUrl(config: SetupAndLaunchLlmDispatchQueueConfig): Promise<string> {
+function requireDatabaseCredentials(config: ConvAgentDatabaseConfig): { readonly username: string; readonly password: string } {
+  if (config.credentials === null) {
+    throw new Error("database credentials must be populated before launch.");
+  }
+
+  return config.credentials;
+}
+
+function requireAccessKeyCredentials(
+  config: ConvAgentBlobStorageConfig | ConvAgentLlmDispatchQueueConfig,
+  configName: string,
+): { readonly accessKeyId: string; readonly secretAccessKey: string } {
+  if (config.credentials === null) {
+    throw new Error(`${configName} credentials must be populated before launch.`);
+  }
+
+  return config.credentials;
+}
+
+async function resolveQueueUrl(config: ConvAgentLlmDispatchQueueConfig): Promise<string> {
   if (config.queueUrl) {
     return config.queueUrl;
   }

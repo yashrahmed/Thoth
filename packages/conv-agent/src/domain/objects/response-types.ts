@@ -18,7 +18,7 @@ export class ConversationResponse {
   }
 }
 
-export class FileResponse {
+class FileResponse {
   readonly id: string;
   readonly canonicalUrl: string;
   readonly filename: string;

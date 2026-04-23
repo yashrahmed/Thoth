@@ -1,9 +1,9 @@
-import { getConvAgentConfig, readConvAgentCredentials } from "./config";
+import { getConvAgentConfig } from "./config/config";
 import { setupAndLaunch } from "./setup-and-launch";
 
 export { setupAndLaunch } from "./setup-and-launch";
-export { getConvAgentConfig, getProxyConfig, readConvAgentCredentials, resolveConfigFilePath } from "./config";
-export type { ConvAgentCredentials, ConvAgentServiceConfig, ProxyConfig } from "./config";
+export { getConvAgentConfig, getProxyPort, resolveConfigFilePath } from "./config/config";
+export type { ConvAgentConfig } from "./config/config";
 
 function parseProfileArg(argv: readonly string[]): string {
   // argv[0] is the Bun executable; argv[1] is the script path. Everything
@@ -53,14 +53,8 @@ function parseProfileArg(argv: readonly string[]): string {
 if (import.meta.main) {
   const profile = parseProfileArg(process.argv);
   const config = getConvAgentConfig(profile);
-  const credentials = readConvAgentCredentials(process.env);
-  const { server } = await setupAndLaunch({
-    port: config.port,
-    database: config.database,
-    blobStorage: config.blobStorage,
-    llmDispatchQueue: config.llmDispatchQueue,
-    credentials,
-  });
+  config.populateCredentials(process.env);
+  const { server } = await setupAndLaunch(config);
 
   console.log(`Thoth conv-agent running at http://localhost:${server.port}`);
 }

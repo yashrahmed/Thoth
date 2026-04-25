@@ -58,6 +58,9 @@ coverage/
 # Common tool caches
 .cache/
 
+# Wrangler / Cloudflare Workers local state
+.wrangler/
+
 # React Native / Expo
 .expo/
 .expo-shared/

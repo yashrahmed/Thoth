@@ -2,6 +2,11 @@
 
 #### Backend
 1. Move to using cloudflare queue / worker and do a local test run. ***
+   1. Try deploying a simple Cloudflare web woker.
+   2. Try deploying a simple Cloudflare queue worker.
+   3. Move IT tests to use cloudflare CLI instead of localstack.
+   4. Convert the web app and listener into cloudflare workers.
+   5. Gardening?
 2. Launch app locally in dev mode (i.e actual Cloudflare services).
 3. Integrate an actual LLM and make it useful locally.
 4. Deployment trials on Cloudflare.

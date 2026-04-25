@@ -75,6 +75,23 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
    - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the `localConnectionString` from `wrangler.toml` and points the worker's `postgres.js` client at `127.0.0.1:5432`.
 6. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
 
+## Running Integration Tests
+
+The integration suite drives the running Cloudflare Worker over HTTP. Run it from the repo root:
+
+```sh
+bun run test:integration
+```
+
+[`local-launch/run-integration-tests.sh`](./local-launch/run-integration-tests.sh) orchestrates the full cycle:
+
+1. Calls `./local-launch/launch-all.sh start` to bring up Postgres, MinIO, and the worker on port `3001` (same stack as `bun run dev:local:start`).
+2. Polls `http://127.0.0.1:3001/health` until the worker is ready.
+3. Runs `bun test --timeout 180000 src/integration` from `packages/conv-agent`. The suite (`src/integration/conv-agent-it.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
+4. Tears down via `./local-launch/launch-all.sh stop` in an `EXIT` trap, so the stack is stopped even if the tests fail or you Ctrl-C.
+
+> ⚠️ This script reuses the local-dev stack. If you have `bun run dev:local:start` running, the orchestrator will stop your worker, tear down your Postgres + MinIO containers, and rebuild them before the test run — and stop everything again at the end. Anything you had open against the local instance will be disrupted. I set it up this way because I thought it was funny.
+
 ## Architecture
 
 See [docs/architecture.md](./docs/architecture.md).

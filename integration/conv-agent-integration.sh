@@ -22,28 +22,27 @@ wait_for_postgres() {
   done
 }
 
-wait_for_http() {
-  url="$1"
-  name="$2"
+wait_for_minio() {
   attempts=0
 
-  while ! curl -sS -o /dev/null "$url"; do
+  while ! curl -sS -o /dev/null -f "http://127.0.0.1:59000/minio/health/live"; do
     attempts=$((attempts + 1))
 
     if [ "$attempts" -ge 60 ]; then
-      echo "$name did not become ready in time."
+      echo "MinIO did not become ready in time."
       exit 1
     fi
 
     sleep 1
   done
+
+  docker compose -f "$COMPOSE_FILE" wait minio-setup >/dev/null
 }
 
 start_stack() {
-  docker compose -f "$COMPOSE_FILE" up -d postgres localstack
+  docker compose -f "$COMPOSE_FILE" up -d postgres minio minio-setup
   wait_for_postgres
-  wait_for_http "http://127.0.0.1:54566" "LocalStack"
-  docker compose -f "$COMPOSE_FILE" exec -T localstack awslocal s3 mb s3://thoth-test
+  wait_for_minio
   docker compose -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
 }
 
@@ -52,9 +51,9 @@ stop_stack() {
 }
 
 run_tests() {
-  start_stack
-  trap stop_stack EXIT INT TERM
-  bun run --filter @thoth/conv-agent test:integration:raw
+  echo "Integration tests are not yet ported to the Cloudflare Worker stack."
+  echo "Re-run once src/integration/conv-agent-it.test.ts is rewritten to drive 'wrangler dev'."
+  exit 1
 }
 
 case "$ACTION" in

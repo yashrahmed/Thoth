@@ -3,36 +3,22 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    },
-    "./config": {
-      "types": "./src/config/config.ts",
-      "default": "./src/config/config.ts"
-    }
-  },
   "scripts": {
     "build": "bun x tsc --noEmit",
-    "dev": "bun run --watch src/index.ts",
-    "proxy:dev": "bun run --watch src/proxy/index.ts",
-    "proxy:start": "bun run src/proxy/index.ts",
-    "start": "bun run src/index.ts",
-    "test": "bun test src/setup.test.ts src/config/config.test.ts src/proxy/index.test.ts src/adapter/blob/*.test.ts",
-    "test:integration": "bun test --timeout 180000 src/integration/conv-agent-it.test.ts",
-    "test:integration:raw": "bun test --timeout 180000 src/integration/conv-agent-it.test.ts",
-    "typecheck": "bun x tsc --noEmit"
+    "test": "bun test --pass-with-no-tests src/adapter src/application src/config src/domain src/worker",
+    "test:integration": "bun test --timeout 180000 src/integration",
+    "typecheck": "bun x tsc --noEmit",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1035.0",
-    "@aws-sdk/client-sqs": "^3.888.0",
     "@aws-sdk/s3-request-presigner": "^3.1035.0",
     "hono": "^4.12.9",
-    "postgres": "^3.4.7",
-    "yaml": "^2.8.1"
+    "postgres": "^3.4.7"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250401.0",
+    "wrangler": "^4.0.0"
+  }
 }

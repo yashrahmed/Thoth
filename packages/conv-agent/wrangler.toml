@@ -1,0 +1,28 @@
+name = "conv-agent"
+main = "src/worker/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 3001
+
+[vars]
+BLOB_STORAGE_ENDPOINT = "http://127.0.0.1:9000"
+BLOB_STORAGE_BUCKET = "thoth-local-blob-store"
+BLOB_STORAGE_REGION = "us-east-1"
+BLOB_STORAGE_FOLDER = "conv-agent"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "00000000000000000000000000000000"
+localConnectionString = "postgresql://thoth:thoth@127.0.0.1:5432/thoth"
+
+[[queues.producers]]
+binding = "LLM_QUEUE"
+queue = "thoth-llm-completions"
+
+[[queues.consumers]]
+queue = "thoth-llm-completions"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3

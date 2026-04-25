@@ -3,7 +3,6 @@
   "bun": false,
   "workspaces": {
     "packages/conv-agent": {
-      "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/domain/contracts": {

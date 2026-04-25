@@ -1,0 +1,5 @@
+# Copy to .dev.vars for `wrangler dev`. Values match the local docker-compose stack.
+BLOB_STORAGE_ACCESS_KEY_ID=minioadmin
+BLOB_STORAGE_SECRET_ACCESS_KEY=minioadmin
+DATABASE_USERNAME=thoth
+DATABASE_PASSWORD=thoth

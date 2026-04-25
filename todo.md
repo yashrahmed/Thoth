@@ -2,6 +2,9 @@
 
 #### Backend
 1. Move to using cloudflare queue / worker and do a local test run. ***
+   1. Conv-agent worker (`fetch` + `queue`) is in place. CF Queue producer/consumer bindings replace the SQS dispatcher and the long-poll listener. Hyperdrive binding fronts Postgres. R2 access keeps the existing S3-protocol adapter under `nodejs_compat`.
+   2. Local launch via `wrangler dev`: `./local-launch/launch-all.sh start` brings up Postgres + MinIO and runs the worker on port 3001. `.dev.vars` is generated from `local-launch/local-secrets.env` for the run.
+   3. Pending: rewrite `src/integration/conv-agent-it.test.ts` to drive `wrangler dev` (the previous LocalStack-based version was removed).
 2. Launch app locally in dev mode (i.e actual Cloudflare services).
 3. Integrate an actual LLM and make it useful locally.
 4. Deployment trials on Cloudflare.

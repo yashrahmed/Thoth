@@ -51,6 +51,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
 
   app.onError((error, c) => {
     const message = error instanceof Error ? error.message : "Unexpected conv-agent error.";
+    console.error("[conv-agent] HTTP handler error", { path: c.req.path, error });
 
     return c.json(
       {

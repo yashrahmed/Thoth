@@ -24,8 +24,7 @@
     "test": "bun test src/setup.test.ts src/config/config.test.ts src/proxy/index.test.ts src/adapter/blob/*.test.ts",
     "test:integration": "bun test --timeout 180000 src/integration/conv-agent-it.test.ts",
     "test:integration:raw": "bun test --timeout 180000 src/integration/conv-agent-it.test.ts",
-    "typecheck": "bun x tsc --noEmit",
-    "worker:dev": "wrangler dev"
+    "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1035.0",
@@ -35,8 +34,5 @@
     "postgres": "^3.4.7",
     "yaml": "^2.8.1"
   },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250401.0",
-    "wrangler": "^4.0.0"
-  }
+  "devDependencies": {}
 }

@@ -59,19 +59,21 @@ export class LlmCompletionFlow {
       return llmResult;
     }
 
-    const nextMessageRecordResult = await this.messageDomainService.buildNextMessageRecord({
-      conversationId: triggerMessage.conversationId,
-      type: LLMMessageType.Assistant,
-      content: llmResult.value.content,
-    });
-
-    if (!nextMessageRecordResult.ok) {
-      return nextMessageRecordResult;
+    if (llmResult.value.messages.length === 0) {
+      return { ok: true, value: undefined };
     }
 
-    const appendMessageResult = await this.appendUserMessageDomainService.persistUserMessageWithFiles({
-      message: nextMessageRecordResult.value,
-      files: [],
+    const nextMessageRecordsResult = await this.messageDomainService.buildNextMessageRecords({
+      conversationId: triggerMessage.conversationId,
+      messages: llmResult.value.messages,
+    });
+
+    if (!nextMessageRecordsResult.ok) {
+      return nextMessageRecordsResult;
+    }
+
+    const appendMessageResult = await this.appendUserMessageDomainService.persistMessages({
+      messages: nextMessageRecordsResult.value,
     });
 
     if (!appendMessageResult.ok) {

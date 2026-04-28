@@ -5,7 +5,6 @@ import type { MessageWithFiles } from "../domain/objects/message-types";
 import type { NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import type { Result } from "../domain/objects/result";
 import { firstFailure, success } from "../domain/objects/result";
-import { LLMMessageType } from "../domain/objects/llm";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
 
 export class GetMessagesOnConversationFlow {
@@ -43,9 +42,8 @@ export class GetMessagesOnConversationFlow {
       return messagesResult;
     }
 
-    const relevantMessages = messagesResult.value.filter((m) => m.type === LLMMessageType.User || m.type === LLMMessageType.Assistant);
     const filesResult = await this.fileDomainService.getFilesOnMessages({
-      messageIds: relevantMessages.map((message) => message.id),
+      messageIds: messagesResult.value.map((message) => message.id),
     });
 
     if (!filesResult.ok) {
@@ -60,7 +58,7 @@ export class GetMessagesOnConversationFlow {
     }
 
     return success(
-      relevantMessages.map((message) => ({
+      messagesResult.value.map((message) => ({
         ...message,
         files: filesByMessageId.get(message.id) ?? [],
       })),

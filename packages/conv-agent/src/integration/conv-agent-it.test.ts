@@ -37,7 +37,7 @@ beforeAll(async () => {
   }
 });
 
-test("creates 10 user messages plus assistant replies, paginates 5 at a time, and cleans up", async () => {
+test("creates 10 user messages plus completion replies, paginates 5 at a time, and cleans up", async () => {
   const imageBuffer = readFileSync(IMAGE_PATH);
   const imageBytes = imageBuffer.buffer.slice(imageBuffer.byteOffset, imageBuffer.byteOffset + imageBuffer.byteLength) as ArrayBuffer;
   let conversationId: string | undefined;
@@ -53,18 +53,19 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
     conversationId = createdConversation.id;
 
     for (let index = 1; index <= 10; index += 1) {
+      const visibleContent = `Manual lambo image upload ${index}`;
+      const content = index === 10 ? `${visibleContent} [simulate-tool-trace]` : visibleContent;
       const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/chat`, {
         method: "POST",
-        body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`),
+        body: buildImageMessageFormData(imageBytes, content),
       });
 
       expect(appendResponse.status).toBe(204);
       expect(await appendResponse.text()).toBe("");
 
-      // Wait for the assistant reply before sending the next user message so sequence
-      // numbers strictly alternate user/assistant. The placeholder LLM is fast, but the
-      // queue handler is async — without this the asserted ordering is racy.
-      await waitForConversationMessages(conversationId, index * 2);
+      // Wait for completion before sending the next user message so sequence numbers
+      // stay deterministic. The final completion deliberately appends assistant/tool/assistant.
+      await waitForConversationMessages(conversationId, index === 10 ? 22 : index * 2);
     }
 
     const firstPage = await fetchPage(conversationId, 1, 5);
@@ -80,6 +81,20 @@ test("creates 10 user messages plus assistant replies, paginates 5 at a time, an
     expect(secondPage.pageNum).toBe(2);
     expect(secondPage.pageSize).toBe(5);
     assertAlternatingMessages(secondPage.items, conversationId, 6, imageBytes.byteLength);
+
+    const fourthPage = await fetchPage(conversationId, 4, 5);
+
+    expect(fourthPage.items).toHaveLength(5);
+    expect(fourthPage.pageNum).toBe(4);
+    expect(fourthPage.pageSize).toBe(5);
+    assertLastCompletionStart(fourthPage.items, conversationId, imageBytes.byteLength);
+
+    const fifthPage = await fetchPage(conversationId, 5, 5);
+
+    expect(fifthPage.items).toHaveLength(2);
+    expect(fifthPage.pageNum).toBe(5);
+    expect(fifthPage.pageSize).toBe(5);
+    assertLastCompletionEnd(fifthPage.items, conversationId);
 
     const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`);
 
@@ -120,6 +135,45 @@ function buildImageMessageFormData(imageBytes: ArrayBuffer, content: string): Fo
   formData.set("file", new Blob([imageBytes], { type: "image/jpeg" }), "lambo.jpg");
 
   return formData;
+}
+
+function assertLastCompletionStart(items: ReadonlyArray<MessageItem>, conversationId: string, imageSize: number): void {
+  assertAlternatingMessages(items.slice(0, 3), conversationId, 16, imageSize);
+
+  const userMessage = items[3];
+  expect(userMessage.conversationId).toBe(conversationId);
+  expect(userMessage.sequenceNumber).toBe(19);
+  expect(userMessage.type).toBe("user");
+  expect(userMessage.content).toBe("Manual lambo image upload 10 [simulate-tool-trace]");
+  expect(userMessage.files).toHaveLength(1);
+  expect(userMessage.files[0]).toMatchObject({
+    filename: "lambo.jpg",
+    mimeType: "image/jpeg",
+    sizeInBytes: imageSize,
+  });
+
+  const assistantMessage = items[4];
+  expect(assistantMessage.conversationId).toBe(conversationId);
+  expect(assistantMessage.sequenceNumber).toBe(20);
+  expect(assistantMessage.type).toBe("assistant");
+  expect(assistantMessage.content).toBe("Manual lambo image upload 10");
+  expect(assistantMessage.files).toEqual([]);
+}
+
+function assertLastCompletionEnd(items: ReadonlyArray<MessageItem>, conversationId: string): void {
+  const toolMessage = items[0];
+  expect(toolMessage.conversationId).toBe(conversationId);
+  expect(toolMessage.sequenceNumber).toBe(21);
+  expect(toolMessage.type).toBe("tool");
+  expect(toolMessage.content).toBe("Tool result for: Manual lambo image upload 10");
+  expect(toolMessage.files).toEqual([]);
+
+  const assistantMessage = items[1];
+  expect(assistantMessage.conversationId).toBe(conversationId);
+  expect(assistantMessage.sequenceNumber).toBe(22);
+  expect(assistantMessage.type).toBe("assistant");
+  expect(assistantMessage.content).toBe("Final answer for: Manual lambo image upload 10");
+  expect(assistantMessage.files).toEqual([]);
 }
 
 async function fetchPage(conversationId: string, pageNum: number, pageSize: number): Promise<MessagePage> {

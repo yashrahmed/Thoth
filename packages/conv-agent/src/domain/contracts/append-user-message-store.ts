@@ -7,6 +7,11 @@ export interface PersistUserMessageWithFilesInput {
   readonly files: ReadonlyArray<UploadedFileMetadata>;
 }
 
+export interface PersistMessagesInput {
+  readonly messages: ReadonlyArray<InsertNextMessageRecord>;
+}
+
 export interface AppendUserMessageStore {
   persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>>;
+  persistMessages(input: PersistMessagesInput): Promise<Result<Message[], ValidationError | StoreError>>;
 }

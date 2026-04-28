@@ -1,13 +1,13 @@
-import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
+import type { AppendUserMessageStore, PersistMessagesInput, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
 import { EntityType, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
-import { Message } from "../../domain/objects/message-types";
+import { type InsertNextMessageRecord, Message } from "../../domain/objects/message-types";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
-  readonly type: PersistUserMessageWithFilesInput["message"]["type"];
+  readonly type: InsertNextMessageRecord["type"];
   readonly sequence_number: number;
   readonly content: string;
   readonly created_at: string | Date;
@@ -114,6 +114,112 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
+
+  async persistMessages(input: PersistMessagesInput): Promise<Result<Message[], ValidationError | StoreError>> {
+    const firstMessage = input.messages[0];
+
+    if (!firstMessage) {
+      return success([]);
+    }
+
+    try {
+      const rows = await this.sql.begin(async (tx) => {
+        const sql = tx as unknown as PostgresDatabase;
+
+        const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
+          select coalesce(max(sequence_number), 0)::int as latest_sequence_number
+          from thoth.messages
+          where conversation_id = ${firstMessage.conversationId}
+        `;
+
+        const latestSequenceRow = latestSequenceRows[0];
+
+        if (!latestSequenceRow) {
+          throw new Error("Latest message sequence row was not returned.");
+        }
+
+        const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
+        const messageRows: MessageRow[] = [];
+
+        for (const [index, message] of input.messages.entries()) {
+          if (message.conversationId !== firstMessage.conversationId) {
+            throw new ValidationError("conversationId", "messages must belong to the same conversation.");
+          }
+
+          const expectedSequenceNumber = latestSequenceNumber + index + 1;
+
+          if (message.sequenceNumber !== expectedSequenceNumber) {
+            throw new ValidationError("sequenceNumber", `sequenceNumber must append after ${expectedSequenceNumber - 1}; received ${message.sequenceNumber}.`);
+          }
+
+          const rows = await sql<MessageRow[]>`
+            insert into thoth.messages (
+              conversation_id,
+              type,
+              sequence_number,
+              content,
+              created_at,
+              updated_at
+            )
+            values (
+              ${message.conversationId},
+              ${message.type},
+              ${message.sequenceNumber},
+              ${message.content},
+              ${message.createdAt.toISOString()},
+              ${message.updatedAt.toISOString()}
+            )
+            returning
+              id,
+              conversation_id,
+              type,
+              sequence_number,
+              content,
+              created_at,
+              updated_at
+          `;
+
+          const messageRow = rows[0];
+
+          if (!messageRow) {
+            throw new Error("Message row was not returned.");
+          }
+
+          messageRows.push(messageRow);
+        }
+
+        return messageRows;
+      });
+
+      return mapMessageRows(rows);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return failure(error);
+      }
+
+      if (isUniqueSequenceConstraintViolation(error)) {
+        return failure(new ValidationError("sequenceNumber", "one or more message sequenceNumbers are no longer available."));
+      }
+
+      return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
+    }
+  }
+}
+
+function mapMessageRows(rows: MessageRow[]): Result<Message[], StoreError> {
+  const messages: Message[] = [];
+
+  for (const row of rows) {
+    const messageResult = mapMessageRow(row);
+
+    if (!messageResult.ok) {
+      return messageResult;
+    }
+
+    messages.push(messageResult.value);
+  }
+
+  return success(messages);
 }
 
 function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError> {

@@ -1,5 +1,5 @@
 import type { MessageRepository } from "../contracts/message-repository";
-import type { CreateMessageInput, InsertNextMessageRecord, Message } from "../objects/message-types";
+import type { CreateMessageContentInput, CreateMessageInput, InsertNextMessageRecord, Message } from "../objects/message-types";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, firstFailure } from "../objects/result";
@@ -56,10 +56,57 @@ export class MessageDomainService {
   }
 
   async buildNextMessageRecord(request: CreateMessageInput): Promise<Result<InsertNextMessageRecord, ValidationError | StoreError>> {
-    const validationResult = this.messageContentDomainService.validateMessageInput(request);
+    const recordsResult = await this.buildNextMessageRecords({
+      conversationId: request.conversationId,
+      messages: [{ type: request.type, content: request.content }],
+    });
 
-    if (!validationResult.ok) {
-      return validationResult;
+    if (!recordsResult.ok) {
+      return recordsResult;
+    }
+
+    const record = recordsResult.value[0];
+
+    if (!record) {
+      return {
+        ok: false,
+        error: new ValidationError("messages", "messages must contain at least one message."),
+      };
+    }
+
+    return {
+      ok: true,
+      value: record,
+    };
+  }
+
+  async buildNextMessageRecords(request: {
+    readonly conversationId: string;
+    readonly messages: ReadonlyArray<CreateMessageContentInput>;
+  }): Promise<Result<InsertNextMessageRecord[], ValidationError | StoreError>> {
+    if (request.messages.length === 0) {
+      return {
+        ok: false,
+        error: new ValidationError("messages", "messages must contain at least one message."),
+      };
+    }
+
+    const conversationIdResult = this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId");
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    for (const message of request.messages) {
+      const validationResult = this.messageContentDomainService.validateMessageInput({
+        conversationId: request.conversationId,
+        type: message.type,
+        content: message.content,
+      });
+
+      if (!validationResult.ok) {
+        return validationResult;
+      }
     }
 
     const timestamp = this.now();
@@ -82,14 +129,14 @@ export class MessageDomainService {
 
     return {
       ok: true,
-      value: {
+      value: request.messages.map((message, index) => ({
         conversationId: request.conversationId,
-        type: request.type,
-        sequenceNumber: latestSequenceNumber + 1,
-        content: request.content,
+        type: message.type,
+        sequenceNumber: latestSequenceNumber + index + 1,
+        content: message.content,
         createdAt: timestamp,
         updatedAt: timestamp,
-      },
+      })),
     };
   }
 

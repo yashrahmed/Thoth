@@ -12,10 +12,11 @@ PROFILE="${2:-$DEFAULT_PROFILE}"
 CREDS_FILE="$REPO_ROOT/local-launch/${PROFILE}-secrets.env"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 COMPOSE_ENV_FILE="$SCRIPT_DIR/data/.env"
+WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
 MINIO_ENDPOINT="http://127.0.0.1:9000"
 WORKER_PORT=3001
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
-WORKER_DEV_VARS="$WORKER_PACKAGE_DIR/.dev.vars"
+WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
 
 if [ -z "$COMMAND" ]; then
   echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
@@ -117,7 +118,7 @@ start_worker() {
 
   (
     cd "$WORKER_PACKAGE_DIR"
-    nohup bun x wrangler dev --port "$WORKER_PORT" >"$log_file" 2>&1 &
+    nohup bun x wrangler dev --config "$WRANGLER_CONFIG_FILE" --port "$WORKER_PORT" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
 

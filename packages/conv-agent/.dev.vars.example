@@ -1,4 +1,5 @@
-# Copy to .dev.vars for `wrangler dev`. Values match the local docker-compose stack.
+# Copy to ../../local-launch/.dev.vars for direct `wrangler dev` runs.
+# The local launcher normally creates that file from local-launch/local-secrets.env.
 BLOB_STORAGE_ACCESS_KEY_ID=minioadmin
 BLOB_STORAGE_SECRET_ACCESS_KEY=minioadmin
 DATABASE_USERNAME=thoth

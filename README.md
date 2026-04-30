@@ -39,8 +39,8 @@ Cloud deployment is **not yet supported**; the project is currently wired only f
 
 Local config lives in two places:
 
-- **Worker config** — [`packages/conv-agent/wrangler.toml`](./packages/conv-agent/wrangler.toml): bindings (Hyperdrive, R2 access env vars, Cloudflare Queue producer/consumer), `compatibility_flags = ["nodejs_compat"]`, dev port `3001`, and a `localConnectionString` that points Hyperdrive at the local Postgres.
-- **Local secrets** — [`local-launch/local-secrets.env.example`](./local-launch/local-secrets.env.example): copy to `local-launch/local-secrets.env` and fill in MinIO credentials. The launcher copies this file into `packages/conv-agent/.dev.vars` at start-up so `wrangler dev` picks it up; the file is removed on stop.
+- **Worker config** — [`local-launch/wrangler-local.toml`](./local-launch/wrangler-local.toml): bindings (Hyperdrive, R2 access env vars, Cloudflare Queue producer/consumer), `compatibility_flags = ["nodejs_compat"]`, dev port `3001`, and a `localConnectionString` that points Hyperdrive at the local Postgres.
+- **Local secrets** — [`local-launch/local-secrets.env.example`](./local-launch/local-secrets.env.example): copy to `local-launch/local-secrets.env` and fill in MinIO credentials. The launcher copies this file into `local-launch/.dev.vars` at start-up so `wrangler dev` picks it up; the file is removed on stop.
 
 ## Running Locally
 
@@ -67,12 +67,12 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
 [`local-launch/launch-all.sh`](./local-launch/launch-all.sh) which is what the bun run ... command launches, coordinates everything:
 
 1. Stops any running worker and tears down the previous docker-compose stack so each `start` is clean.
-2. Copies `local-launch/local-secrets.env` → `packages/conv-agent/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
+2. Copies `local-launch/local-secrets.env` → `local-launch/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
 3. Brings up [`local-launch/docker-compose.yml`](./local-launch/docker-compose.yml): Postgres (port `5432`), MinIO (port `9000`), and a one-shot `minio-setup` job that creates the local blob bucket. Postgres data lives under `local-launch/data/_data/`; MinIO data under `local-launch/data/minio/`.
 4. Runs the Flyway migrations container against Postgres using SQL under `packages/conv-agent/resources/db/migrations/`.
-5. Launches `wrangler dev` from `packages/conv-agent` on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:
+5. Launches `wrangler dev` from `packages/conv-agent` with [`local-launch/wrangler-local.toml`](./local-launch/wrangler-local.toml) on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:
    - the local Cloudflare Queue (no LocalStack/SQS needed),
-   - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the `localConnectionString` from `wrangler.toml` and points the worker's `postgres.js` client at `127.0.0.1:5432`.
+   - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the `localConnectionString` from `wrangler-local.toml` and points the worker's `postgres.js` client at `127.0.0.1:5432`.
 6. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
 
 ## Running Integration Tests

@@ -1,15 +1,26 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Move to using cloudflare queue / worker and do a local test run. ***
-   1. Conv-agent worker (`fetch` + `queue`) is in place. CF Queue producer/consumer bindings replace the SQS dispatcher and the long-poll listener. Hyperdrive binding fronts Postgres. R2 access keeps the existing S3-protocol adapter under `nodejs_compat`.
-   2. Local launch via `wrangler dev`: `./local-launch/launch-all.sh start` brings up Postgres + MinIO and runs the worker on port 3001. `.dev.vars` is generated from `local-launch/local-secrets.env` for the run.
-   3. Integration tests: `packages/conv-agent/src/integration/conv-agent-it.test.ts` drives the running worker over HTTP. `bun run test:integration` (root) calls `local-launch/run-integration-tests.sh`, which boots the local stack, runs the suite, and tears it down.
-2. Launch app locally in dev mode (i.e actual Cloudflare services).
-3. Integrate an actual LLM and make it useful locally.
-4. Deployment trials on Cloudflare.
-5. Examine async usage.
-6. Trials for Auth + Supporting Oauth and multitenancy.
+1. Launch app locally in dev mode (i.e actual Cloudflare services).
+   1. *** Set up Clouflare queue.
+   2. *** R2 is already setup but requires cleaning up existing data.
+   3. *** Set up Neon DB.
+   4. *** Set up Hyperdrive (if need be).
+   5. *** Modify launch script to run migrations instead of relying on compose ymls.
+   6. Set up scripts to launch locally but with dev resources.
+   7. Rinse/Repeat till it works.
+   8. Confirm local and integration tests do not regress.
+2. Switch from S3 compatible API to R2 native API.
+3. Figure out a way to host creds outside of the local env.
+4. Examine async usage in the context of worker execution.
+5. Understand the Cloudflare security model.
+6. Deployment trials on Cloudflare.
+   1. Set up a deploy script to configure a worker.
+   2. Figure out security and http tunneling.
+   3. Dependencies should be set up in the previous step.
+   4. Ensure that other forms of deploys do not regress.
+7. Integrate an actual LLM and make it useful locally.
+8. Trials for Auth + Supporting Oauth and multitenancy.
 
 #### UI
 1. Build a basic but chat UI.
@@ -17,6 +28,7 @@
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.
  ```I will move this into a new project. I wish to be able to build a graph where the node describes the code components```.
 1. As of April 09, 2026, I am more inclined to focus on track 03 and instead develop LLM powered workflows to accomplish track 2's goals. I will start out with this and pivot back to developing editing and viz tools. I still think editing and viz tools have a place if only to help the engineer understand the LLM's output.
+2. As of April 27,2026. I will start with an editor that looks more like a workbench. The design goal must be to enable an engineer to build systems bottom up and ground the design in real word interactions.
 
 ### Track 3 - Develop techniques to encode world models and test cases.
 

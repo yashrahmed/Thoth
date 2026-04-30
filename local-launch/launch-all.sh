@@ -148,7 +148,7 @@ start_worker() {
 
   (
     cd "$WORKER_PACKAGE_DIR"
-    nohup bun x wrangler dev --config "$WRANGLER_CONFIG_FILE" --port "$WORKER_PORT" >"$log_file" 2>&1 &
+    nohup bun x wrangler dev --config "$WRANGLER_CONFIG_FILE" --port "$WORKER_PORT" --inspector-port 0 >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
 
@@ -187,7 +187,6 @@ start_database() {
 
   docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d postgres minio minio-setup
   wait_for_dependencies
-  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
 }
 
 stop_database() {

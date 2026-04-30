@@ -45,11 +45,19 @@ The launcher supports two local run profiles:
 ## Running Locally
 
 Pre-requisites:
-- `local` profile: Bun, Docker, and `local-launch/local-secrets.env` in place.
-- `dev` profile: Bun, `local-launch/wrangler-cloud-dev.toml`, and `local-launch/cloud-dev-secrets.env` populated with cloud development values.
+- `local` profile: Bun, Docker, and `local-launch/local-secrets.env` in place with `MIGRATION_DATABASE_URL` populated.
+- `dev` profile: Bun, `local-launch/wrangler-cloud-dev.toml`, and `local-launch/cloud-dev-secrets.env` populated with cloud development values, including `MIGRATION_DATABASE_URL`.
 
 1. Install deps: `bun install`
-2. Start the backend stack (Postgres, MinIO, conv-agent Worker on `:3001`):
+2. Run migrations manually for the profile you intend to use:
+   ```sh
+   sh ./local-launch/run-flyway-migrations.sh local
+   ```
+   For the cloud-backed dev profile instead:
+   ```sh
+   sh ./local-launch/run-flyway-migrations.sh dev
+   ```
+3. Start the backend stack (Postgres, MinIO, conv-agent Worker on `:3001`):
    ```sh
    bun run dev:local:start
    ```
@@ -57,11 +65,11 @@ Pre-requisites:
    ```sh
    ./local-launch/launch-all.sh start dev
    ```
-3. In a second terminal, start the web app (Vite on `:5173`):
+4. In a second terminal, start the web app (Vite on `:5173`):
    ```sh
    bun run dev:web
    ```
-4. When you are done and wish to stop everything:
+5. When you are done and wish to stop everything:
    ```sh
    bun run dev:local:stop
    ```
@@ -78,11 +86,14 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
    - `dev`: `wrangler-cloud-dev.toml` + `cloud-dev-secrets.env`
 3. Copies the selected secrets file → `local-launch/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
 4. For the `local` profile only, brings up [`local-launch/docker-compose.yml`](./local-launch/docker-compose.yml): Postgres (port `5432`), MinIO (port `9000`), and a one-shot `minio-setup` job that creates the local blob bucket. Postgres data lives under `local-launch/data/_data/`; MinIO data under `local-launch/data/minio/`.
-5. For the `local` profile only, runs the Flyway migrations container against Postgres using SQL under `packages/conv-agent/resources/db/migrations/`.
-6. Launches `wrangler dev` from `packages/conv-agent` with the selected config on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:
+5. Launches `wrangler dev` from `packages/conv-agent` with the selected config on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:
    - the local Cloudflare Queue (no LocalStack/SQS needed),
    - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the selected config's `localConnectionString`.
-7. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
+6. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
+
+Run Flyway separately with [`local-launch/run-flyway-migrations.sh`](./local-launch/run-flyway-migrations.sh):
+- `local`: requires `MIGRATION_DATABASE_URL` in `local-launch/local-secrets.env`
+- `dev`: requires `MIGRATION_DATABASE_URL` in `local-launch/cloud-dev-secrets.env`
 
 ## Running Integration Tests
 

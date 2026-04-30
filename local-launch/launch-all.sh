@@ -9,14 +9,16 @@ LOG_DIR="$STATE_DIR/logs"
 COMMAND="${1:-}"
 DEFAULT_PROFILE="local"
 PROFILE="${2:-$DEFAULT_PROFILE}"
-CREDS_FILE="$REPO_ROOT/local-launch/${PROFILE}-secrets.env"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 COMPOSE_ENV_FILE="$SCRIPT_DIR/data/.env"
-WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
 MINIO_ENDPOINT="http://127.0.0.1:9000"
 WORKER_PORT=3001
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
 WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
+CREDS_FILE=""
+CREDS_HINT=""
+USE_LOCAL_INFRA=0
+WRANGLER_CONFIG_FILE=""
 
 if [ -z "$COMMAND" ]; then
   echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
@@ -24,6 +26,29 @@ if [ -z "$COMMAND" ]; then
 fi
 
 mkdir -p "$LOG_DIR"
+
+configure_profile() {
+  case "$PROFILE" in
+    local)
+      CREDS_FILE="$SCRIPT_DIR/local-secrets.env"
+      CREDS_HINT="Copy local-launch/local-secrets.env.example to local-launch/local-secrets.env and fill in values."
+      USE_LOCAL_INFRA=1
+      WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
+      ;;
+    dev)
+      CREDS_FILE="$SCRIPT_DIR/cloud-dev-secrets.env"
+      CREDS_HINT="Populate local-launch/cloud-dev-secrets.env and local-launch/wrangler-cloud-dev.toml with your cloud development values."
+      USE_LOCAL_INFRA=0
+      WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-cloud-dev.toml"
+      ;;
+    *)
+      echo "Unsupported profile: $PROFILE"
+      echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
+      echo "Supported profiles: local, dev"
+      exit 1
+      ;;
+  esac
+}
 
 kill_service_pids() {
   service_name="$1"
@@ -89,7 +114,12 @@ wait_for_service_listener() {
 
 write_dev_vars() {
   if [ ! -f "$CREDS_FILE" ]; then
-    echo "Missing credentials file: $CREDS_FILE. Copy local-launch/${PROFILE}-secrets.env.example and fill in values."
+    echo "Missing credentials file: $CREDS_FILE. $CREDS_HINT"
+    exit 1
+  fi
+
+  if [ ! -f "$WRANGLER_CONFIG_FILE" ]; then
+    echo "Missing Wrangler config file: $WRANGLER_CONFIG_FILE."
     exit 1
   fi
 
@@ -150,14 +180,25 @@ wait_for_dependencies() {
 }
 
 start_database() {
+  if [ "$USE_LOCAL_INFRA" -ne 1 ]; then
+    echo "Skipping local Postgres and MinIO for profile $PROFILE."
+    return
+  fi
+
   docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d postgres minio minio-setup
   wait_for_dependencies
   docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" --profile migrations run --rm flyway migrate
 }
 
 stop_database() {
+  if [ "$USE_LOCAL_INFRA" -ne 1 ]; then
+    return
+  fi
+
   docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" down
 }
+
+configure_profile
 
 case "$COMMAND" in
   start)

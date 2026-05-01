@@ -1,26 +1,17 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Launch app locally in dev mode (i.e actual Cloudflare services).
-   1. *** Set up Clouflare queue.
-   2. *** R2 is already setup but requires cleaning up existing data.
-   3. *** Set up Neon DB.
-   4. *** Set up Hyperdrive (if need be).
-   5. *** Modify launch script to run migrations instead of relying on compose ymls.
-   6. Set up scripts to launch locally but with dev resources.
-   7. Rinse/Repeat till it works.
-   8. Confirm local and integration tests do not regress.
+1. Figure out a way to host creds outside of the local env.
 2. Switch from S3 compatible API to R2 native API.
-3. Figure out a way to host creds outside of the local env.
-4. Examine async usage in the context of worker execution.
-5. Understand the Cloudflare security model.
-6. Deployment trials on Cloudflare.
+3. Examine async usage in the context of worker execution.
+4. Understand the Cloudflare security model.
+5. Deployment trials on Cloudflare.
    1. Set up a deploy script to configure a worker.
    2. Figure out security and http tunneling.
    3. Dependencies should be set up in the previous step.
    4. Ensure that other forms of deploys do not regress.
-7. Integrate an actual LLM and make it useful locally.
-8. Trials for Auth + Supporting Oauth and multitenancy.
+6. Integrate an actual LLM and make it useful locally.
+7. Trials for Auth + Supporting Oauth and multitenancy.
 
 #### UI
 1. Build a basic but chat UI.

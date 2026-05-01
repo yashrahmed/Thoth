@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "build": "bun x tsc --noEmit",
-    "db:test:connection": "bun src/scripts/test-postgres-connection.ts",
     "test": "bun test --pass-with-no-tests src/adapter src/application src/config src/domain src/worker",
     "test:integration": "bun test --timeout 180000 src/integration",
     "typecheck": "bun x tsc --noEmit",

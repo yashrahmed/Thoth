@@ -148,7 +148,12 @@ start_worker() {
 
   (
     cd "$WORKER_PACKAGE_DIR"
-    nohup bun x wrangler dev --config "$WRANGLER_CONFIG_FILE" --port "$WORKER_PORT" --inspector-port 0 >"$log_file" 2>&1 &
+    # At the time of writing with wrangler 4.85.0, relying on Wrangler to
+    # auto-discover local-launch/.dev.vars was not sufficient for
+    # CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE in the dev
+    # profile. Run Wrangler through Bun with --env-file so the Hyperdrive local
+    # override is present in Wrangler's own process environment at startup.
+    nohup bun exec --env-file "$WORKER_DEV_VARS" "bun x wrangler dev --config \"$WRANGLER_CONFIG_FILE\" --port \"$WORKER_PORT\" --inspector-port 0" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
 

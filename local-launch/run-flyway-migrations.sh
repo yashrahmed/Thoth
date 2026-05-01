@@ -4,6 +4,7 @@ set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+CREDENTIALS_DIR="$HOME/.thoth"
 PROFILE="${1:-local}"
 CREDS_FILE=""
 MIGRATIONS_DIR="$REPO_ROOT/packages/conv-agent/resources/db/migrations"
@@ -62,10 +63,8 @@ build_flyway_jdbc_url() {
 
 case "$PROFILE" in
   local)
-    CREDS_FILE="$SCRIPT_DIR/local-secrets.env"
     ;;
   dev)
-    CREDS_FILE="$SCRIPT_DIR/cloud-dev-secrets.env"
     ;;
   *)
     echo "Unsupported profile: $PROFILE" >&2
@@ -73,6 +72,8 @@ case "$PROFILE" in
     exit 1
     ;;
 esac
+
+CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
 
 migration_database_url="$(get_env_value "MIGRATION_DATABASE_URL" "$CREDS_FILE")"
 

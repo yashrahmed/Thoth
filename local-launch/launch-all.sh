@@ -6,6 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
+CREDENTIALS_DIR="$HOME/.thoth"
 COMMAND="${1:-}"
 DEFAULT_PROFILE="local"
 PROFILE="${2:-$DEFAULT_PROFILE}"
@@ -28,16 +29,16 @@ fi
 mkdir -p "$LOG_DIR"
 
 configure_profile() {
+  CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
+
   case "$PROFILE" in
     local)
-      CREDS_FILE="$SCRIPT_DIR/local-secrets.env"
-      CREDS_HINT="Copy local-launch/local-secrets.env.example to local-launch/local-secrets.env and fill in values."
+      CREDS_HINT="Copy local-launch/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
       USE_LOCAL_INFRA=1
       WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
       ;;
     dev)
-      CREDS_FILE="$SCRIPT_DIR/cloud-dev-secrets.env"
-      CREDS_HINT="Populate local-launch/cloud-dev-secrets.env and local-launch/wrangler-cloud-dev.toml with your cloud development values."
+      CREDS_HINT="Populate ~/.thoth/dev-secrets.env and local-launch/wrangler-cloud-dev.toml with your cloud development values."
       USE_LOCAL_INFRA=0
       WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-cloud-dev.toml"
       ;;

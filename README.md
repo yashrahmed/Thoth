@@ -33,6 +33,10 @@ The conv-agent's hexagonal layout (`domain/`, `application/`, `adapter/`, `worke
 | Architecture       | Hexagonal + DDD                                                      |
 | Monorepo           | Bun workspaces                                                       |
 
+### R2 access choice
+
+Blob storage uses R2 through its S3-compatible API instead of native Worker R2 bindings. Native bindings are cleaner for a fully deployed Cloudflare Worker, but `wrangler dev` defaults those bindings to local simulated R2 unless the binding is marked remote, and remote bindings require separate Wrangler authentication. The S3-compatible path keeps local, cloud-backed dev, and eventual Worker deployment on the same adapter shape: configure an endpoint, bucket, region, access key, and secret key, then the backend writes directly to the intended R2 bucket. It also preserves standard S3 presigned URL support for later file access flows.
+
 ## Configuration
 
 Cloud deployment is **not yet supported**; the project is currently wired only for local runs. A real Cloudflare deployment path (Hyperdrive id, R2 bucket, secrets via `wrangler secret`) will be set up soon.

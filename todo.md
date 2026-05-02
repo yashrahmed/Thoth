@@ -1,18 +1,17 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Rebuild signer using R2 native bindings?
-2. Set up local launch using secrets.
-3. Backend Deployment trials on Cloudflare.
+1. Set up local launch using secrets on wrangler.
+2. Backend Deployment trials on Cloudflare.
    1. Set up a deploy script to configure a worker.
    2. Configure Vite dev server to inject the credentials.
    3. Dependencies should be set up in the previous step.
    4. Understand the Cloudflare security model.
-4. Examine async usage in the context of worker execution.
-5. Optimize conv sequencing by using "lock for update".
-6. Integrate an actual LLM and make it useful locally.
-7. Trials for Auth + Supporting Oauth and multitenancy.
-8. Set up a basic deploy pipeline.
+3. Examine async usage in the context of worker execution.
+4. Optimize conv sequencing by using "lock for update".
+5. Integrate an actual LLM and make it useful locally.
+6. Trials for Auth + Supporting Oauth and multitenancy.
+7. Set up a basic deploy pipeline.
 
 #### UI
 1. Build a basic but chat UI.

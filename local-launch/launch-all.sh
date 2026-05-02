@@ -12,6 +12,7 @@ DEFAULT_PROFILE="local"
 PROFILE="${2:-$DEFAULT_PROFILE}"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 COMPOSE_ENV_FILE="$SCRIPT_DIR/data/.env"
+MINIO_ENDPOINT="http://127.0.0.1:9000"
 WORKER_PORT=3001
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
 WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
@@ -167,13 +168,31 @@ stop_worker() {
   rm -f "$WORKER_DEV_VARS"
 }
 
+wait_for_dependencies() {
+  attempts=0
+
+  while ! curl -sS -o /dev/null -f "$MINIO_ENDPOINT/minio/health/live"; do
+    attempts=$((attempts + 1))
+
+    if [ "$attempts" -ge 60 ]; then
+      echo "MinIO did not become ready in time."
+      exit 1
+    fi
+
+    sleep 1
+  done
+
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" wait minio-setup >/dev/null
+}
+
 start_database() {
   if [ "$USE_LOCAL_INFRA" -ne 1 ]; then
-    echo "Skipping local Postgres for profile $PROFILE."
+    echo "Skipping local Postgres and MinIO for profile $PROFILE."
     return
   fi
 
-  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d postgres
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d postgres minio minio-setup
+  wait_for_dependencies
 }
 
 stop_database() {

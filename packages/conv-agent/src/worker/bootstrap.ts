@@ -30,12 +30,8 @@ import { MessageDomainService } from "../domain/services/message-domain-service"
 export interface WorkerEnv {
   HYPERDRIVE: Hyperdrive;
   LLM_QUEUE: Queue<LlmCompletionQueueMessage>;
-  BLOB_STORAGE_ENDPOINT: string;
-  BLOB_STORAGE_BUCKET: string;
-  BLOB_STORAGE_REGION: string;
+  BLOB_BUCKET: R2Bucket;
   BLOB_STORAGE_FOLDER: string;
-  BLOB_STORAGE_ACCESS_KEY_ID: string;
-  BLOB_STORAGE_SECRET_ACCESS_KEY: string;
 }
 
 export interface WorkerDeps {
@@ -49,18 +45,7 @@ export interface WorkerDeps {
 export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const database = createPostgresDatabase(env.HYPERDRIVE.connectionString);
 
-  const blobRepository = new R2BlobRepository(
-    {
-      endpoint: requireString(env.BLOB_STORAGE_ENDPOINT, "BLOB_STORAGE_ENDPOINT"),
-      bucket: requireString(env.BLOB_STORAGE_BUCKET, "BLOB_STORAGE_BUCKET"),
-      region: requireString(env.BLOB_STORAGE_REGION, "BLOB_STORAGE_REGION"),
-      folder: requireString(env.BLOB_STORAGE_FOLDER, "BLOB_STORAGE_FOLDER"),
-    },
-    {
-      accessKeyId: requireString(env.BLOB_STORAGE_ACCESS_KEY_ID, "BLOB_STORAGE_ACCESS_KEY_ID"),
-      secretAccessKey: requireString(env.BLOB_STORAGE_SECRET_ACCESS_KEY, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
-    },
-  );
+  const blobRepository = new R2BlobRepository({ folder: requireString(env.BLOB_STORAGE_FOLDER, "BLOB_STORAGE_FOLDER") }, env.BLOB_BUCKET);
 
   const conversationRepository = new PostgresConversationRepository(database);
   const messageRepository = new PostgresMessageRepository(database);

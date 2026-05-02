@@ -1,17 +1,18 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Figure out a way to host creds outside of the local env.
-2. Switch from S3 compatible API to R2 native API.
-3. Examine async usage in the context of worker execution.
-4. Understand the Cloudflare security model.
-5. Deployment trials on Cloudflare.
+1. Rebuild signer using R2 native bindings?
+2. Set up local launch using secrets.
+3. Backend Deployment trials on Cloudflare.
    1. Set up a deploy script to configure a worker.
-   2. Figure out security and http tunneling.
+   2. Configure Vite dev server to inject the credentials.
    3. Dependencies should be set up in the previous step.
-   4. Ensure that other forms of deploys do not regress.
+   4. Understand the Cloudflare security model.
+4. Examine async usage in the context of worker execution.
+5. Optimize conv sequencing by using "lock for update".
 6. Integrate an actual LLM and make it useful locally.
 7. Trials for Auth + Supporting Oauth and multitenancy.
+8. Set up a basic deploy pipeline.
 
 #### UI
 1. Build a basic but chat UI.
@@ -20,6 +21,7 @@
  ```I will move this into a new project. I wish to be able to build a graph where the node describes the code components```.
 1. As of April 09, 2026, I am more inclined to focus on track 03 and instead develop LLM powered workflows to accomplish track 2's goals. I will start out with this and pivot back to developing editing and viz tools. I still think editing and viz tools have a place if only to help the engineer understand the LLM's output.
 2. As of April 27,2026. I will start with an editor that looks more like a workbench. The design goal must be to enable an engineer to build systems bottom up and ground the design in real word interactions.
+3. May 01, 2026 - This could just be a tool/skill that the agent uses to generate a visualization of the code and render graphs and sequence diagrams.
 
 ### Track 3 - Develop techniques to encode world models and test cases.
 

@@ -1,44 +1,27 @@
-import { Buffer } from "node:buffer";
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { BlobStorageConfig } from "../../config/config";
 import type { BlobRepository } from "../../domain/contracts/blob-repository";
 import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
 
-interface R2BlobCredentials {
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-}
-
 const FILES_CANONICAL_PATH_PREFIX = "/files/";
-
-enum BlobRequestMethod {
-  Put = "PUT",
-  Delete = "DELETE",
-}
 
 export class R2BlobRepository implements BlobRepository {
   constructor(
     private readonly config: BlobStorageConfig,
-    private readonly credentials: R2BlobCredentials,
+    private readonly bucket: R2Bucket,
   ) {}
 
   async putBlob(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, StoreError>> {
     const canonicalPath = this.getCanonicalPath(request.filename);
     const objectKey = this.getObjectKey(canonicalPath);
-    const canonicalUri = `/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(objectKey)}`;
 
     try {
-      const response = await this.signedFetch({
-        method: BlobRequestMethod.Put,
-        canonicalUri,
-        body: request.content,
-        contentType: request.mimeType,
+      await this.bucket.put(objectKey, request.content, {
+        httpMetadata: {
+          contentType: request.mimeType,
+        },
       });
-
-      if (!response.ok) {
-        return failure(new StoreError(EntityType.File, StoreOperation.Persist, await getResponseMessage(response)));
-      }
 
       return success(canonicalPath);
     } catch (error) {
@@ -48,59 +31,14 @@ export class R2BlobRepository implements BlobRepository {
 
   async removeBlob(url: string): Promise<Result<void, StoreError>> {
     const objectKey = this.getObjectKey(url);
-    const canonicalUri = `/${encodePathSegment(this.config.bucket)}/${encodeObjectKey(objectKey)}`;
 
     try {
-      const response = await this.signedFetch({ method: BlobRequestMethod.Delete, canonicalUri });
-
-      if (!response.ok) {
-        return failure(new StoreError(EntityType.File, StoreOperation.Remove, await getResponseMessage(response)));
-      }
+      await this.bucket.delete(objectKey);
 
       return success(undefined);
     } catch (error) {
       return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
     }
-  }
-
-  private async signedFetch(input: {
-    readonly method: BlobRequestMethod;
-    readonly canonicalUri: string;
-    readonly body?: ArrayBuffer;
-    readonly contentType?: string;
-  }): Promise<Response> {
-    const now = new Date();
-    const amzDate = toAmzDate(now);
-    const dateStamp = toDateStamp(now);
-    const endpointUrl = new URL(this.config.endpoint);
-    const bodyHash = input.body ? sha256Hex(Buffer.from(input.body)) : "UNSIGNED-PAYLOAD";
-    const canonicalHeaders = [
-      input.contentType ? `content-type:${input.contentType}` : null,
-      `host:${endpointUrl.host}`,
-      `x-amz-content-sha256:${bodyHash}`,
-      `x-amz-date:${amzDate}`,
-    ]
-      .filter((value): value is string => value !== null)
-      .join("\n");
-    const signedHeaders = [input.contentType ? "content-type" : null, "host", "x-amz-content-sha256", "x-amz-date"].filter((value): value is string => value !== null).join(";");
-    const canonicalRequest = [input.method, input.canonicalUri, "", `${canonicalHeaders}\n`, signedHeaders, bodyHash].join("\n");
-    const credentialScope = `${dateStamp}/${this.config.region}/s3/aws4_request`;
-    const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
-    const signingKey = getSignatureKey(this.credentials.secretAccessKey, dateStamp, this.config.region, "s3");
-    const signature = hmacSha256Hex(signingKey, stringToSign);
-    const authorization = [`AWS4-HMAC-SHA256 Credential=${this.credentials.accessKeyId}/${credentialScope}`, `SignedHeaders=${signedHeaders}`, `Signature=${signature}`].join(", ");
-
-    return fetch(`${this.config.endpoint}${input.canonicalUri}`, {
-      method: input.method,
-      headers: {
-        ...(input.contentType ? { "content-type": input.contentType } : {}),
-        authorization,
-        host: endpointUrl.host,
-        "x-amz-content-sha256": bodyHash,
-        "x-amz-date": amzDate,
-      },
-      body: input.body,
-    });
   }
 
   private getCanonicalPath(filename: string): string {
@@ -123,16 +61,6 @@ export class R2BlobRepository implements BlobRepository {
   }
 }
 
-async function getResponseMessage(response: Response): Promise<string> {
-  const text = await response.text();
-
-  if (text.length > 0) {
-    return text;
-  }
-
-  return `Blob storage request failed with status ${response.status}.`;
-}
-
 function sanitizeFilename(value: string): string {
   const sanitized = value.replace(/[^A-Za-z0-9._-]/g, "_");
 
@@ -145,45 +73,6 @@ function sanitizeFilename(value: string): string {
 
 function trimSlashes(value: string): string {
   return value.replace(/^\/+|\/+$/g, "");
-}
-
-function toAmzDate(date: Date): string {
-  return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
-}
-
-function toDateStamp(date: Date): string {
-  return date.toISOString().slice(0, 10).replace(/-/g, "");
-}
-
-function encodePathSegment(value: string): string {
-  return encodeURIComponent(value).replace(/%2F/g, "/");
-}
-
-function encodeObjectKey(objectKey: string): string {
-  return objectKey
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-}
-
-function sha256Hex(input: string | Uint8Array): string {
-  return createHash("sha256").update(input).digest("hex");
-}
-
-function hmacSha256(key: Uint8Array | string, data: string): Uint8Array {
-  return createHmac("sha256", key).update(data).digest();
-}
-
-function hmacSha256Hex(key: Uint8Array | string, data: string): string {
-  return createHmac("sha256", key).update(data).digest("hex");
-}
-
-function getSignatureKey(secretAccessKey: string, dateStamp: string, regionName: string, serviceName: string): Uint8Array {
-  const kDate = hmacSha256(`AWS4${secretAccessKey}`, dateStamp);
-  const kRegion = hmacSha256(kDate, regionName);
-  const kService = hmacSha256(kRegion, serviceName);
-
-  return hmacSha256(kService, "aws4_request");
 }
 
 function getErrorMessage(error: unknown): string {

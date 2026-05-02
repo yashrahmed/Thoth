@@ -7,10 +7,11 @@ compatibility_flags = ["nodejs_compat"]
 port = 3001
 
 [vars]
-BLOB_STORAGE_ENDPOINT = "http://127.0.0.1:9000"
-BLOB_STORAGE_BUCKET = "thoth-local-blob-store"
-BLOB_STORAGE_REGION = "us-east-1"
 BLOB_STORAGE_FOLDER = "conv-agent"
+
+[[r2_buckets]]
+binding = "BLOB_BUCKET"
+bucket_name = "thoth-local-blob-store"
 
 [[hyperdrive]]
 binding = "HYPERDRIVE"

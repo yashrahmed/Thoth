@@ -3,7 +3,7 @@
 set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 LAUNCH="$SCRIPT_DIR/launch-all.sh"
 WORKER_PORT=3001
 LOCAL_SECRETS_FILE="$HOME/.thoth/local-secrets.env"

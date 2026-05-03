@@ -3,7 +3,7 @@
 set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 CREDENTIALS_DIR="$HOME/.thoth"
 PROFILE="dev"
 CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
@@ -14,7 +14,7 @@ COMMAND="${1:-}"
 REQUIRED_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY TEMP_BEARER_TOKEN"
 
 usage() {
-  echo "Usage: ./deployment/deploy-worker-dev.sh <deploy|teardown>"
+  echo "Usage: ./deployment/dev/deploy-worker-dev.sh <deploy|teardown>"
 }
 
 if [ -z "$COMMAND" ]; then

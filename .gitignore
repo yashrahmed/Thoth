@@ -27,14 +27,14 @@ workspace/*
 !.env.example
 config/*-secrets.env
 !config/*-secrets.env.example
-local-launch/*-secrets.env
-!local-launch/*-secrets.env.example
-deployment/wrangler-cloud-dev.toml
+deployment/local/*-secrets.env
+!deployment/local/*-secrets.env.example
+deployment/dev/wrangler-cloud-dev.toml
 
 # Local database state
-local-launch/data/_data/
-local-launch/data/localstack/
-local-launch/data/minio/
+deployment/local/data/_data/
+deployment/local/data/localstack/
+deployment/local/data/minio/
 
 # Claude Code local settings
 .claude/settings.json

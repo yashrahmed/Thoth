@@ -3,7 +3,7 @@
 set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
 CREDENTIALS_DIR="$HOME/.thoth"
@@ -22,7 +22,7 @@ USE_LOCAL_INFRA=0
 WRANGLER_CONFIG_FILE=""
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
+  echo "Usage: ./deployment/local/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
   exit 1
 fi
 
@@ -33,18 +33,18 @@ configure_profile() {
 
   case "$PROFILE" in
     local)
-      CREDS_HINT="Copy local-launch/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
+      CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
       USE_LOCAL_INFRA=1
       WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
       ;;
     dev)
-      CREDS_HINT="Populate ~/.thoth/dev-secrets.env and deployment/wrangler-cloud-dev.toml with your cloud development values."
+      CREDS_HINT="Populate ~/.thoth/dev-secrets.env and deployment/dev/wrangler-cloud-dev.toml with your cloud development values."
       USE_LOCAL_INFRA=0
-      WRANGLER_CONFIG_FILE="$REPO_ROOT/deployment/wrangler-cloud-dev.toml"
+      WRANGLER_CONFIG_FILE="$REPO_ROOT/deployment/dev/wrangler-cloud-dev.toml"
       ;;
     *)
       echo "Unsupported profile: $PROFILE"
-      echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
+      echo "Usage: ./deployment/local/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
       echo "Supported profiles: local, dev"
       exit 1
       ;;
@@ -150,7 +150,7 @@ start_worker() {
   (
     cd "$WORKER_PACKAGE_DIR"
     # At the time of writing with wrangler 4.85.0, relying on Wrangler to
-    # auto-discover local-launch/.dev.vars was not sufficient for
+    # auto-discover deployment/local/.dev.vars was not sufficient for
     # CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE in the dev
     # profile. Run Wrangler through Bun with --env-file so the Hyperdrive local
     # override is present in Wrangler's own process environment at startup.
@@ -219,7 +219,7 @@ case "$COMMAND" in
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./local-launch/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
+    echo "Usage: ./deployment/local/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
     exit 1
     ;;
 esac

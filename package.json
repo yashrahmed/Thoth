@@ -5,10 +5,10 @@
     "packages/*"
   ],
   "scripts": {
-    "db:local:up": "docker compose --env-file local-launch/data/.env -f local-launch/docker-compose.yml up -d postgres",
-    "db:local:migrate": "docker compose --env-file local-launch/data/.env -f local-launch/docker-compose.yml up -d postgres && sh ./deployment/run-flyway-migrations.sh local",
-    "dev:local:start": "./local-launch/launch-all.sh start",
-    "dev:local:stop": "./local-launch/launch-all.sh stop",
+    "db:local:up": "docker compose --env-file deployment/local/data/.env -f deployment/local/docker-compose.yml up -d postgres",
+    "db:local:migrate": "docker compose --env-file deployment/local/data/.env -f deployment/local/docker-compose.yml up -d postgres && sh ./deployment/run-flyway-migrations.sh local",
+    "dev:local:start": "./deployment/local/launch-all.sh start",
+    "dev:local:stop": "./deployment/local/launch-all.sh stop",
     "dev:web": "bun run --filter @thoth/web dev",
     "format": "bun x prettier . --write",
     "format:check": "bun x prettier . --check",
@@ -18,7 +18,7 @@
     "lint:deps": "bun x depcruise --config .dependency-cruiser.cjs packages",
     "build": "bun x tsc --noEmit -p tsconfig.domain.json && bun run --filter '*' build",
     "test": "bun run --filter '*' test",
-    "test:integration": "./local-launch/run-integration-tests.sh",
+    "test:integration": "./deployment/local/run-integration-tests.sh",
     "typecheck": "bun x tsc --noEmit -p tsconfig.domain.json && bun run --filter '*' typecheck"
   },
   "devDependencies": {

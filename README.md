@@ -102,7 +102,7 @@ Pre-requisites:
 1. Install deps: `bun install`
 2. Run local migrations manually:
    ```sh
-   ./deployment/local/db-local.sh migrate
+   ./deployment/run-flyway-migrations.sh local
    ```
 3. Start the backend stack (Postgres, MinIO, conv-agent Worker on `:3001`):
    ```sh
@@ -127,15 +127,7 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
    - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the local config's `localConnectionString`.
 5. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
 
-For database-only work, use [`deployment/local/db-local.sh`](./deployment/local/db-local.sh):
-
-```sh
-./deployment/local/db-local.sh up
-./deployment/local/db-local.sh migrate
-./deployment/local/db-local.sh stop
-```
-
-The `migrate` command runs Flyway through [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh) and requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
+Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh). The `local` target requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
 
 ## Launching The UI
 

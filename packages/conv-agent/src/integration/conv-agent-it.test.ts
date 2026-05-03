@@ -4,9 +4,16 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, expect, test } from "bun:test";
 
 const BASE_URL = process.env.CONV_AGENT_URL ?? "http://127.0.0.1:3001";
+const BEARER_TOKEN = process.env.CONV_AGENT_BEARER_TOKEN;
 const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
 const COMPLETION_TIMEOUT_MS = 10_000;
 const COMPLETION_POLL_INTERVAL_MS = 100;
+
+if (!BEARER_TOKEN) {
+  throw new Error("CONV_AGENT_BEARER_TOKEN is required to run integration tests.");
+}
+
+const AUTH_HEADERS: Record<string, string> = { authorization: `Bearer ${BEARER_TOKEN}` };
 
 type MessageType = "user" | "assistant" | "system" | "tool";
 
@@ -43,7 +50,7 @@ test("creates 10 user messages plus completion replies, paginates 5 at a time, a
   let conversationId: string | undefined;
 
   try {
-    const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST" });
+    const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
 
     expect(createResponse.status).toBe(201);
 
@@ -57,6 +64,7 @@ test("creates 10 user messages plus completion replies, paginates 5 at a time, a
       const content = index === 10 ? `${visibleContent} [simulate-tool-trace]` : visibleContent;
       const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/chat`, {
         method: "POST",
+        headers: AUTH_HEADERS,
         body: buildImageMessageFormData(imageBytes, content),
       });
 
@@ -96,19 +104,19 @@ test("creates 10 user messages plus completion replies, paginates 5 at a time, a
     expect(fifthPage.pageSize).toBe(5);
     assertLastCompletionEnd(fifthPage.items, conversationId);
 
-    const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`);
+    const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { headers: AUTH_HEADERS });
 
     expect(conversationResponse.status).toBe(200);
     expect(((await conversationResponse.json()) as { readonly id: string }).id).toBe(conversationId);
 
-    const deleteResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE" });
+    const deleteResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
 
     expect(deleteResponse.status).toBe(204);
 
     const deletedId = conversationId;
     conversationId = undefined;
 
-    const missingResponse = await fetch(`${BASE_URL}/conversations/${deletedId}`);
+    const missingResponse = await fetch(`${BASE_URL}/conversations/${deletedId}`, { headers: AUTH_HEADERS });
 
     expect(missingResponse.status).toBe(404);
 
@@ -123,7 +131,7 @@ test("creates 10 user messages plus completion replies, paginates 5 at a time, a
     });
   } finally {
     if (conversationId) {
-      await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE" });
+      await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
     }
   }
 });
@@ -177,7 +185,7 @@ function assertLastCompletionEnd(items: ReadonlyArray<MessageItem>, conversation
 }
 
 async function fetchPage(conversationId: string, pageNum: number, pageSize: number): Promise<MessagePage> {
-  const response = await fetch(`${BASE_URL}/conversations/${conversationId}/chat?pageNum=${pageNum}&pageSize=${pageSize}`);
+  const response = await fetch(`${BASE_URL}/conversations/${conversationId}/chat?pageNum=${pageNum}&pageSize=${pageSize}`, { headers: AUTH_HEADERS });
 
   expect(response.status).toBe(200);
 

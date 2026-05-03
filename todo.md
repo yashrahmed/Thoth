@@ -1,17 +1,15 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Set up local launch using secrets on wrangler.
+1. Examine async usage in the context of worker execution.
 2. Backend Deployment trials on Cloudflare.
-   1. Set up a deploy script to configure a worker.
+   1. Set up secrets and set up a deploy script to configure a cloud worker.
    2. Configure Vite dev server to inject the credentials.
-   3. Dependencies should be set up in the previous step.
-   4. Understand the Cloudflare security model.
-3. Examine async usage in the context of worker execution.
-4. Optimize conv sequencing by using "lock for update".
-5. Integrate an actual LLM and make it useful locally.
-6. Trials for Auth + Supporting Oauth and multitenancy.
-7. Set up a basic deploy pipeline.
+   3. Understand the Cloudflare security model.
+3. Optimize conv sequencing by using "lock for update".
+4. Integrate an actual LLM and make it useful locally.
+5. Trials for Auth + Supporting Oauth and multitenancy.
+6. Set up a basic deploy pipeline.
 
 #### UI
 1. Build a basic but chat UI.

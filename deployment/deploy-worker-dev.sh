@@ -11,7 +11,7 @@ WRANGLER_CONFIG_FILE="$REPO_ROOT/local-launch/wrangler-cloud-dev.toml"
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
 COMMAND="${1:-}"
 
-REQUIRED_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY"
+REQUIRED_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY TEMP_BEARER_TOKEN"
 
 usage() {
   echo "Usage: ./deployment/deploy-worker-dev.sh <deploy|teardown>"

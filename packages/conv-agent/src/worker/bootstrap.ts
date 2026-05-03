@@ -36,6 +36,7 @@ export interface WorkerEnv {
   BLOB_STORAGE_FOLDER: string;
   BLOB_STORAGE_ACCESS_KEY_ID: string;
   BLOB_STORAGE_SECRET_ACCESS_KEY: string;
+  TEMP_BEARER_TOKEN: string;
 }
 
 export interface WorkerDeps {
@@ -82,6 +83,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmRepository()), appendUserMessageDomainService);
 
   const httpHandler = createConversationHttpHandler({
+    tempBearerToken: requireString(env.TEMP_BEARER_TOKEN, "TEMP_BEARER_TOKEN"),
     createConversation: new CreateConversationFlow(conversationDomainService),
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),

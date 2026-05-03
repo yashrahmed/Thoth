@@ -36,6 +36,7 @@ type ApplicationMessageType = ApplicationAppendMessageRequest["type"];
 type ApplicationContent = ApplicationAppendMessageRequest["content"];
 
 interface ConversationHttpHandlerDeps {
+  readonly tempBearerToken: string;
   readonly createConversation: CreateConversationFlow;
   readonly getConversation: GetConversationFlow;
   readonly listConversations: ListConversationsFlow;
@@ -44,10 +45,34 @@ interface ConversationHttpHandlerDeps {
   readonly getMessagesOnConversation: GetMessagesOnConversationFlow;
 }
 
+const PUBLIC_PATHS = new Set(["/", "/health"]);
+
 export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps): (req: Request) => Response | Promise<Response> {
   const app = new Hono();
 
   app.use("*", cors());
+
+  const expectedAuthorization = `Bearer ${deps.tempBearerToken}`;
+
+  app.use("*", async (c, next) => {
+    if (PUBLIC_PATHS.has(c.req.path)) {
+      return next();
+    }
+
+    if (c.req.header("authorization") !== expectedAuthorization) {
+      return c.json(
+        {
+          error: {
+            kind: "UnauthorizedError",
+            message: "Missing or invalid bearer token.",
+          },
+        },
+        401,
+      );
+    }
+
+    return next();
+  });
 
   app.onError((error, c) => {
     const message = error instanceof Error ? error.message : "Unexpected conv-agent error.";

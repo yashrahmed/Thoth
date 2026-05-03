@@ -181,20 +181,37 @@ The current dev Hyperdrive id is listed in `deployment/dev/wrangler-cloud-dev.to
 
 ## Running Integration Tests
 
-The integration suite drives the running Cloudflare Worker over HTTP. Run it from the repo root:
+The integration suite drives an already-running `conv-agent` Worker over HTTP. The test runner does not start or stop services, and it does not run Flyway migrations.
+
+Run against the local profile:
 
 ```sh
-./deployment/local/run-integration-tests.sh
+./deployment/run-flyway-migrations.sh local
+./deployment/local/launch-all.sh start
+./deployment/integrations/run-integration-tests.sh
 ```
 
-[`deployment/local/run-integration-tests.sh`](./deployment/local/run-integration-tests.sh) orchestrates the full cycle:
+When you are done with the local stack:
 
-1. Calls `./deployment/local/launch-all.sh start` to bring up Postgres, MinIO, and the worker on port `3001`.
-2. Polls `http://127.0.0.1:3001/health` until the worker is ready.
-3. Runs `bun test --timeout 180000 src/integration` from `packages/conv-agent`. The suite (`src/integration/conv-agent-it.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
-4. Tears down via `./deployment/local/launch-all.sh stop` in an `EXIT` trap, so the stack is stopped even if the tests fail or you Ctrl-C.
+```sh
+./deployment/local/launch-all.sh stop
+```
 
-> ⚠️ This script reuses the local-dev stack. If you have `./deployment/local/launch-all.sh start` running, the orchestrator will stop your worker, tear down your Postgres + MinIO containers, and rebuild them before the test run — and stop everything again at the end. Anything you had open against the local instance will be disrupted.
+Run against the deployed dev profile:
+
+```sh
+./deployment/run-flyway-migrations.sh dev
+./deployment/integrations/run-integration-tests.sh dev
+```
+
+[`deployment/integrations/run-integration-tests.sh`](./deployment/integrations/run-integration-tests.sh) supports `local` and `dev` profiles:
+
+1. Loads `TEMP_BEARER_TOKEN` from `~/.thoth/{profile}-secrets.env`.
+2. Sets `CONV_AGENT_URL` to `http://127.0.0.1:3001` for `local` or `https://conv-agent.yashrahmed.workers.dev` for `dev`.
+3. Polls `{CONV_AGENT_URL}/health` until the worker is ready.
+4. Runs `bun test --timeout 180000 src/integration` from `packages/conv-agent`. The suite (`src/integration/conv-agent-it.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
+
+Pass extra Bun test arguments after the optional profile.
 
 ## Architecture
 

@@ -1,5 +1,5 @@
 name = "conv-agent"
-main = "../packages/conv-agent/src/worker/index.ts"
+main = "../../packages/conv-agent/src/worker/index.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 

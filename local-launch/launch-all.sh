@@ -38,9 +38,9 @@ configure_profile() {
       WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
       ;;
     dev)
-      CREDS_HINT="Populate ~/.thoth/dev-secrets.env and local-launch/wrangler-cloud-dev.toml with your cloud development values."
+      CREDS_HINT="Populate ~/.thoth/dev-secrets.env and deployment/wrangler-cloud-dev.toml with your cloud development values."
       USE_LOCAL_INFRA=0
-      WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-cloud-dev.toml"
+      WRANGLER_CONFIG_FILE="$REPO_ROOT/deployment/wrangler-cloud-dev.toml"
       ;;
     *)
       echo "Unsupported profile: $PROFILE"

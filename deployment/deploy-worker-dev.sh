@@ -7,7 +7,7 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 CREDENTIALS_DIR="$HOME/.thoth"
 PROFILE="dev"
 CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
-WRANGLER_CONFIG_FILE="$REPO_ROOT/local-launch/wrangler-cloud-dev.toml"
+WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-cloud-dev.toml"
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
 COMMAND="${1:-}"
 

@@ -29,7 +29,7 @@ config/*-secrets.env
 !config/*-secrets.env.example
 local-launch/*-secrets.env
 !local-launch/*-secrets.env.example
-local-launch/wrangler-cloud-dev.toml
+deployment/wrangler-cloud-dev.toml
 
 # Local database state
 local-launch/data/_data/

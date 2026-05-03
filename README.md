@@ -44,7 +44,7 @@ Cloud deployment is **not yet supported**; the project is currently wired only f
 The launcher supports two local run profiles:
 
 - **`local`** — [`local-launch/wrangler-local.toml`](./local-launch/wrangler-local.toml) plus `~/.thoth/local-secrets.env`. This profile starts local Postgres and MinIO via Docker and points Hyperdrive at the local database.
-- **`dev`** — `local-launch/wrangler-cloud-dev.toml` plus `~/.thoth/dev-secrets.env`. This profile runs the Worker locally against cloud-backed resources and skips local Postgres and MinIO.
+- **`dev`** — `deployment/wrangler-cloud-dev.toml` plus `~/.thoth/dev-secrets.env`. This profile runs the Worker locally against cloud-backed resources and skips local Postgres and MinIO.
 
 ### Credential setup
 
@@ -60,13 +60,13 @@ cp local-launch/local-secrets.env.example ~/.thoth/local-secrets.env
 
 Then edit `~/.thoth/local-secrets.env` if you need non-default local Postgres or MinIO values.
 
-For the cloud-backed dev profile, create `~/.thoth/dev-secrets.env` with the cloud development values, including `MIGRATION_DATABASE_URL`, `BLOB_STORAGE_ACCESS_KEY_ID`, and `BLOB_STORAGE_SECRET_ACCESS_KEY`. The dev profile also requires `local-launch/wrangler-cloud-dev.toml`.
+For the cloud-backed dev profile, create `~/.thoth/dev-secrets.env` with the cloud development values, including `MIGRATION_DATABASE_URL`, `BLOB_STORAGE_ACCESS_KEY_ID`, and `BLOB_STORAGE_SECRET_ACCESS_KEY`. The dev profile also requires `deployment/wrangler-cloud-dev.toml`.
 
 ## Running Locally
 
 Pre-requisites:
 - `local` profile: Bun, Docker, and `~/.thoth/local-secrets.env` in place with `MIGRATION_DATABASE_URL` populated.
-- `dev` profile: Bun, `local-launch/wrangler-cloud-dev.toml`, and `~/.thoth/dev-secrets.env` populated with cloud development values, including `MIGRATION_DATABASE_URL`.
+- `dev` profile: Bun, `deployment/wrangler-cloud-dev.toml`, and `~/.thoth/dev-secrets.env` populated with cloud development values, including `MIGRATION_DATABASE_URL`.
 
 1. Install deps: `bun install`
 2. Run migrations manually for the profile you intend to use:
@@ -103,7 +103,7 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
 1. Stops any running worker and tears down the previous docker-compose stack so each `start` is clean.
 2. Selects a profile-specific Wrangler config and secrets file:
    - `local`: `wrangler-local.toml` + `~/.thoth/local-secrets.env`
-   - `dev`: `wrangler-cloud-dev.toml` + `~/.thoth/dev-secrets.env`
+   - `dev`: `deployment/wrangler-cloud-dev.toml` + `~/.thoth/dev-secrets.env`
 3. Copies the selected secrets file → `local-launch/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
 4. For the `local` profile only, brings up [`local-launch/docker-compose.yml`](./local-launch/docker-compose.yml): Postgres (port `5432`), MinIO (port `9000`), and a one-shot `minio-setup` job that creates the local blob bucket. Postgres data lives under `local-launch/data/_data/`; MinIO data under `local-launch/data/minio/`.
 5. Launches `wrangler dev` from `packages/conv-agent` with the selected config on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:

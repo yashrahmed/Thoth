@@ -8,48 +8,28 @@ STATE_DIR="/tmp/thoth-local"
 LOG_DIR="$STATE_DIR/logs"
 CREDENTIALS_DIR="$HOME/.thoth"
 COMMAND="${1:-}"
-DEFAULT_PROFILE="local"
-PROFILE="${2:-$DEFAULT_PROFILE}"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 COMPOSE_ENV_FILE="$SCRIPT_DIR/data/.env"
 MINIO_ENDPOINT="http://127.0.0.1:9000"
 WORKER_PORT=3001
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
 WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
-CREDS_FILE=""
-CREDS_HINT=""
-USE_LOCAL_INFRA=0
-WRANGLER_CONFIG_FILE=""
+CREDS_FILE="$CREDENTIALS_DIR/local-secrets.env"
+CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
+WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
 
 if [ -z "$COMMAND" ]; then
-  echo "Usage: ./deployment/local/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
+  echo "Usage: ./deployment/local/launch-all.sh <start|stop>"
+  exit 1
+fi
+
+if [ -n "${2:-}" ]; then
+  echo "Local launch no longer supports profiles. Use ./deployment/local/launch-all.sh <start|stop>." >&2
+  echo "Use bun run dev:web dev to point the local UI at the deployed dev Worker." >&2
   exit 1
 fi
 
 mkdir -p "$LOG_DIR"
-
-configure_profile() {
-  CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
-
-  case "$PROFILE" in
-    local)
-      CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
-      USE_LOCAL_INFRA=1
-      WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
-      ;;
-    dev)
-      CREDS_HINT="Populate ~/.thoth/dev-secrets.env and deployment/dev/wrangler-cloud-dev.toml with your cloud development values."
-      USE_LOCAL_INFRA=0
-      WRANGLER_CONFIG_FILE="$REPO_ROOT/deployment/dev/wrangler-cloud-dev.toml"
-      ;;
-    *)
-      echo "Unsupported profile: $PROFILE"
-      echo "Usage: ./deployment/local/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
-      echo "Supported profiles: local, dev"
-      exit 1
-      ;;
-  esac
-}
 
 kill_service_pids() {
   service_name="$1"
@@ -92,7 +72,7 @@ wait_for_service_listener() {
   while [ "$attempts" -lt 60 ]; do
     listener_pid="$(lsof -ti tcp:"$service_port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
 
-    if [ -n "$listener_pid" ]; then
+    if [ -n "$listener_pid" ] && curl -sS -o /dev/null -f "http://127.0.0.1:$service_port/health" 2>/dev/null; then
       echo "$listener_pid" >"$pid_file"
       echo "Started $service_name. Logs: $log_file"
       return 0
@@ -109,7 +89,7 @@ wait_for_service_listener() {
   done
 
   rm -f "$pid_file"
-  echo "$service_name did not bind port $service_port in time. Logs: $log_file"
+  echo "$service_name did not become healthy on port $service_port in time. Logs: $log_file"
   return 1
 }
 
@@ -149,11 +129,8 @@ start_worker() {
 
   (
     cd "$WORKER_PACKAGE_DIR"
-    # At the time of writing with wrangler 4.85.0, relying on Wrangler to
-    # auto-discover deployment/local/.dev.vars was not sufficient for
-    # CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE in the dev
-    # profile. Run Wrangler through Bun with --env-file so the Hyperdrive local
-    # override is present in Wrangler's own process environment at startup.
+    # Run Wrangler through Bun with --env-file so local secret values are
+    # available to both Wrangler and the Worker runtime at startup.
     nohup bun exec --env-file "$WORKER_DEV_VARS" "bun x wrangler dev --config \"$WRANGLER_CONFIG_FILE\" --port \"$WORKER_PORT\" --inspector-port 0" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
@@ -186,24 +163,13 @@ wait_for_dependencies() {
 }
 
 start_database() {
-  if [ "$USE_LOCAL_INFRA" -ne 1 ]; then
-    echo "Skipping local Postgres and MinIO for profile $PROFILE."
-    return
-  fi
-
   docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d postgres minio minio-setup
   wait_for_dependencies
 }
 
 stop_database() {
-  if [ "$USE_LOCAL_INFRA" -ne 1 ]; then
-    return
-  fi
-
   docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" down
 }
-
-configure_profile
 
 case "$COMMAND" in
   start)
@@ -219,7 +185,7 @@ case "$COMMAND" in
     ;;
   *)
     echo "Unsupported command: $COMMAND"
-    echo "Usage: ./deployment/local/launch-all.sh <start|stop> [profile=${DEFAULT_PROFILE}]"
+    echo "Usage: ./deployment/local/launch-all.sh <start|stop>"
     exit 1
     ;;
 esac

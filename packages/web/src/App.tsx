@@ -52,7 +52,8 @@ type MessagePageResponse = {
   readonly pageSize: number;
 };
 
-const CONV_AGENT_URL = import.meta.env.VITE_CONV_AGENT_URL?.trim() || "http://localhost:3001";
+const CONV_AGENT_URL = import.meta.env.VITE_CONV_AGENT_URL?.trim() || "/api";
+const THOTH_PROFILE = import.meta.env.VITE_THOTH_PROFILE?.trim() || "local";
 const MESSAGE_PAGE_SIZE = 50;
 const CONVERSATION_PAGE_SIZE = 40;
 const IMAGE_FILE_EXTENSIONS = new Set(["avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "svg", "tif", "tiff", "webp"]);
@@ -226,9 +227,10 @@ export function App() {
     }
 
     try {
-      const url = new URL("/conversations", CONV_AGENT_URL);
-      url.searchParams.set("pageNum", "1");
-      url.searchParams.set("pageSize", String(CONVERSATION_PAGE_SIZE));
+      const url = buildConvAgentRequestUrl("/conversations", {
+        pageNum: "1",
+        pageSize: String(CONVERSATION_PAGE_SIZE),
+      });
 
       const response = await fetch(url);
 
@@ -253,7 +255,7 @@ export function App() {
     setComposerError("");
 
     try {
-      const response = await fetch(new URL("/conversations", CONV_AGENT_URL), {
+      const response = await fetch(buildConvAgentRequestUrl("/conversations"), {
         method: "POST",
       });
 
@@ -282,9 +284,10 @@ export function App() {
     }
 
     try {
-      const url = new URL(`/conversations/${id}/chat`, CONV_AGENT_URL);
-      url.searchParams.set("pageNum", "1");
-      url.searchParams.set("pageSize", String(MESSAGE_PAGE_SIZE));
+      const url = buildConvAgentRequestUrl(`/conversations/${id}/chat`, {
+        pageNum: "1",
+        pageSize: String(MESSAGE_PAGE_SIZE),
+      });
 
       const response = await fetch(url);
 
@@ -323,7 +326,7 @@ export function App() {
     setError("");
 
     try {
-      const response = await fetch(new URL(`/conversations/${id}`, CONV_AGENT_URL), {
+      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${id}`), {
         method: "DELETE",
       });
 
@@ -386,7 +389,7 @@ export function App() {
         formData.append("attachment", file);
       }
 
-      const response = await fetch(new URL(`/conversations/${conversationId}/chat`, CONV_AGENT_URL), {
+      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/chat`), {
         method: "POST",
         body: formData,
       });
@@ -490,6 +493,7 @@ function ConversationSidebar(props: {
 
       <div style={statusPanelStyle}>
         <StatusRow label="Endpoint" value={CONV_AGENT_URL} mono />
+        <StatusRow label="Profile" value={THOTH_PROFILE} />
         <StatusRow label="Conversation" value={props.conversationId || "Starting..."} mono />
         <StatusRow label="State" value={formatUiState(props.booting, props.sending, props.refreshing)} />
       </div>
@@ -825,6 +829,22 @@ function getFileExtension(filename: string): string {
   }
 
   return normalizedFilename.slice(extensionStart + 1);
+}
+
+function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<string, string>>): string {
+  const base = CONV_AGENT_URL.endsWith("/") ? CONV_AGENT_URL.slice(0, -1) : CONV_AGENT_URL;
+  const isAbsoluteBase = /^https?:\/\//i.test(base);
+  const url = isAbsoluteBase ? new URL(path, base) : new URL(`${base}${path}`, window.location.origin);
+
+  for (const [key, value] of Object.entries(searchParams ?? {})) {
+    url.searchParams.set(key, value);
+  }
+
+  if (isAbsoluteBase) {
+    return url.toString();
+  }
+
+  return `${url.pathname}${url.search}`;
 }
 
 function isSpreadsheetFile(mimeType: string, extension: string): boolean {

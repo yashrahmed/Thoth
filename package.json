@@ -9,7 +9,7 @@
     "db:local:migrate": "docker compose --env-file deployment/local/data/.env -f deployment/local/docker-compose.yml up -d postgres && sh ./deployment/run-flyway-migrations.sh local",
     "dev:local:start": "./deployment/local/launch-all.sh start",
     "dev:local:stop": "./deployment/local/launch-all.sh stop",
-    "dev:web": "bun run --filter @thoth/web dev",
+    "dev:web": "./deployment/local/launch-web.sh",
     "format": "bun x prettier . --write",
     "format:check": "bun x prettier . --check",
     "lint": "bun x eslint .",

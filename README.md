@@ -39,19 +39,16 @@ Blob storage uses R2 through its S3-compatible API instead of native Worker R2 b
 
 ## Configuration
 
-Cloud deployment is **not yet supported**; the project is currently wired only for local runs. A real Cloudflare deployment path (Hyperdrive id, R2 bucket, secrets via `wrangler secret`) will be set up soon.
+The local backend launcher runs a fully local stack: [`deployment/local/wrangler-local.toml`](./deployment/local/wrangler-local.toml), `~/.thoth/local-secrets.env`, local Postgres, and local MinIO.
 
-The launcher supports two local run profiles:
-
-- **`local`** — [`deployment/local/wrangler-local.toml`](./deployment/local/wrangler-local.toml) plus `~/.thoth/local-secrets.env`. This profile starts local Postgres and MinIO via Docker and points Hyperdrive at the local database.
-- **`dev`** — `deployment/dev/wrangler-cloud-dev.toml` plus `~/.thoth/dev-secrets.env`. This profile runs the Worker locally against cloud-backed resources and skips local Postgres and MinIO.
+The dev backend is deployed to Cloudflare Workers with [`deployment/dev/deploy-worker-dev.sh`](./deployment/dev/deploy-worker-dev.sh) and [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml).
 
 ### Credential setup
 
 Credentials are loaded from `~/.thoth`, outside the Git checkout.
 Secrets files follow the `~/.thoth/{profile}-secrets.env` naming convention.
 
-For the local profile:
+For local backend runs:
 
 ```sh
 mkdir -p ~/.thoth
@@ -60,36 +57,58 @@ cp deployment/local/local-secrets.env.example ~/.thoth/local-secrets.env
 
 Then edit `~/.thoth/local-secrets.env` if you need non-default local Postgres or MinIO values.
 
-For the cloud-backed dev profile, create `~/.thoth/dev-secrets.env` with the cloud development values, including `MIGRATION_DATABASE_URL`, `BLOB_STORAGE_ACCESS_KEY_ID`, and `BLOB_STORAGE_SECRET_ACCESS_KEY`. The dev profile also requires `deployment/dev/wrangler-cloud-dev.toml`.
+For the deployed dev Worker and local UI-to-dev flow, create `~/.thoth/dev-secrets.env` with:
+
+- `BLOB_STORAGE_ACCESS_KEY_ID`
+- `BLOB_STORAGE_SECRET_ACCESS_KEY`
+- `TEMP_BEARER_TOKEN`
+
+`MIGRATION_DATABASE_URL` is also required when running dev database migrations manually.
+
+## Deploying Dev
+
+The dev Worker runs fully on Cloudflare infrastructure and is exposed at:
+
+```text
+https://conv-agent.yashrahmed.workers.dev
+```
+
+Deploy from the repo root:
+
+```sh
+./deployment/dev/deploy-worker-dev.sh deploy
+```
+
+The deploy script:
+
+1. Reads dev credentials from `~/.thoth/dev-secrets.env`.
+2. Verifies Wrangler authentication.
+3. Smoke-tests the configured Hyperdrive, Queue, and R2 bucket.
+4. Runs `wrangler deploy` for `conv-agent`.
+5. Uploads required Worker secrets with `wrangler secret put`.
+
+To delete the dev Worker while leaving Hyperdrive, Queue, and R2 resources intact:
+
+```sh
+./deployment/dev/deploy-worker-dev.sh teardown
+```
 
 ## Running Locally
 
 Pre-requisites:
-- `local` profile: Bun, Docker, and `~/.thoth/local-secrets.env` in place with `MIGRATION_DATABASE_URL` populated.
-- `dev` profile: Bun, `deployment/dev/wrangler-cloud-dev.toml`, and `~/.thoth/dev-secrets.env` populated with cloud development values, including `MIGRATION_DATABASE_URL`.
+- Bun and Docker.
+- `~/.thoth/local-secrets.env` in place with `MIGRATION_DATABASE_URL` populated.
 
 1. Install deps: `bun install`
-2. Run migrations manually for the profile you intend to use:
+2. Run local migrations manually:
    ```sh
    sh ./deployment/run-flyway-migrations.sh local
-   ```
-   For the cloud-backed dev profile instead:
-   ```sh
-   sh ./deployment/run-flyway-migrations.sh dev
    ```
 3. Start the backend stack (Postgres, MinIO, conv-agent Worker on `:3001`):
    ```sh
    bun run dev:local:start
    ```
-   To start the cloud-backed dev profile instead:
-   ```sh
-   ./deployment/local/launch-all.sh start dev
-   ```
-4. In a second terminal, start the web app (Vite on `:5173`):
-   ```sh
-   bun run dev:web
-   ```
-5. When you are done and wish to stop everything:
+4. When you are done and wish to stop everything:
    ```sh
    bun run dev:local:stop
    ```
@@ -101,19 +120,65 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
 [`deployment/local/launch-all.sh`](./deployment/local/launch-all.sh) which is what the bun run ... command launches, coordinates everything:
 
 1. Stops any running worker and tears down the previous docker-compose stack so each `start` is clean.
-2. Selects a profile-specific Wrangler config and secrets file:
-   - `local`: `deployment/local/wrangler-local.toml` + `~/.thoth/local-secrets.env`
-   - `dev`: `deployment/dev/wrangler-cloud-dev.toml` + `~/.thoth/dev-secrets.env`
-3. Copies the selected secrets file → `deployment/local/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
-4. For the `local` profile only, brings up [`deployment/local/docker-compose.yml`](./deployment/local/docker-compose.yml): Postgres (port `5432`), MinIO (port `9000`), and a one-shot `minio-setup` job that creates the local blob bucket. Postgres data lives under `deployment/local/data/_data/`; MinIO data under `deployment/local/data/minio/`.
-5. Launches `wrangler dev` from `packages/conv-agent` with the selected config on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:
+2. Copies `~/.thoth/local-secrets.env` to `deployment/local/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
+3. Brings up [`deployment/local/docker-compose.yml`](./deployment/local/docker-compose.yml): Postgres (port `5432`), MinIO (port `9000`), and a one-shot `minio-setup` job that creates the local blob bucket. Postgres data lives under `deployment/local/data/_data/`; MinIO data under `deployment/local/data/minio/`.
+4. Launches `wrangler dev` from `packages/conv-agent` with the local config on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:
    - the local Cloudflare Queue (no LocalStack/SQS needed),
-   - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the selected config's `localConnectionString`.
-6. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
+   - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the local config's `localConnectionString`.
+5. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
 
 Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh):
 - `local`: requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`
-- `dev`: requires `MIGRATION_DATABASE_URL` in `~/.thoth/dev-secrets.env`
+
+## Launching The UI
+
+The web UI runs locally with Vite on `:5173`. It always calls the backend through a local Vite proxy at `/api`; browser code does not receive the bearer token.
+
+Start the UI against the local Worker:
+
+```sh
+bun run dev:web
+```
+
+This uses `~/.thoth/local-secrets.env` and proxies:
+
+```text
+/api -> http://127.0.0.1:3001
+```
+
+Start the UI against the deployed dev Worker:
+
+```sh
+bun run dev:web dev
+```
+
+This uses `~/.thoth/dev-secrets.env` and proxies:
+
+```text
+/api -> https://conv-agent.yashrahmed.workers.dev
+```
+
+The launcher reads `TEMP_BEARER_TOKEN` from the selected secrets file and exports it only into the Vite dev-server process. [`packages/web/vite.config.ts`](./packages/web/vite.config.ts) injects it as `Authorization: Bearer ...` on proxied API requests.
+
+## Caveats
+
+### Hyperdrive query caching
+
+Hyperdrive query caching must be disabled for the dev Hyperdrive config used by `conv-agent`.
+
+The app performs write-then-immediate-read workflows. For example, `POST /conversations/:id/chat` inserts a user message and dispatches a queue completion, then the queue consumer reads the conversation messages immediately. With Hyperdrive caching enabled, read-only `SELECT` results can be served from cache for the default cache window. That caused stale reads such as:
+
+- the UI seeing conversations that had already been deleted,
+- the queue consumer reading an empty message list immediately after the user message was inserted,
+- completions being skipped because the completion flow believed the conversation had no messages.
+
+Disable caching for the dev Hyperdrive configuration:
+
+```sh
+packages/conv-agent/node_modules/.bin/wrangler hyperdrive update <hyperdrive-id> --caching-disabled true
+```
+
+The current dev Hyperdrive id is listed in `deployment/dev/wrangler-cloud-dev.toml`.
 
 ## Running Integration Tests
 

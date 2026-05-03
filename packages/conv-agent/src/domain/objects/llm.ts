@@ -7,10 +7,8 @@ export enum LLMMessageType {
 
 export const LLM_MESSAGE_TYPES = Object.values(LLMMessageType);
 
-export type LlmCompletionMessageType = LLMMessageType.Assistant | LLMMessageType.Tool;
-
 export interface LlmCompletionMessage {
-  readonly type: LlmCompletionMessageType;
+  readonly type: LLMMessageType.Assistant | LLMMessageType.Tool;
   readonly content: string;
 }
 

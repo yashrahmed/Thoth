@@ -80,4 +80,4 @@ echo "Starting web UI with profile '$PROFILE'."
 echo "Proxying $VITE_CONV_AGENT_URL -> $CONV_AGENT_URL"
 
 cd "$WEB_PACKAGE_DIR"
-exec bun run dev -- "$@"
+exec bunx vite "$@"

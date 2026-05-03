@@ -25,7 +25,7 @@ fi
 
 if [ -n "${2:-}" ]; then
   echo "Local launch no longer supports profiles. Use ./deployment/local/launch-all.sh <start|stop>." >&2
-  echo "Use bun run dev:web dev to point the local UI at the deployed dev Worker." >&2
+  echo "Use ./deployment/local/launch-web.sh dev to point the local UI at the deployed dev Worker." >&2
   exit 1
 fi
 

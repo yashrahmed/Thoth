@@ -102,22 +102,22 @@ Pre-requisites:
 1. Install deps: `bun install`
 2. Run local migrations manually:
    ```sh
-   sh ./deployment/run-flyway-migrations.sh local
+   ./deployment/local/db-local.sh migrate
    ```
 3. Start the backend stack (Postgres, MinIO, conv-agent Worker on `:3001`):
    ```sh
-   bun run dev:local:start
+   ./deployment/local/launch-all.sh start
    ```
 4. When you are done and wish to stop everything:
    ```sh
-   bun run dev:local:stop
+   ./deployment/local/launch-all.sh stop
    ```
 
 Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
 
 ### How the local launch works
 
-[`deployment/local/launch-all.sh`](./deployment/local/launch-all.sh) which is what the bun run ... command launches, coordinates everything:
+[`deployment/local/launch-all.sh`](./deployment/local/launch-all.sh) coordinates everything:
 
 1. Stops any running worker and tears down the previous docker-compose stack so each `start` is clean.
 2. Copies `~/.thoth/local-secrets.env` to `deployment/local/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
@@ -127,8 +127,15 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
    - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the local config's `localConnectionString`.
 5. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
 
-Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh):
-- `local`: requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`
+For database-only work, use [`deployment/local/db-local.sh`](./deployment/local/db-local.sh):
+
+```sh
+./deployment/local/db-local.sh up
+./deployment/local/db-local.sh migrate
+./deployment/local/db-local.sh stop
+```
+
+The `migrate` command runs Flyway through [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh) and requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
 
 ## Launching The UI
 
@@ -137,7 +144,7 @@ The web UI runs locally with Vite on `:5173`. It always calls the backend throug
 Start the UI against the local Worker:
 
 ```sh
-bun run dev:web
+./deployment/local/launch-web.sh
 ```
 
 This uses `~/.thoth/local-secrets.env` and proxies:
@@ -149,7 +156,7 @@ This uses `~/.thoth/local-secrets.env` and proxies:
 Start the UI against the deployed dev Worker:
 
 ```sh
-bun run dev:web dev
+./deployment/local/launch-web.sh dev
 ```
 
 This uses `~/.thoth/dev-secrets.env` and proxies:
@@ -185,17 +192,17 @@ The current dev Hyperdrive id is listed in `deployment/dev/wrangler-cloud-dev.to
 The integration suite drives the running Cloudflare Worker over HTTP. Run it from the repo root:
 
 ```sh
-bun run test:integration
+./deployment/local/run-integration-tests.sh
 ```
 
 [`deployment/local/run-integration-tests.sh`](./deployment/local/run-integration-tests.sh) orchestrates the full cycle:
 
-1. Calls `./deployment/local/launch-all.sh start` to bring up Postgres, MinIO, and the worker on port `3001` (same stack as `bun run dev:local:start`).
+1. Calls `./deployment/local/launch-all.sh start` to bring up Postgres, MinIO, and the worker on port `3001`.
 2. Polls `http://127.0.0.1:3001/health` until the worker is ready.
 3. Runs `bun test --timeout 180000 src/integration` from `packages/conv-agent`. The suite (`src/integration/conv-agent-it.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
 4. Tears down via `./deployment/local/launch-all.sh stop` in an `EXIT` trap, so the stack is stopped even if the tests fail or you Ctrl-C.
 
-> ⚠️ This script reuses the local-dev stack. If you have `bun run dev:local:start` running, the orchestrator will stop your worker, tear down your Postgres + MinIO containers, and rebuild them before the test run — and stop everything again at the end. Anything you had open against the local instance will be disrupted.
+> ⚠️ This script reuses the local-dev stack. If you have `./deployment/local/launch-all.sh start` running, the orchestrator will stop your worker, tear down your Postgres + MinIO containers, and rebuild them before the test run — and stop everything again at the end. Anything you had open against the local instance will be disrupted.
 
 ## Architecture
 

@@ -39,7 +39,7 @@ export interface WorkerEnv {
   TEMP_BEARER_TOKEN: string;
 }
 
-export interface WorkerDeps {
+interface WorkerDeps {
   readonly database: PostgresDatabase;
   readonly httpHandler: (request: Request) => Response | Promise<Response>;
   readonly queueHandler: (batch: MessageBatch<LlmCompletionQueueMessage>) => Promise<void>;

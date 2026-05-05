@@ -2,14 +2,13 @@
 
 #### Backend
 1. Examine async usage in the context of worker execution.
-2. Backend Deployment trials on Cloudflare.
-   1. Set up secrets and set up a deploy script to configure a cloud worker.
-   2. Configure Vite dev server to inject the credentials.
-   3. Understand the Cloudflare security model.
-3. Optimize conv sequencing by using "lock for update".
-4. Integrate an actual LLM and make it useful locally.
-5. Trials for Auth + Supporting Oauth and multitenancy.
-6. Set up a basic deploy pipeline.
+2. Understand the Cloudflare security model.x
+3. Integrate an actual LLM and make it useful locally.
+4. Trials for Auth + Supporting Oauth and multitenancy.
+5. Understand how CF agents work.
+6. Performance improvments.
+   1. ...TBD..I do not have that many ideas as of now.
+7. Set up a basic deploy pipeline.
 
 #### UI
 1. Build a basic but chat UI.

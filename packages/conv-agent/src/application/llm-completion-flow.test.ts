@@ -4,7 +4,7 @@ import type { AppendUserMessageStore, PersistMessagesInput, PersistUserMessageWi
 import type { LlmCompletionService } from "../domain/contracts/llm-completion-service";
 import type { MessageRepository } from "../domain/contracts/message-repository";
 import { LLMMessageType, type LlmCompletionResult } from "../domain/objects/llm";
-import { Message, type InsertNextMessageRecord } from "../domain/objects/message-types";
+import { type AppendMessageRecord, Message } from "../domain/objects/message-types";
 import { success, type Result } from "../domain/objects/result";
 import type { LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
@@ -27,18 +27,9 @@ test("appends every message returned by the LLM completion in order", async () =
   });
 
   const genericValidationService = new GenericValidationService();
-  const messageDomainService = new MessageDomainService(
-    messageRepository,
-    new MessageContentDomainService(genericValidationService),
-    genericValidationService,
-    () => createdAt,
-  );
+  const messageDomainService = new MessageDomainService(messageRepository, new MessageContentDomainService(genericValidationService), genericValidationService, () => createdAt);
 
-  const flow = new LlmCompletionFlow(
-    messageDomainService,
-    new LlmDomainService(llmCompletionService),
-    new AppendUserMessageDomainService(appendStore),
-  );
+  const flow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(llmCompletionService), new AppendUserMessageDomainService(appendStore));
 
   const result = await flow.execute({ messageId: userMessage.id });
 
@@ -47,7 +38,6 @@ test("appends every message returned by the LLM completion in order", async () =
     {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
-      sequenceNumber: 2,
       content: "I will call a tool.",
       createdAt,
       updatedAt: createdAt,
@@ -55,7 +45,6 @@ test("appends every message returned by the LLM completion in order", async () =
     {
       conversationId: "conversation-1",
       type: LLMMessageType.Tool,
-      sequenceNumber: 3,
       content: "Tool result.",
       createdAt,
       updatedAt: createdAt,
@@ -63,12 +52,12 @@ test("appends every message returned by the LLM completion in order", async () =
     {
       conversationId: "conversation-1",
       type: LLMMessageType.Assistant,
-      sequenceNumber: 4,
       content: "Done.",
       createdAt,
       updatedAt: createdAt,
     },
   ]);
+  expect(messageRepository.messages.map((message) => message.sequenceNumber)).toEqual([1, 2, 3, 4]);
 });
 
 class StaticLlmCompletionService implements LlmCompletionService {
@@ -80,7 +69,7 @@ class StaticLlmCompletionService implements LlmCompletionService {
 }
 
 class CapturingAppendStore implements AppendUserMessageStore {
-  readonly persistedRecords: InsertNextMessageRecord[] = [];
+  readonly persistedRecords: AppendMessageRecord[] = [];
 
   constructor(private readonly messageRepository: InMemoryMessageRepository) {}
 
@@ -104,9 +93,13 @@ class CapturingAppendStore implements AppendUserMessageStore {
     return success(messages);
   }
 
-  private async persistOne(record: InsertNextMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
+  private async persistOne(record: AppendMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
     this.persistedRecords.push(record);
-    const message = new Message(`message-${record.sequenceNumber}`, record.conversationId, record.type, record.sequenceNumber, record.content, record.createdAt, record.updatedAt);
+    const latestSequenceNumber = this.messageRepository.messages
+      .filter((message) => message.conversationId === record.conversationId)
+      .reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0);
+    const sequenceNumber = latestSequenceNumber + 1;
+    const message = new Message(`message-${sequenceNumber}`, record.conversationId, record.type, sequenceNumber, record.content, record.createdAt, record.updatedAt);
     this.messageRepository.messages.push(message);
     return success(message);
   }
@@ -117,12 +110,6 @@ class InMemoryMessageRepository implements MessageRepository {
 
   constructor(messages: Message[]) {
     this.messages = [...messages];
-  }
-
-  async insertNextMessageRow(record: InsertNextMessageRecord): Promise<Result<Message, ValidationError | StoreError>> {
-    const message = new Message(`message-${record.sequenceNumber}`, record.conversationId, record.type, record.sequenceNumber, record.content, record.createdAt, record.updatedAt);
-    this.messages.push(message);
-    return success(message);
   }
 
   async selectMessageRow(messageId: string): Promise<Result<Message, NotFoundError | StoreError>> {

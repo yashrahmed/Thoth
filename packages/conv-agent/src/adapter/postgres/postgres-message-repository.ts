@@ -1,9 +1,9 @@
 import type { MessageRepository } from "../../domain/contracts/message-repository";
 import { type LLMMessageType } from "../../domain/objects/llm";
-import { EntityType, NotFoundError, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
+import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
-import { type InsertNextMessageRecord, Message } from "../../domain/objects/message-types";
+import { Message } from "../../domain/objects/message-types";
 
 interface MessageRow {
   readonly id: string;
@@ -17,74 +17,6 @@ interface MessageRow {
 
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
-
-  async insertNextMessageRow(record: InsertNextMessageRecord) {
-    try {
-      const row = await this.sql.begin(async (tx) => {
-        const sql = tx as unknown as PostgresDatabase;
-
-        const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
-          select coalesce(max(sequence_number), 0)::int as latest_sequence_number
-          from thoth.messages
-          where conversation_id = ${record.conversationId}
-        `;
-
-        const latestSequenceRow = latestSequenceRows[0];
-
-        if (!latestSequenceRow) {
-          throw new Error("Latest message sequence row was not returned.");
-        }
-
-        const expectedPreviousSequenceNumber = record.sequenceNumber - 1;
-        const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
-
-        if (latestSequenceNumber !== expectedPreviousSequenceNumber) {
-          throw new ValidationError("sequenceNumber", `sequenceNumber must append after ${latestSequenceNumber}; received ${record.sequenceNumber}.`);
-        }
-
-        const rows = await sql<MessageRow[]>`
-          insert into thoth.messages (
-            conversation_id,
-            type,
-            sequence_number,
-            content,
-            created_at,
-            updated_at
-          )
-          values (
-            ${record.conversationId},
-            ${record.type},
-            ${record.sequenceNumber},
-            ${record.content},
-            ${record.createdAt.toISOString()},
-            ${record.updatedAt.toISOString()}
-          )
-          returning
-            id,
-            conversation_id,
-            type,
-            sequence_number,
-            content,
-            created_at,
-            updated_at
-        `;
-
-        return rows[0];
-      });
-
-      return mapRow(row, StoreOperation.Persist);
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        return failure(error);
-      }
-
-      if (isUniqueSequenceConstraintViolation(error)) {
-        return failure(new ValidationError("sequenceNumber", `sequenceNumber ${record.sequenceNumber} is no longer available.`));
-      }
-
-      return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
-    }
-  }
 
   async selectMessageRow(messageId: string) {
     try {
@@ -225,8 +157,4 @@ function toDate(value: string | Date): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
-}
-
-function isUniqueSequenceConstraintViolation(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }

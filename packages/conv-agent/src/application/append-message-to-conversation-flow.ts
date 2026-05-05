@@ -7,6 +7,7 @@ import { ValidationError, type NotFoundError, type StoreError } from "../domain/
 import { failure, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
 import { type AppendMessageRequest } from "../domain/objects/request-types";
+import type { AppendMessageRecord } from "../domain/objects/message-types";
 
 export { type AppendMessageRequest } from "../domain/objects/request-types";
 export { type Attachment } from "../domain/objects/request-types";
@@ -44,11 +45,7 @@ export class AppendMessageToConversationFlow {
       return uploadFilesResult;
     }
 
-    const nextMessageRecordResult = await this.messageDomainService.buildNextMessageRecord({
-      conversationId: request.conversationId,
-      type: request.type,
-      content: request.content,
-    });
+    const nextMessageRecordResult = await this.buildUserMessageRecord(request);
 
     if (!nextMessageRecordResult.ok) {
       const deleteUploadedBlobsResult = await this.fileDomainService.deleteUploadedBlobs({ files: uploadFilesResult.value });
@@ -74,5 +71,20 @@ export class AppendMessageToConversationFlow {
     }
 
     return { ok: true, value: undefined };
+  }
+
+  private async buildUserMessageRecord(request: AppendMessageRequest): Promise<Result<AppendMessageRecord, ValidationError>> {
+    const recordsResult = await this.messageDomainService.buildNextMessageRecords({
+      conversationId: request.conversationId,
+      messages: [{ type: request.type, content: request.content }],
+    });
+
+    if (!recordsResult.ok) {
+      return recordsResult;
+    }
+
+    const record = recordsResult.value[0];
+
+    return record ? { ok: true, value: record } : failure(new ValidationError("messages", "messages must contain at least one message."));
   }
 }

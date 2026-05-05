@@ -1,14 +1,14 @@
-import type { InsertNextMessageRecord, Message, UploadedFileMetadata } from "../objects/message-types";
+import type { AppendMessageRecord, Message, UploadedFileMetadata } from "../objects/message-types";
 import type { StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
 
 export interface PersistUserMessageWithFilesInput {
-  readonly message: InsertNextMessageRecord;
+  readonly message: AppendMessageRecord;
   readonly files: ReadonlyArray<UploadedFileMetadata>;
 }
 
 export interface PersistMessagesInput {
-  readonly messages: ReadonlyArray<InsertNextMessageRecord>;
+  readonly messages: ReadonlyArray<AppendMessageRecord>;
 }
 
 export interface AppendUserMessageStore {

@@ -26,7 +26,7 @@ export type CreateMessageInput = Pick<Message, "conversationId" | "type" | "cont
 
 export type CreateMessageContentInput = Pick<Message, "type" | "content">;
 
-export type InsertNextMessageRecord = Omit<Message, "id">;
+export type AppendMessageRecord = Omit<Message, "id" | "sequenceNumber">;
 
 export class File {
   readonly id: string;

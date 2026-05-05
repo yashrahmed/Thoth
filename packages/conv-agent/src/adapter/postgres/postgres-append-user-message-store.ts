@@ -1,17 +1,21 @@
 import type { AppendUserMessageStore, PersistMessagesInput, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
 import { EntityType, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
-import { type InsertNextMessageRecord, Message } from "../../domain/objects/message-types";
+import { type AppendMessageRecord, Message } from "../../domain/objects/message-types";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
-  readonly type: InsertNextMessageRecord["type"];
+  readonly type: AppendMessageRecord["type"];
   readonly sequence_number: number;
   readonly content: string;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
+}
+
+interface ConversationRow {
+  readonly id: string;
 }
 
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
@@ -22,25 +26,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
       const row = await this.sql.begin(async (tx) => {
         const sql = tx as unknown as PostgresDatabase;
         const timestamp = new Date();
-
-        const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
-          select coalesce(max(sequence_number), 0)::int as latest_sequence_number
-          from thoth.messages
-          where conversation_id = ${input.message.conversationId}
-        `;
-
-        const latestSequenceRow = latestSequenceRows[0];
-
-        if (!latestSequenceRow) {
-          throw new Error("Latest message sequence row was not returned.");
-        }
-
-        const expectedPreviousSequenceNumber = input.message.sequenceNumber - 1;
-        const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
-
-        if (latestSequenceNumber !== expectedPreviousSequenceNumber) {
-          throw new ValidationError("sequenceNumber", `sequenceNumber must append after ${latestSequenceNumber}; received ${input.message.sequenceNumber}.`);
-        }
+        const latestSequenceNumber = await lockConversationAndGetLatestSequenceNumber(sql, input.message.conversationId);
+        const sequenceNumber = latestSequenceNumber + 1;
 
         const messageRows = await sql<MessageRow[]>`
           insert into thoth.messages (
@@ -54,7 +41,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
           values (
             ${input.message.conversationId},
             ${input.message.type},
-            ${input.message.sequenceNumber},
+            ${sequenceNumber},
             ${input.message.content},
             ${input.message.createdAt.toISOString()},
             ${input.message.updatedAt.toISOString()}
@@ -108,7 +95,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
       }
 
       if (isUniqueSequenceConstraintViolation(error)) {
-        return failure(new ValidationError("sequenceNumber", `sequenceNumber ${input.message.sequenceNumber} is no longer available.`));
+        return failure(new ValidationError("sequenceNumber", "next message sequenceNumber is no longer available."));
       }
 
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
@@ -125,32 +112,18 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
     try {
       const rows = await this.sql.begin(async (tx) => {
         const sql = tx as unknown as PostgresDatabase;
-
-        const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
-          select coalesce(max(sequence_number), 0)::int as latest_sequence_number
-          from thoth.messages
-          where conversation_id = ${firstMessage.conversationId}
-        `;
-
-        const latestSequenceRow = latestSequenceRows[0];
-
-        if (!latestSequenceRow) {
-          throw new Error("Latest message sequence row was not returned.");
-        }
-
-        const latestSequenceNumber = Number(latestSequenceRow.latest_sequence_number);
         const messageRows: MessageRow[] = [];
 
-        for (const [index, message] of input.messages.entries()) {
+        for (const message of input.messages) {
           if (message.conversationId !== firstMessage.conversationId) {
             throw new ValidationError("conversationId", "messages must belong to the same conversation.");
           }
+        }
 
-          const expectedSequenceNumber = latestSequenceNumber + index + 1;
+        const latestSequenceNumber = await lockConversationAndGetLatestSequenceNumber(sql, firstMessage.conversationId);
 
-          if (message.sequenceNumber !== expectedSequenceNumber) {
-            throw new ValidationError("sequenceNumber", `sequenceNumber must append after ${expectedSequenceNumber - 1}; received ${message.sequenceNumber}.`);
-          }
+        for (const [index, message] of input.messages.entries()) {
+          const sequenceNumber = latestSequenceNumber + index + 1;
 
           const rows = await sql<MessageRow[]>`
             insert into thoth.messages (
@@ -164,7 +137,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             values (
               ${message.conversationId},
               ${message.type},
-              ${message.sequenceNumber},
+              ${sequenceNumber},
               ${message.content},
               ${message.createdAt.toISOString()},
               ${message.updatedAt.toISOString()}
@@ -198,12 +171,39 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
       }
 
       if (isUniqueSequenceConstraintViolation(error)) {
-        return failure(new ValidationError("sequenceNumber", "one or more message sequenceNumbers are no longer available."));
+        return failure(new ValidationError("sequenceNumber", "one or more next message sequenceNumbers are no longer available."));
       }
 
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
+}
+
+async function lockConversationAndGetLatestSequenceNumber(sql: PostgresDatabase, conversationId: string): Promise<number> {
+  const conversationRows = await sql<ConversationRow[]>`
+    select id
+    from thoth.conversations
+    where id = ${conversationId}
+    for no key update
+  `;
+
+  if (!conversationRows[0]) {
+    throw new Error(`Conversation ${conversationId} was not found while allocating message sequence.`);
+  }
+
+  const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
+    select coalesce(max(sequence_number), 0)::int as latest_sequence_number
+    from thoth.messages
+    where conversation_id = ${conversationId}
+  `;
+
+  const latestSequenceRow = latestSequenceRows[0];
+
+  if (!latestSequenceRow) {
+    throw new Error("Latest message sequence row was not returned.");
+  }
+
+  return Number(latestSequenceRow.latest_sequence_number);
 }
 
 function mapMessageRows(rows: MessageRow[]): Result<Message[], StoreError> {

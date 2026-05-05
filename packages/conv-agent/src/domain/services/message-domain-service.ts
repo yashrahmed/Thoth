@@ -1,5 +1,5 @@
 import type { MessageRepository } from "../contracts/message-repository";
-import type { CreateMessageContentInput, CreateMessageInput, InsertNextMessageRecord, Message } from "../objects/message-types";
+import type { AppendMessageRecord, CreateMessageContentInput, Message } from "../objects/message-types";
 import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, firstFailure } from "../objects/result";
@@ -55,35 +55,10 @@ export class MessageDomainService {
     return andThenAsync(await fileDomainService.deleteFilesOnMessages({ messageIds: [messageResult.value.id] }), () => this.delete(messageId));
   }
 
-  async buildNextMessageRecord(request: CreateMessageInput): Promise<Result<InsertNextMessageRecord, ValidationError | StoreError>> {
-    const recordsResult = await this.buildNextMessageRecords({
-      conversationId: request.conversationId,
-      messages: [{ type: request.type, content: request.content }],
-    });
-
-    if (!recordsResult.ok) {
-      return recordsResult;
-    }
-
-    const record = recordsResult.value[0];
-
-    if (!record) {
-      return {
-        ok: false,
-        error: new ValidationError("messages", "messages must contain at least one message."),
-      };
-    }
-
-    return {
-      ok: true,
-      value: record,
-    };
-  }
-
   async buildNextMessageRecords(request: {
     readonly conversationId: string;
     readonly messages: ReadonlyArray<CreateMessageContentInput>;
-  }): Promise<Result<InsertNextMessageRecord[], ValidationError | StoreError>> {
+  }): Promise<Result<AppendMessageRecord[], ValidationError>> {
     if (request.messages.length === 0) {
       return {
         ok: false,
@@ -119,36 +94,15 @@ export class MessageDomainService {
       return timestampValidationResult;
     }
 
-    const allMessagesResult = await this.messageRepository.selectAllMessagesByConversation(request.conversationId);
-
-    if (!allMessagesResult.ok) {
-      return allMessagesResult;
-    }
-
-    const latestSequenceNumber = allMessagesResult.value.reduce((highest, message) => Math.max(highest, message.sequenceNumber), 0);
-
     return {
       ok: true,
-      value: request.messages.map((message, index) => ({
+      value: request.messages.map((message) => ({
         conversationId: request.conversationId,
         type: message.type,
-        sequenceNumber: latestSequenceNumber + index + 1,
         content: message.content,
         createdAt: timestamp,
         updatedAt: timestamp,
       })),
     };
-  }
-
-  async createNextMessage(request: CreateMessageInput): Promise<Result<Message, ValidationError | StoreError>> {
-    const nextMessageRecordResult = await this.buildNextMessageRecord(request);
-
-    if (!nextMessageRecordResult.ok) {
-      return nextMessageRecordResult;
-    }
-
-    return this.messageRepository.insertNextMessageRow({
-      ...nextMessageRecordResult.value,
-    });
   }
 }

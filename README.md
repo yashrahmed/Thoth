@@ -161,6 +161,12 @@ The launcher reads `TEMP_BEARER_TOKEN` from the selected secrets file and export
 
 ## Caveats
 
+### Cloudflare Secrets Store
+
+Cloudflare Secrets Store is useful for the deployed dev Worker because secrets become account-level values that can be bound to the Worker instead of uploaded with `wrangler secret put`. The main caveat is that local and deployed secret access differ: local runs still need `~/.thoth/local-secrets.env` / `.dev.vars`, while deployed Workers read Secrets Store bindings asynchronously with `await env.<BINDING>.get()`.
+
+For this repo, moving to Secrets Store mainly changes the dev deploy path. It does not remove local credential files, and it requires small Worker bootstrap changes because Secrets Store bindings are not plain string environment variables.
+
 ### Hyperdrive query caching
 
 Hyperdrive query caching must be disabled for the dev Hyperdrive config used by `conv-agent`.

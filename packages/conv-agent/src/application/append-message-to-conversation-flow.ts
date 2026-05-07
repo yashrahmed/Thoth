@@ -1,7 +1,7 @@
 import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import type { LlmCompletionDispatchDomainService } from "../domain/services/llm-completion-dispatch-domain-service";
+import type { LLMCompletionDispatcher } from "../domain/contracts/llm-completion-dispatcher";
 import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { ValidationError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { failure, type Result } from "../domain/objects/result";
@@ -19,7 +19,7 @@ export class AppendMessageToConversationFlow {
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
-    private readonly llmCompletionDispatchDomainService: LlmCompletionDispatchDomainService,
+    private readonly llmCompletionDispatcher: LLMCompletionDispatcher,
   ) {}
 
   async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
@@ -62,7 +62,7 @@ export class AppendMessageToConversationFlow {
       return deleteUploadedBlobsResult.ok ? createUserMessageResult : deleteUploadedBlobsResult;
     }
 
-    const dispatchResult = await this.llmCompletionDispatchDomainService.dispatchCompletion({
+    const dispatchResult = await this.llmCompletionDispatcher.dispatch({
       messageId: createUserMessageResult.value.id,
     });
 

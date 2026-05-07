@@ -22,7 +22,6 @@ import { ConversationDomainService } from "../domain/services/conversation-domai
 import { DeleteConversationGraphDomainService } from "../domain/services/delete-conversation-graph-domain-service";
 import { FileDomainService } from "../domain/services/file-domain-service";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
-import { LlmCompletionDispatchDomainService } from "../domain/services/llm-completion-dispatch-domain-service";
 import { LlmDomainService } from "../domain/services/llm-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
@@ -84,7 +83,6 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
 
   const llmCompletionDispatcher = new CloudflareQueueLlmCompletionDispatcher(env.LLM_QUEUE);
-  const llmCompletionDispatchDomainService = new LlmCompletionDispatchDomainService(llmCompletionDispatcher);
   const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmRepository(llmConfig)), appendUserMessageDomainService);
 
   const httpHandler = createConversationHttpHandler({
@@ -98,7 +96,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
       appendUserMessageDomainService,
       messageDomainService,
       fileDomainService,
-      llmCompletionDispatchDomainService,
+      llmCompletionDispatcher,
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });

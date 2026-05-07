@@ -8,12 +8,15 @@
     "test": "bun test --pass-with-no-tests src/adapter src/application src/config src/domain src/worker",
     "test:integration": "bun test --timeout 180000 src/integration",
     "typecheck": "bun x tsc --noEmit",
+    "chat": "bun src/cli/chat.ts",
     "worker:dev": "wrangler dev --config ../../deployment/local/wrangler-local.toml",
     "worker:deploy": "wrangler deploy"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1035.0",
     "@aws-sdk/s3-request-presigner": "^3.1035.0",
+    "@langchain/core": "^1.1.44",
+    "@langchain/openai": "^1.4.5",
     "hono": "^4.12.9",
     "postgres": "^3.4.7"
   },

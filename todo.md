@@ -2,8 +2,11 @@
 
 #### Backend
 1. Examine async usage in the context of worker execution.
-2. Understand the Cloudflare security model.x
+2. Understand the Cloudflare security model.
 3. Integrate an actual LLM and make it useful locally.
+   1. Test cli tool with an LLM.
+   2. Integrate into completions flow.
+   3. Perform a local test + Figure out md rendering.
 4. Trials for Auth + Supporting Oauth and multitenancy.
 5. Understand how CF agents work.
 6. Performance improvments.

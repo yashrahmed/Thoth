@@ -4,6 +4,7 @@ import type { MessageDomainService } from "../domain/services/message-domain-ser
 import { LLMMessageType } from "../domain/objects/llm";
 import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { type Result } from "../domain/objects/result";
+import type { Message, MessageWithFiles } from "../domain/objects/message-types";
 
 interface LlmCompletionRequest {
   readonly messageId: string;
@@ -53,7 +54,7 @@ export class LlmCompletionFlow {
       };
     }
 
-    const llmResult = await this.llmDomainService.complete(allMessagesResult.value);
+    const llmResult = await this.llmDomainService.complete(withoutFiles(allMessagesResult.value));
 
     if (!llmResult.ok) {
       return llmResult;
@@ -82,4 +83,11 @@ export class LlmCompletionFlow {
 
     return { ok: true, value: undefined };
   }
+}
+
+function withoutFiles(messages: ReadonlyArray<Message>): MessageWithFiles[] {
+  return messages.map((message) => ({
+    ...message,
+    files: [],
+  }));
 }

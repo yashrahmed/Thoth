@@ -5,7 +5,7 @@ import type { LlmConfig } from "../../config/config";
 import type { LlmCompletionService } from "../../domain/contracts/llm-completion-service";
 import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
-import type { Message } from "../../domain/objects/message-types";
+import type { MessageWithFiles } from "../../domain/objects/message-types";
 import { failure, success, type Result } from "../../domain/objects/result";
 
 export const OPENAI_LLM_MODEL = "gpt-5.5";
@@ -34,7 +34,7 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
     this.toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
   }
 
-  async llmComplete(messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>> {
+  async llmComplete(messages: ReadonlyArray<MessageWithFiles>): Promise<Result<LlmCompletionResult, LlmError>> {
     try {
       const completionMessages = await this.complete(messages.map(toLangChainMessage));
 
@@ -90,7 +90,7 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
   }
 }
 
-function toLangChainMessage(message: Message): BaseMessage {
+function toLangChainMessage(message: MessageWithFiles): BaseMessage {
   switch (message.type) {
     case LLMMessageType.User:
       return new HumanMessage(message.content);

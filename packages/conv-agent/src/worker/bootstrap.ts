@@ -8,7 +8,7 @@ import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgr
 import { PostgresFileRepository } from "../adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
 import { CloudflareQueueLlmCompletionDispatcher, type LlmCompletionQueueMessage } from "../adapter/queue/cf-queue-llm-completion-dispatcher";
-import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
+import { PlaceholderLlmAdapter } from "../adapter/llm/placeholder-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
 import { CreateConversationFlow } from "../application/create-conversation-flow";
 import { DeleteConversationFlow } from "../application/delete-conversation-flow";
@@ -83,7 +83,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
 
   const llmCompletionDispatcher = new CloudflareQueueLlmCompletionDispatcher(env.LLM_QUEUE);
-  const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new OpenAiLlmAdapter(llmConfig)), appendUserMessageDomainService);
+  const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmAdapter(llmConfig)), appendUserMessageDomainService);
 
   const httpHandler = createConversationHttpHandler({
     tempBearerToken: requireString(env.TEMP_BEARER_TOKEN, "TEMP_BEARER_TOKEN"),

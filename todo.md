@@ -4,7 +4,7 @@
 1. Examine async usage in the context of worker execution.
 2. Understand the Cloudflare security model.
 3. Integrate an actual LLM and make it useful locally.
-   1. Test cli tool with an LLM.
+   1. Build and test file uploads.
    2. Integrate into completions flow.
    3. Perform a local test + Figure out md rendering.
 4. Trials for Auth + Supporting Oauth and multitenancy.

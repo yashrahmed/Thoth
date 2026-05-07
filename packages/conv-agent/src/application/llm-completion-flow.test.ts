@@ -4,7 +4,7 @@ import type { AppendUserMessageStore, PersistMessagesInput, PersistUserMessageWi
 import type { LlmCompletionService } from "../domain/contracts/llm-completion-service";
 import type { MessageRepository } from "../domain/contracts/message-repository";
 import { LLMMessageType, type LlmCompletionResult } from "../domain/objects/llm";
-import { type AppendMessageRecord, Message } from "../domain/objects/message-types";
+import { type AppendMessageRecord, Message, type MessageWithFiles } from "../domain/objects/message-types";
 import { success, type Result } from "../domain/objects/result";
 import type { LlmError, NotFoundError, StoreError, ValidationError } from "../domain/objects/errors";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
@@ -63,7 +63,7 @@ test("appends every message returned by the LLM completion in order", async () =
 class StaticLlmCompletionService implements LlmCompletionService {
   constructor(private readonly result: LlmCompletionResult) {}
 
-  async llmComplete(_messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>> {
+  async llmComplete(_messages: ReadonlyArray<MessageWithFiles>): Promise<Result<LlmCompletionResult, LlmError>> {
     return success(this.result);
   }
 }

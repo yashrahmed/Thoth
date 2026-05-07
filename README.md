@@ -55,12 +55,13 @@ mkdir -p ~/.thoth
 cp deployment/local/local-secrets.env.example ~/.thoth/local-secrets.env
 ```
 
-Then edit `~/.thoth/local-secrets.env` if you need non-default local Postgres or MinIO values.
+Then edit `~/.thoth/local-secrets.env` if you need non-default local Postgres or MinIO values, and set `LLM_API_KEY` there or export `LLM_API_KEY` before launching the local backend.
 
 For the deployed dev Worker and local UI-to-dev flow, create `~/.thoth/dev-secrets.env` with:
 
 - `BLOB_STORAGE_ACCESS_KEY_ID`
 - `BLOB_STORAGE_SECRET_ACCESS_KEY`
+- `LLM_API_KEY`
 - `TEMP_BEARER_TOKEN`
 
 `MIGRATION_DATABASE_URL` is also required when running dev database migrations manually.

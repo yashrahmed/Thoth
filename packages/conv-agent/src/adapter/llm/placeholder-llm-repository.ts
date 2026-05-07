@@ -3,9 +3,14 @@ import { LLMMessageType, type LlmCompletionResult } from "../../domain/objects/l
 import type { Message } from "../../domain/objects/message-types";
 import { success, type Result } from "../../domain/objects/result";
 import type { LlmError } from "../../domain/objects/errors";
+import type { LlmConfig } from "../../config/config";
 
 export class PlaceholderLlmRepository implements LlmCompletionService {
+  constructor(private readonly config: LlmConfig) {}
+
   async llmComplete(messages: ReadonlyArray<Message>): Promise<Result<LlmCompletionResult, LlmError>> {
+    void this.config.apiKey;
+
     const latestMessage = messages.at(-1);
 
     if (!latestMessage) {

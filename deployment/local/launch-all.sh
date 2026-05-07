@@ -17,6 +17,7 @@ WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
 CREDS_FILE="$CREDENTIALS_DIR/local-secrets.env"
 CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
 WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
+REQUIRED_WORKER_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY LLM_API_KEY TEMP_BEARER_TOKEN"
 
 if [ -z "$COMMAND" ]; then
   echo "Usage: ./deployment/local/launch-all.sh <start|stop>"
@@ -93,6 +94,30 @@ wait_for_service_listener() {
   return 1
 }
 
+read_secret_value() {
+  key="$1"
+  file="$2"
+
+  if [ ! -f "$file" ]; then
+    return 0
+  fi
+
+  value="$(sed -n "s/^${key}=//p" "$file" | tail -n 1)"
+
+  case "$value" in
+    \"*\")
+      value="${value#\"}"
+      value="${value%\"}"
+      ;;
+    \'*\')
+      value="${value#\'}"
+      value="${value%\'}"
+      ;;
+  esac
+
+  printf '%s\n' "$value"
+}
+
 write_dev_vars() {
   if [ ! -f "$CREDS_FILE" ]; then
     echo "Missing credentials file: $CREDS_FILE. $CREDS_HINT"
@@ -105,6 +130,20 @@ write_dev_vars() {
   fi
 
   cp "$CREDS_FILE" "$WORKER_DEV_VARS"
+
+  if [ -z "$(read_secret_value "LLM_API_KEY" "$WORKER_DEV_VARS")" ] && [ -n "${LLM_API_KEY:-}" ]; then
+    printf '\nLLM_API_KEY=%s\n' "$LLM_API_KEY" >>"$WORKER_DEV_VARS"
+  fi
+
+  for secret_name in $REQUIRED_WORKER_SECRETS; do
+    if [ -z "$(read_secret_value "$secret_name" "$WORKER_DEV_VARS")" ]; then
+      echo "Missing $secret_name in $CREDS_FILE."
+      if [ "$secret_name" = "LLM_API_KEY" ]; then
+        echo "Set LLM_API_KEY in $CREDS_FILE or export LLM_API_KEY before starting the local worker."
+      fi
+      exit 1
+    fi
+  done
 }
 
 start_worker() {

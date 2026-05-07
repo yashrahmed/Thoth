@@ -26,6 +26,7 @@ import { LlmCompletionDispatchDomainService } from "../domain/services/llm-compl
 import { LlmDomainService } from "../domain/services/llm-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
+import type { LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
   HYPERDRIVE: Hyperdrive;
@@ -36,6 +37,7 @@ export interface WorkerEnv {
   BLOB_STORAGE_FOLDER: string;
   BLOB_STORAGE_ACCESS_KEY_ID: string;
   BLOB_STORAGE_SECRET_ACCESS_KEY: string;
+  LLM_API_KEY: string;
   TEMP_BEARER_TOKEN: string;
 }
 
@@ -62,6 +64,9 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
       secretAccessKey: requireString(env.BLOB_STORAGE_SECRET_ACCESS_KEY, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
     },
   );
+  const llmConfig: LlmConfig = {
+    apiKey: requireString(env.LLM_API_KEY, "LLM_API_KEY"),
+  };
 
   const conversationRepository = new PostgresConversationRepository(database);
   const messageRepository = new PostgresMessageRepository(database);
@@ -80,7 +85,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
 
   const llmCompletionDispatcher = new CloudflareQueueLlmCompletionDispatcher(env.LLM_QUEUE);
   const llmCompletionDispatchDomainService = new LlmCompletionDispatchDomainService(llmCompletionDispatcher);
-  const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmRepository()), appendUserMessageDomainService);
+  const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmRepository(llmConfig)), appendUserMessageDomainService);
 
   const httpHandler = createConversationHttpHandler({
     tempBearerToken: requireString(env.TEMP_BEARER_TOKEN, "TEMP_BEARER_TOKEN"),

@@ -4,3 +4,7 @@ export interface BlobStorageConfig {
   readonly region: string;
   readonly folder: string;
 }
+
+export interface LlmConfig {
+  readonly apiKey: string;
+}

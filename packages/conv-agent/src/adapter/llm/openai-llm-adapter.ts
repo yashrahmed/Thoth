@@ -1,11 +1,10 @@
-import { AIMessage, type BaseMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
+import { AIMessage, type BaseMessage, type ContentBlock, HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
 
 import type { LlmConfig } from "../../config/config";
 import type { LlmCompletionService } from "../../domain/contracts/llm-completion-service";
 import { LlmError } from "../../domain/objects/errors";
-import { LLMMessageType, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
-import type { MessageWithFiles } from "../../domain/objects/message-types";
+import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
 export const OPENAI_LLM_MODEL = "gpt-5.5";
@@ -34,7 +33,7 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
     this.toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
   }
 
-  async llmComplete(messages: ReadonlyArray<MessageWithFiles>): Promise<Result<LlmCompletionResult, LlmError>> {
+  async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>> {
     try {
       const completionMessages = await this.complete(messages.map(toLangChainMessage));
 
@@ -90,10 +89,10 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
   }
 }
 
-function toLangChainMessage(message: MessageWithFiles): BaseMessage {
+function toLangChainMessage(message: LlmCompletionInputMessage): BaseMessage {
   switch (message.type) {
     case LLMMessageType.User:
-      return new HumanMessage(message.content);
+      return toHumanMessage(message);
     case LLMMessageType.Assistant:
       return new AIMessage(message.content);
     case LLMMessageType.System:
@@ -102,6 +101,38 @@ function toLangChainMessage(message: MessageWithFiles): BaseMessage {
       // Domain tool messages do not yet store provider tool_call_id values.
       return new HumanMessage(`Tool result:\n${message.content}`);
   }
+}
+
+function toHumanMessage(message: LlmCompletionInputMessage): HumanMessage {
+  if (message.files.length === 0) {
+    return new HumanMessage(message.content);
+  }
+
+  return new HumanMessage({
+    content: toHumanMessageContentBlocks(message),
+    response_metadata: { output_version: "v1" },
+  });
+}
+
+function toHumanMessageContentBlocks(message: LlmCompletionInputMessage): ContentBlock[] {
+  const contentBlocks: ContentBlock[] = [];
+
+  if (message.content.length > 0) {
+    contentBlocks.push({ type: "text", text: message.content });
+  }
+
+  contentBlocks.push(
+    ...message.files.map((file) => ({
+      type: "file" as const,
+      url: file.signedUrl,
+      mimeType: file.mimeType,
+      metadata: {
+        filename: file.filename,
+      },
+    })),
+  );
+
+  return contentBlocks;
 }
 
 function getErrorMessage(error: unknown): string {

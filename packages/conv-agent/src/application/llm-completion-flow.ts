@@ -1,19 +1,26 @@
 import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
-import type { LlmDomainService } from "../domain/services/llm-domain-service";
+import type { FileAccessDomainService, SignedFileAccess } from "../domain/services/file-access-domain-service";
+import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { MessageDomainService } from "../domain/services/message-domain-service";
-import { LLMMessageType } from "../domain/objects/llm";
+import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../domain/objects/llm";
 import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
-import { type Result } from "../domain/objects/result";
-import type { Message, MessageWithFiles } from "../domain/objects/message-types";
+import { success, type Result } from "../domain/objects/result";
+import type { Message } from "../domain/objects/message-types";
 
 interface LlmCompletionRequest {
   readonly messageId: string;
 }
 
+interface LlmCompletionPort {
+  llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>>;
+}
+
 export class LlmCompletionFlow {
   constructor(
     private readonly messageDomainService: MessageDomainService,
-    private readonly llmDomainService: LlmDomainService,
+    private readonly fileDomainService: FileDomainService,
+    private readonly fileAccessDomainService: FileAccessDomainService,
+    private readonly llmCompletionService: LlmCompletionPort,
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
   ) {}
 
@@ -31,7 +38,66 @@ export class LlmCompletionFlow {
       return allMessagesResult;
     }
 
-    const latestMessage = allMessagesResult.value.at(-1);
+    const triggerValidationResult = this.validateTriggerMessage(triggerMessage, allMessagesResult.value);
+
+    if (!triggerValidationResult.ok) {
+      return triggerValidationResult;
+    }
+
+    const filesResult = await this.fileDomainService.getFilesOnMessages({
+      messageIds: allMessagesResult.value.map((message) => message.id),
+    });
+
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    const signedFilesResult = await this.fileAccessDomainService.createSignedFileAccess(filesResult.value);
+
+    if (!signedFilesResult.ok) {
+      return signedFilesResult;
+    }
+
+    const llmInput = this.buildLlmInputMessages(allMessagesResult.value, signedFilesResult.value);
+    const llmResult = await this.llmCompletionService.llmComplete(llmInput);
+
+    if (!llmResult.ok) {
+      return llmResult;
+    }
+
+    if (llmResult.value.messages.length === 0) {
+      return { ok: true, value: undefined };
+    }
+
+    return this.appendCompletionMessages(triggerMessage.conversationId, llmResult.value.messages);
+  }
+
+  private async appendCompletionMessages(
+    conversationId: string,
+    messages: ReadonlyArray<LlmCompletionMessage>,
+  ): Promise<Result<void, ValidationError | StoreError>> {
+    const nextMessageRecordsResult = await this.messageDomainService.buildNextMessageRecords({
+      conversationId,
+      messages,
+    });
+
+    if (!nextMessageRecordsResult.ok) {
+      return nextMessageRecordsResult;
+    }
+
+    const appendMessageResult = await this.appendUserMessageDomainService.persistMessages({
+      messages: nextMessageRecordsResult.value,
+    });
+
+    if (!appendMessageResult.ok) {
+      return appendMessageResult;
+    }
+
+    return { ok: true, value: undefined };
+  }
+
+  private validateTriggerMessage(triggerMessage: Message, allMessages: ReadonlyArray<Message>): Result<void, ValidationError> {
+    const latestMessage = allMessages.at(-1);
 
     if (!latestMessage) {
       return {
@@ -54,40 +120,26 @@ export class LlmCompletionFlow {
       };
     }
 
-    const llmResult = await this.llmDomainService.complete(withoutFiles(allMessagesResult.value));
-
-    if (!llmResult.ok) {
-      return llmResult;
-    }
-
-    if (llmResult.value.messages.length === 0) {
-      return { ok: true, value: undefined };
-    }
-
-    const nextMessageRecordsResult = await this.messageDomainService.buildNextMessageRecords({
-      conversationId: triggerMessage.conversationId,
-      messages: llmResult.value.messages,
-    });
-
-    if (!nextMessageRecordsResult.ok) {
-      return nextMessageRecordsResult;
-    }
-
-    const appendMessageResult = await this.appendUserMessageDomainService.persistMessages({
-      messages: nextMessageRecordsResult.value,
-    });
-
-    if (!appendMessageResult.ok) {
-      return appendMessageResult;
-    }
-
-    return { ok: true, value: undefined };
+    return success(undefined);
   }
-}
 
-function withoutFiles(messages: ReadonlyArray<Message>): MessageWithFiles[] {
-  return messages.map((message) => ({
-    ...message,
-    files: [],
-  }));
+  private buildLlmInputMessages(messages: ReadonlyArray<Message>, files: ReadonlyArray<SignedFileAccess>): LlmCompletionInputMessage[] {
+    const filesByMessageId = new Map<string, LlmCompletionInputFile[]>();
+
+    for (const file of files) {
+      const messageFiles = filesByMessageId.get(file.messageId) ?? [];
+      messageFiles.push({
+        filename: file.filename,
+        mimeType: file.mimeType,
+        signedUrl: file.signedUrl,
+      });
+      filesByMessageId.set(file.messageId, messageFiles);
+    }
+
+    return messages.map((message) => ({
+      type: message.type,
+      content: message.content,
+      files: filesByMessageId.get(message.id) ?? [],
+    }));
+  }
 }

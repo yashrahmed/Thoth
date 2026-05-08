@@ -1,6 +1,8 @@
+import { S3Client } from "@aws-sdk/client-s3";
 import { createConversationHttpHandler } from "../adapter/inbound/conversation-http-handler";
 import { createQueueLlmCompletionHandler } from "../adapter/inbound/cf-queue-llm-completion-handler";
 import { R2BlobRepository } from "../adapter/blob/r2-blob-repository";
+import { R2FileSignedUrlGenerator } from "../adapter/blob/r2-file-signed-url-generator";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
 import { PostgresConversationRepository } from "../adapter/postgres/postgres-conversation-repository";
 import { createPostgresDatabase, type PostgresDatabase } from "../adapter/postgres/postgres-database";
@@ -20,12 +22,12 @@ import { AppendUserMessageDomainService } from "../domain/services/append-user-m
 import { BlobDomainService } from "../domain/services/blob-domain-service";
 import { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import { DeleteConversationGraphDomainService } from "../domain/services/delete-conversation-graph-domain-service";
+import { FileAccessDomainService } from "../domain/services/file-access-domain-service";
 import { FileDomainService } from "../domain/services/file-domain-service";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
-import { LlmDomainService } from "../domain/services/llm-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
-import type { LlmConfig } from "../config/config";
+import type { BlobStorageConfig, LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
   HYPERDRIVE: Hyperdrive;
@@ -50,18 +52,31 @@ interface WorkerDeps {
 // Build the dependency graph (which holds a postgres.js connection) per request.
 export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const database = createPostgresDatabase(env.HYPERDRIVE.connectionString);
+  const blobStorageConfig: BlobStorageConfig = {
+    endpoint: requireString(env.BLOB_STORAGE_ENDPOINT, "BLOB_STORAGE_ENDPOINT"),
+    bucket: requireString(env.BLOB_STORAGE_BUCKET, "BLOB_STORAGE_BUCKET"),
+    region: requireString(env.BLOB_STORAGE_REGION, "BLOB_STORAGE_REGION"),
+    folder: requireString(env.BLOB_STORAGE_FOLDER, "BLOB_STORAGE_FOLDER"),
+  };
+  const blobStorageCredentials = {
+    accessKeyId: requireString(env.BLOB_STORAGE_ACCESS_KEY_ID, "BLOB_STORAGE_ACCESS_KEY_ID"),
+    secretAccessKey: requireString(env.BLOB_STORAGE_SECRET_ACCESS_KEY, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
+  };
 
   const blobRepository = new R2BlobRepository(
+    blobStorageConfig,
+    blobStorageCredentials,
+  );
+  const fileSignedUrlGenerator = new R2FileSignedUrlGenerator(
     {
-      endpoint: requireString(env.BLOB_STORAGE_ENDPOINT, "BLOB_STORAGE_ENDPOINT"),
-      bucket: requireString(env.BLOB_STORAGE_BUCKET, "BLOB_STORAGE_BUCKET"),
-      region: requireString(env.BLOB_STORAGE_REGION, "BLOB_STORAGE_REGION"),
-      folder: requireString(env.BLOB_STORAGE_FOLDER, "BLOB_STORAGE_FOLDER"),
+      ...blobStorageConfig,
     },
-    {
-      accessKeyId: requireString(env.BLOB_STORAGE_ACCESS_KEY_ID, "BLOB_STORAGE_ACCESS_KEY_ID"),
-      secretAccessKey: requireString(env.BLOB_STORAGE_SECRET_ACCESS_KEY, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
-    },
+    new S3Client({
+      endpoint: blobStorageConfig.endpoint,
+      region: blobStorageConfig.region,
+      credentials: blobStorageCredentials,
+      forcePathStyle: true,
+    }),
   );
   const llmConfig: LlmConfig = {
     apiKey: requireString(env.LLM_API_KEY, "LLM_API_KEY"),
@@ -83,7 +98,13 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
 
   const llmCompletionDispatcher = new CloudflareQueueLlmCompletionDispatcher(env.LLM_QUEUE);
-  const llmCompletionFlow = new LlmCompletionFlow(messageDomainService, new LlmDomainService(new PlaceholderLlmAdapter(llmConfig)), appendUserMessageDomainService);
+  const llmCompletionFlow = new LlmCompletionFlow(
+    messageDomainService,
+    fileDomainService,
+    new FileAccessDomainService(fileSignedUrlGenerator),
+    new PlaceholderLlmAdapter(llmConfig),
+    appendUserMessageDomainService,
+  );
 
   const httpHandler = createConversationHttpHandler({
     tempBearerToken: requireString(env.TEMP_BEARER_TOKEN, "TEMP_BEARER_TOKEN"),

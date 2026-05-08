@@ -1,14 +1,13 @@
 import type { LlmConfig } from "../../config/config";
 import type { LlmCompletionService } from "../../domain/contracts/llm-completion-service";
 import type { LlmError } from "../../domain/objects/errors";
-import { LLMMessageType, type LlmCompletionResult } from "../../domain/objects/llm";
-import type { MessageWithFiles } from "../../domain/objects/message-types";
+import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { success, type Result } from "../../domain/objects/result";
 
 export class PlaceholderLlmAdapter implements LlmCompletionService {
   constructor(private readonly config: LlmConfig) {}
 
-  async llmComplete(messages: ReadonlyArray<MessageWithFiles>): Promise<Result<LlmCompletionResult, LlmError>> {
+  async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>> {
     void this.config.apiKey;
 
     const latestMessage = messages.at(-1);

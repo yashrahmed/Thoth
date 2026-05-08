@@ -2,10 +2,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
-import { LLMMessageType, type LlmCompletionMessage } from "../domain/objects/llm";
-import { Message, type MessageWithFiles } from "../domain/objects/message-types";
-
-const CONVERSATION_ID = "cli-chat";
+import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../domain/objects/llm";
 
 type ChatCommand = "continue" | "exit";
 
@@ -29,7 +26,7 @@ async function main(): Promise<void> {
   await runInteractive(adapter, transcript);
 }
 
-async function runInteractive(adapter: OpenAiLlmAdapter, transcript: MessageWithFiles[]): Promise<void> {
+async function runInteractive(adapter: OpenAiLlmAdapter, transcript: LlmCompletionInputMessage[]): Promise<void> {
   const rl = createInterface({ input, output });
 
   process.on("SIGINT", () => {
@@ -59,7 +56,7 @@ async function runInteractive(adapter: OpenAiLlmAdapter, transcript: MessageWith
   }
 }
 
-async function runBatch(adapter: OpenAiLlmAdapter, transcript: MessageWithFiles[], inputText: string): Promise<void> {
+async function runBatch(adapter: OpenAiLlmAdapter, transcript: LlmCompletionInputMessage[], inputText: string): Promise<void> {
   for (const rawLine of inputText.split(/\r?\n/u)) {
     const content = rawLine.trim();
     const command = handleCommand(content, transcript);
@@ -76,7 +73,7 @@ async function runBatch(adapter: OpenAiLlmAdapter, transcript: MessageWithFiles[
   }
 }
 
-async function runTurn(adapter: OpenAiLlmAdapter, transcript: MessageWithFiles[], content: string): Promise<void> {
+async function runTurn(adapter: OpenAiLlmAdapter, transcript: LlmCompletionInputMessage[], content: string): Promise<void> {
   transcript.push(createMessage(LLMMessageType.User, content, transcript.length + 1));
 
   const result = await adapter.llmComplete(transcript);
@@ -97,7 +94,7 @@ async function runTurn(adapter: OpenAiLlmAdapter, transcript: MessageWithFiles[]
   }
 }
 
-function handleCommand(content: string, transcript: MessageWithFiles[]): ChatCommand | undefined {
+function handleCommand(content: string, transcript: LlmCompletionInputMessage[]): ChatCommand | undefined {
   if (content.length === 0) {
     return "continue";
   }
@@ -115,7 +112,7 @@ function handleCommand(content: string, transcript: MessageWithFiles[]): ChatCom
   return undefined;
 }
 
-function createInitialTranscript(): MessageWithFiles[] {
+function createInitialTranscript(): LlmCompletionInputMessage[] {
   return [
     createMessage(
       LLMMessageType.System,
@@ -125,15 +122,15 @@ function createInitialTranscript(): MessageWithFiles[] {
   ];
 }
 
-function resetTranscript(transcript: MessageWithFiles[]): void {
+function resetTranscript(transcript: LlmCompletionInputMessage[]): void {
   transcript.length = 0;
   transcript.push(...createInitialTranscript());
 }
 
-function createMessage(type: LLMMessageType, content: string, sequenceNumber: number): MessageWithFiles {
-  const timestamp = new Date();
+function createMessage(type: LLMMessageType, content: string, _sequenceNumber: number): LlmCompletionInputMessage {
   return {
-    ...new Message(`cli-message-${sequenceNumber}`, CONVERSATION_ID, type, sequenceNumber, content, timestamp, timestamp),
+    type,
+    content,
     files: [],
   };
 }

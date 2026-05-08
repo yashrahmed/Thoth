@@ -9,6 +9,7 @@ import { failure, success, type Result } from "../../domain/objects/result";
 
 export const OPENAI_LLM_MODEL = "gpt-5.5";
 const MAX_TOOL_CALL_ROUNDS = 5;
+const OPENAI_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface OpenAiTool {
   readonly name: string;
@@ -29,6 +30,7 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
       useResponsesApi: true,
       reasoning: { effort: "medium" },
       maxRetries: 2,
+      timeout: OPENAI_REQUEST_TIMEOUT_MS,
     });
     this.toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
   }
@@ -54,7 +56,7 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
     const completionMessages: LlmCompletionMessage[] = [];
 
     for (let round = 0; round <= MAX_TOOL_CALL_ROUNDS; round += 1) {
-      const response = await this.model.invoke(transcript);
+      const response = await withTimeout(this.model.invoke(transcript), OPENAI_REQUEST_TIMEOUT_MS, `OpenAI invoke timed out after ${OPENAI_REQUEST_TIMEOUT_MS} ms.`);
       transcript.push(response);
 
       if (response.text.trim().length > 0) {
@@ -123,18 +125,36 @@ function toHumanMessageContentBlocks(message: LlmCompletionInputMessage): Conten
 
   contentBlocks.push(
     ...message.files.map((file) => ({
-      type: "file" as const,
+      type: getContentBlockType(file.mimeType),
       url: file.signedUrl,
       mimeType: file.mimeType,
-      metadata: {
-        filename: file.filename,
-      },
     })),
   );
 
   return contentBlocks;
 }
 
+function getContentBlockType(mimeType: string): "file" | "image" {
+  return mimeType.startsWith("image/") ? "image" : "file";
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected OpenAI LLM completion error.";
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }

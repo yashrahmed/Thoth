@@ -68,3 +68,6 @@ coverage/
 .expo-shared/
 android/.gradle/
 ios/Pods/
+
+# Test files
+test-files

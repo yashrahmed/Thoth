@@ -89,4 +89,4 @@ echo "Running conv-agent integration tests with profile '$PROFILE'."
 echo "Target: $CONV_AGENT_URL"
 
 cd "$REPO_ROOT/packages/conv-agent"
-bun test --timeout 180000 src/integration "$@"
+bun test --timeout 180000 src/integration/conv-agent-it.test.ts "$@"

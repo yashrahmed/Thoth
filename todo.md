@@ -4,13 +4,17 @@
 1. Examine async usage in the context of worker execution.
 2. Understand the Cloudflare security model.
 3. Integrate an actual LLM and make it useful locally.
-   1. Build and test file uploads.
-   2. Integrate into completions flow.
-   3. Perform a local test + Figure out md rendering.
+   1. Integrate into completions flow.
+      1. Would signed URL's be generated for all messages with files everytime? If so, then this needs to be fixed.
+   2. Perform a local test + Figure out md rendering.
+   3. Test with dev deployment.
+   4. Integrate timestamps (and deltas into the message payload)?
 4. Trials for Auth + Supporting Oauth and multitenancy.
 5. Understand how CF agents work.
 6. Performance improvments.
-   1. ...TBD..I do not have that many ideas as of now.
+   1. Separate worker for completions?
+   2. Research Worker KV cache.
+   3. ...TBD..I do not have that many ideas as of now.
 7. Set up a basic deploy pipeline.
 
 #### UI

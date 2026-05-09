@@ -10,7 +10,7 @@ import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgr
 import { PostgresFileRepository } from "../adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
 import { CloudflareQueueLlmCompletionDispatcher, type LlmCompletionQueueMessage } from "../adapter/queue/cf-queue-llm-completion-dispatcher";
-import { PlaceholderLlmAdapter } from "../adapter/llm/placeholder-llm-adapter";
+import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
 import { CreateConversationFlow } from "../application/create-conversation-flow";
 import { DeleteConversationFlow } from "../application/delete-conversation-flow";
@@ -102,7 +102,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     messageDomainService,
     fileDomainService,
     new FileAccessDomainService(fileSignedUrlGenerator),
-    new PlaceholderLlmAdapter(llmConfig),
+    new OpenAiLlmAdapter(llmConfig),
     appendUserMessageDomainService,
   );
 

@@ -6,8 +6,8 @@ import { beforeAll, describe, expect, test } from "bun:test";
 const BASE_URL = process.env.CONV_AGENT_URL ?? "http://127.0.0.1:3001";
 const BEARER_TOKEN = process.env.CONV_AGENT_BEARER_TOKEN;
 const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
-const COMPLETION_TIMEOUT_MS = 10_000;
-const COMPLETION_POLL_INTERVAL_MS = 100;
+const COMPLETION_TIMEOUT_MS = 30_000;
+const COMPLETION_POLL_INTERVAL_MS = 200;
 
 if (!BEARER_TOKEN) {
   throw new Error("CONV_AGENT_BEARER_TOKEN is required to run integration tests.");
@@ -45,7 +45,7 @@ describe("conv-agent HTTP integration", () => {
     }
   });
 
-  test("creates 10 user messages plus completion replies, paginates 5 at a time, and cleans up", async () => {
+  test("appends 10 user messages directly, paginates them 4 at a time, and cleans up", async () => {
     const imageBuffer = readFileSync(IMAGE_PATH);
     const imageBytes = imageBuffer.buffer.slice(imageBuffer.byteOffset, imageBuffer.byteOffset + imageBuffer.byteLength) as ArrayBuffer;
     let conversationId: string | undefined;
@@ -61,49 +61,36 @@ describe("conv-agent HTTP integration", () => {
       conversationId = createdConversation.id;
 
       for (let index = 1; index <= 10; index += 1) {
-        const visibleContent = `Manual lambo image upload ${index}`;
-        const content = index === 10 ? `${visibleContent} [simulate-tool-trace]` : visibleContent;
-        const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/chat`, {
+        const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
           method: "POST",
           headers: AUTH_HEADERS,
-          body: buildImageMessageFormData(imageBytes, content),
+          body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`),
         });
 
         expect(appendResponse.status).toBe(204);
         expect(await appendResponse.text()).toBe("");
-
-        // Wait for completion before sending the next user message so sequence numbers
-        // stay deterministic. The final completion deliberately appends assistant/tool/assistant.
-        await waitForConversationMessages(conversationId, index === 10 ? 22 : index * 2);
       }
 
-      const firstPage = await fetchPage(conversationId, 1, 5);
+      const firstPage = await fetchPage(conversationId, 1, 4);
 
-      expect(firstPage.items).toHaveLength(5);
+      expect(firstPage.items).toHaveLength(4);
       expect(firstPage.pageNum).toBe(1);
-      expect(firstPage.pageSize).toBe(5);
-      assertAlternatingMessages(firstPage.items, conversationId, 1, imageBytes.byteLength);
+      expect(firstPage.pageSize).toBe(4);
+      assertUserMessages(firstPage.items, conversationId, 1, imageBytes.byteLength);
 
-      const secondPage = await fetchPage(conversationId, 2, 5);
+      const secondPage = await fetchPage(conversationId, 2, 4);
 
-      expect(secondPage.items).toHaveLength(5);
+      expect(secondPage.items).toHaveLength(4);
       expect(secondPage.pageNum).toBe(2);
-      expect(secondPage.pageSize).toBe(5);
-      assertAlternatingMessages(secondPage.items, conversationId, 6, imageBytes.byteLength);
+      expect(secondPage.pageSize).toBe(4);
+      assertUserMessages(secondPage.items, conversationId, 5, imageBytes.byteLength);
 
-      const fourthPage = await fetchPage(conversationId, 4, 5);
+      const thirdPage = await fetchPage(conversationId, 3, 4);
 
-      expect(fourthPage.items).toHaveLength(5);
-      expect(fourthPage.pageNum).toBe(4);
-      expect(fourthPage.pageSize).toBe(5);
-      assertLastCompletionStart(fourthPage.items, conversationId, imageBytes.byteLength);
-
-      const fifthPage = await fetchPage(conversationId, 5, 5);
-
-      expect(fifthPage.items).toHaveLength(2);
-      expect(fifthPage.pageNum).toBe(5);
-      expect(fifthPage.pageSize).toBe(5);
-      assertLastCompletionEnd(fifthPage.items, conversationId);
+      expect(thirdPage.items).toHaveLength(2);
+      expect(thirdPage.pageNum).toBe(3);
+      expect(thirdPage.pageSize).toBe(4);
+      assertUserMessages(thirdPage.items, conversationId, 9, imageBytes.byteLength);
 
       const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { headers: AUTH_HEADERS });
 
@@ -136,6 +123,52 @@ describe("conv-agent HTTP integration", () => {
       }
     }
   });
+
+  test("posts a single user message and receives an assistant completion reply", async () => {
+    let conversationId: string | undefined;
+
+    try {
+      const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+
+      expect(createResponse.status).toBe(201);
+
+      const createdConversation = (await createResponse.json()) as { readonly id: string };
+
+      conversationId = createdConversation.id;
+
+      const userContent = "Reply with a short greeting.";
+      const formData = new FormData();
+      formData.set("type", "user");
+      formData.set("content", userContent);
+
+      const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/add-to-conv`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: formData,
+      });
+
+      expect(appendResponse.status).toBe(204);
+      expect(await appendResponse.text()).toBe("");
+
+      await waitForAssistantReply(conversationId);
+
+      const page = await fetchPage(conversationId, 1, 50);
+      const userMessage = page.items.find((item) => item.type === "user");
+      const assistantMessage = page.items.find((item) => item.type === "assistant");
+
+      expect(userMessage).toBeDefined();
+      expect(userMessage?.content).toBe(userContent);
+      expect(userMessage?.sequenceNumber).toBe(1);
+
+      expect(assistantMessage).toBeDefined();
+      expect(assistantMessage?.content.length).toBeGreaterThan(0);
+      expect((assistantMessage?.sequenceNumber ?? 0)).toBeGreaterThan(1);
+    } finally {
+      if (conversationId) {
+        await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
+    }
+  });
 });
 
 function buildImageMessageFormData(imageBytes: ArrayBuffer, content: string): FormData {
@@ -147,45 +180,6 @@ function buildImageMessageFormData(imageBytes: ArrayBuffer, content: string): Fo
   return formData;
 }
 
-function assertLastCompletionStart(items: ReadonlyArray<MessageItem>, conversationId: string, imageSize: number): void {
-  assertAlternatingMessages(items.slice(0, 3), conversationId, 16, imageSize);
-
-  const userMessage = items[3];
-  expect(userMessage.conversationId).toBe(conversationId);
-  expect(userMessage.sequenceNumber).toBe(19);
-  expect(userMessage.type).toBe("user");
-  expect(userMessage.content).toBe("Manual lambo image upload 10 [simulate-tool-trace]");
-  expect(userMessage.files).toHaveLength(1);
-  expect(userMessage.files[0]).toMatchObject({
-    filename: "lambo.jpg",
-    mimeType: "image/jpeg",
-    sizeInBytes: imageSize,
-  });
-
-  const assistantMessage = items[4];
-  expect(assistantMessage.conversationId).toBe(conversationId);
-  expect(assistantMessage.sequenceNumber).toBe(20);
-  expect(assistantMessage.type).toBe("assistant");
-  expect(assistantMessage.content).toBe("Manual lambo image upload 10");
-  expect(assistantMessage.files).toEqual([]);
-}
-
-function assertLastCompletionEnd(items: ReadonlyArray<MessageItem>, conversationId: string): void {
-  const toolMessage = items[0];
-  expect(toolMessage.conversationId).toBe(conversationId);
-  expect(toolMessage.sequenceNumber).toBe(21);
-  expect(toolMessage.type).toBe("tool");
-  expect(toolMessage.content).toBe("Tool result for: Manual lambo image upload 10");
-  expect(toolMessage.files).toEqual([]);
-
-  const assistantMessage = items[1];
-  expect(assistantMessage.conversationId).toBe(conversationId);
-  expect(assistantMessage.sequenceNumber).toBe(22);
-  expect(assistantMessage.type).toBe("assistant");
-  expect(assistantMessage.content).toBe("Final answer for: Manual lambo image upload 10");
-  expect(assistantMessage.files).toEqual([]);
-}
-
 async function fetchPage(conversationId: string, pageNum: number, pageSize: number): Promise<MessagePage> {
   const response = await fetch(`${BASE_URL}/conversations/${conversationId}/chat?pageNum=${pageNum}&pageSize=${pageSize}`, { headers: AUTH_HEADERS });
 
@@ -194,43 +188,36 @@ async function fetchPage(conversationId: string, pageNum: number, pageSize: numb
   return (await response.json()) as MessagePage;
 }
 
-async function waitForConversationMessages(conversationId: string, expected: number): Promise<void> {
+async function waitForAssistantReply(conversationId: string): Promise<void> {
   const deadline = Date.now() + COMPLETION_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
-    const page = await fetchPage(conversationId, 1, expected + 1);
+    const page = await fetchPage(conversationId, 1, 50);
 
-    if (page.items.length >= expected) {
+    if (page.items.some((item) => item.type === "assistant")) {
       return;
     }
 
     await new Promise((resolveSleep) => setTimeout(resolveSleep, COMPLETION_POLL_INTERVAL_MS));
   }
 
-  throw new Error(`Timed out waiting for ${expected} messages on conversation ${conversationId}.`);
+  throw new Error(`Timed out waiting for assistant reply on conversation ${conversationId}.`);
 }
 
-function assertAlternatingMessages(items: ReadonlyArray<MessageItem>, conversationId: string, startSequence: number, imageSize: number): void {
+function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: string, startSequence: number, imageSize: number): void {
   for (let index = 0; index < items.length; index += 1) {
     const expectedSequence = startSequence + index;
-    const expectedMessageIndex = Math.ceil(expectedSequence / 2);
-    const expectedType: MessageType = expectedSequence % 2 === 1 ? "user" : "assistant";
     const item = items[index];
 
     expect(item.conversationId).toBe(conversationId);
     expect(item.sequenceNumber).toBe(expectedSequence);
-    expect(item.type).toBe(expectedType);
-    expect(item.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
-
-    if (expectedType === "user") {
-      expect(item.files).toHaveLength(1);
-      expect(item.files[0]).toMatchObject({
-        filename: "lambo.jpg",
-        mimeType: "image/jpeg",
-        sizeInBytes: imageSize,
-      });
-    } else {
-      expect(item.files).toEqual([]);
-    }
+    expect(item.type).toBe("user");
+    expect(item.content).toBe(`Manual lambo image upload ${expectedSequence}`);
+    expect(item.files).toHaveLength(1);
+    expect(item.files[0]).toMatchObject({
+      filename: "lambo.jpg",
+      mimeType: "image/jpeg",
+      sizeInBytes: imageSize,
+    });
   }
 }

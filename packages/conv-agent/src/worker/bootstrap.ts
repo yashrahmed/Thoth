@@ -10,9 +10,9 @@ import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgr
 import { PostgresFileRepository } from "../adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
 import { CloudflareQueueLlmCompletionDispatcher, type LlmCompletionQueueMessage } from "../adapter/queue/cf-queue-llm-completion-dispatcher";
+import { NoOpLlmCompletionDispatcher } from "../adapter/queue/noop-llm-completion-dispatcher";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
-import { AppendMessageDirectFlow } from "../application/append-message-direct-flow";
 import { CreateConversationFlow } from "../application/create-conversation-flow";
 import { DeleteConversationFlow } from "../application/delete-conversation-flow";
 import { GetConversationFlow } from "../application/get-conversation-flow";
@@ -120,11 +120,14 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
       fileDomainService,
       llmCompletionDispatcher,
     ),
-    appendMessageDirect: new AppendMessageDirectFlow(
+    // The /append-direct route persists user messages without triggering an LLM completion,
+    // so it shares the append flow but skips the queue dispatch via a no-op dispatcher.
+    appendMessageDirect: new AppendMessageToConversationFlow(
       conversationDomainService,
       appendUserMessageDomainService,
       messageDomainService,
       fileDomainService,
+      new NoOpLlmCompletionDispatcher(),
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });

@@ -6,7 +6,6 @@ import {
   type AppendMessageRequest as ApplicationAppendMessageRequest,
   type Attachment,
 } from "../../application/append-message-to-conversation-flow";
-import type { AppendMessageDirectFlow } from "../../application/append-message-direct-flow";
 import type { CreateConversationFlow } from "../../application/create-conversation-flow";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
@@ -43,7 +42,7 @@ interface ConversationHttpHandlerDeps {
   readonly listConversations: ListConversationsFlow;
   readonly deleteConversation: DeleteConversationFlow;
   readonly appendMessageToConversation: AppendMessageToConversationFlow;
-  readonly appendMessageDirect: AppendMessageDirectFlow;
+  readonly appendMessageDirect: AppendMessageToConversationFlow;
   readonly getMessagesOnConversation: GetMessagesOnConversationFlow;
 }
 

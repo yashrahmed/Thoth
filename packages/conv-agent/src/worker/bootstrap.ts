@@ -12,6 +12,7 @@ import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-
 import { CloudflareQueueLlmCompletionDispatcher, type LlmCompletionQueueMessage } from "../adapter/queue/cf-queue-llm-completion-dispatcher";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
+import { AppendMessageDirectFlow } from "../application/append-message-direct-flow";
 import { CreateConversationFlow } from "../application/create-conversation-flow";
 import { DeleteConversationFlow } from "../application/delete-conversation-flow";
 import { GetConversationFlow } from "../application/get-conversation-flow";
@@ -118,6 +119,12 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
       messageDomainService,
       fileDomainService,
       llmCompletionDispatcher,
+    ),
+    appendMessageDirect: new AppendMessageDirectFlow(
+      conversationDomainService,
+      appendUserMessageDomainService,
+      messageDomainService,
+      fileDomainService,
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });

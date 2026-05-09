@@ -6,6 +6,7 @@ import {
   type AppendMessageRequest as ApplicationAppendMessageRequest,
   type Attachment,
 } from "../../application/append-message-to-conversation-flow";
+import type { AppendMessageDirectFlow } from "../../application/append-message-direct-flow";
 import type { CreateConversationFlow } from "../../application/create-conversation-flow";
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
@@ -42,6 +43,7 @@ interface ConversationHttpHandlerDeps {
   readonly listConversations: ListConversationsFlow;
   readonly deleteConversation: DeleteConversationFlow;
   readonly appendMessageToConversation: AppendMessageToConversationFlow;
+  readonly appendMessageDirect: AppendMessageDirectFlow;
   readonly getMessagesOnConversation: GetMessagesOnConversationFlow;
 }
 
@@ -119,7 +121,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     return c.json(new PageResponse(result.value.map(ConversationResponse.fromConversation), pageNum, pageSize));
   });
 
-  app.post("/conversations/:id/chat", async (c) => {
+  app.post("/conversations/:id/add-to-conv", async (c) => {
     const conversationId = c.req.param("id");
     const appendRequestResult = await parseAppendMessageRequest(c.req.raw, conversationId);
 
@@ -128,6 +130,23 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     }
 
     const result = await deps.appendMessageToConversation.execute(appendRequestResult.value);
+
+    if (!result.ok) {
+      return mapError(c, result.error);
+    }
+
+    return c.body(null, 204);
+  });
+
+  app.post("/conversations/:id/append-direct", async (c) => {
+    const conversationId = c.req.param("id");
+    const appendRequestResult = await parseAppendMessageRequest(c.req.raw, conversationId);
+
+    if (!appendRequestResult.ok) {
+      return mapError(c, appendRequestResult.error);
+    }
+
+    const result = await deps.appendMessageDirect.execute(appendRequestResult.value);
 
     if (!result.ok) {
       return mapError(c, result.error);

@@ -389,7 +389,7 @@ export function App() {
         formData.append("attachment", file);
       }
 
-      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/chat`), {
+      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/add-to-conv`), {
         method: "POST",
         body: formData,
       });

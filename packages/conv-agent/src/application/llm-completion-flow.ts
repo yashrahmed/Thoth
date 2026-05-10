@@ -139,6 +139,7 @@ export class LlmCompletionFlow {
     return messages.map((message) => ({
       type: message.type,
       content: message.content,
+      createdAt: message.createdAt,
       files: filesByMessageId.get(message.id) ?? [],
     }));
   }

@@ -6,6 +6,7 @@ import type { LlmCompletionService } from "../../domain/contracts/llm-completion
 import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
+import { withSentAtHeader } from "./sent-at-header";
 
 export const OPENAI_LLM_MODEL = "gpt-5.5";
 const MAX_TOOL_CALL_ROUNDS = 5;
@@ -96,7 +97,7 @@ function toLangChainMessage(message: LlmCompletionInputMessage): BaseMessage {
     case LLMMessageType.User:
       return toHumanMessage(message);
     case LLMMessageType.Assistant:
-      return new AIMessage(message.content);
+      return new AIMessage(withSentAtHeader(message));
     case LLMMessageType.System:
       return new SystemMessage(message.content);
     case LLMMessageType.Tool:
@@ -106,22 +107,20 @@ function toLangChainMessage(message: LlmCompletionInputMessage): BaseMessage {
 }
 
 function toHumanMessage(message: LlmCompletionInputMessage): HumanMessage {
+  const text = withSentAtHeader(message);
+
   if (message.files.length === 0) {
-    return new HumanMessage(message.content);
+    return new HumanMessage(text);
   }
 
   return new HumanMessage({
-    content: toHumanMessageContentBlocks(message),
+    content: toHumanMessageContentBlocks(message, text),
     response_metadata: { output_version: "v1" },
   });
 }
 
-function toHumanMessageContentBlocks(message: LlmCompletionInputMessage): ContentBlock[] {
-  const contentBlocks: ContentBlock[] = [];
-
-  if (message.content.length > 0) {
-    contentBlocks.push({ type: "text", text: message.content });
-  }
+function toHumanMessageContentBlocks(message: LlmCompletionInputMessage, text: string): ContentBlock[] {
+  const contentBlocks: ContentBlock[] = [{ type: "text", text }];
 
   contentBlocks.push(
     ...message.files.map((file) => ({

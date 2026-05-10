@@ -101,6 +101,7 @@ test("signs message files before calling the LLM completion service", async () =
       {
         type: LLMMessageType.User,
         content: "Summarize this file",
+        createdAt,
         files: [
           {
             filename: "report.pdf",

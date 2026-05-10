@@ -3,6 +3,7 @@ import type { LlmCompletionService } from "../../domain/contracts/llm-completion
 import type { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { success, type Result } from "../../domain/objects/result";
+import { withSentAtHeader } from "./sent-at-header";
 
 export class PlaceholderLlmAdapter implements LlmCompletionService {
   constructor(private readonly config: LlmConfig) {}
@@ -23,8 +24,10 @@ export class PlaceholderLlmAdapter implements LlmCompletionService {
       });
     }
 
+    const renderedLatest = withSentAtHeader(latestMessage);
+
     if (latestMessage.content.includes("[simulate-tool-trace]")) {
-      const visibleContent = latestMessage.content.replace("[simulate-tool-trace]", "").trim();
+      const visibleContent = renderedLatest.replace("[simulate-tool-trace]", "").trim();
 
       return success({
         messages: [
@@ -48,7 +51,7 @@ export class PlaceholderLlmAdapter implements LlmCompletionService {
       messages: [
         {
           type: LLMMessageType.Assistant,
-          content: latestMessage.content.trim().length > 0 ? latestMessage.content : "No textual content available.",
+          content: renderedLatest.trim().length > 0 ? renderedLatest : "No textual content available.",
         },
       ],
     });

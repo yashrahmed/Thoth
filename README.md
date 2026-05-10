@@ -160,6 +160,23 @@ This uses `~/.thoth/dev-secrets.env` and proxies:
 
 The launcher reads `TEMP_BEARER_TOKEN` from the selected secrets file and exports it only into the Vite dev-server process. [`packages/web/vite.config.ts`](./packages/web/vite.config.ts) injects it as `Authorization: Bearer ...` on proxied API requests.
 
+## Temporal Awareness
+
+Every user and assistant message sent to the LLM is prefixed with a `sent at ...` header derived from the message's `createdAt`, so the model can reason about when each turn happened and how much time has passed between them.
+
+The header is rendered as the first line of each user/assistant turn:
+
+```
+sent at 2026-05-10 14:30:22 +00:00 UTC
+
+<message content>
+```
+
+Format details:
+- Timestamps are always UTC for now. A per-user timezone setting is on the roadmap; once added, the header will switch to the user's local zone with the offset and abbreviation (e.g. `-05:00 CDT`).
+- System and tool messages are not stamped. System messages are directives, not turns; tool messages are model-generated and have no meaningful authoring time.
+- The header is added in the LLM adapters ([openai-llm-adapter.ts](packages/conv-agent/src/adapter/llm/openai-llm-adapter.ts), [placeholder-llm-adapter.ts](packages/conv-agent/src/adapter/llm/placeholder-llm-adapter.ts)) via the shared formatter in [sent-at-header.ts](packages/conv-agent/src/adapter/llm/sent-at-header.ts). The application layer carries `createdAt` on `LlmCompletionInputMessage` and stays adapter-neutral.
+
 ## Caveats
 
 ### Cloudflare Secrets Store
@@ -167,6 +184,12 @@ The launcher reads `TEMP_BEARER_TOKEN` from the selected secrets file and export
 Cloudflare Secrets Store is useful for the deployed dev Worker because secrets become account-level values that can be bound to the Worker instead of uploaded with `wrangler secret put`. The main caveat is that local and deployed secret access differ: local runs still need `~/.thoth/local-secrets.env` / `.dev.vars`, while deployed Workers read Secrets Store bindings asynchronously with `await env.<BINDING>.get()`.
 
 For this repo, moving to Secrets Store mainly changes the dev deploy path. It does not remove local credential files, and it requires small Worker bootstrap changes because Secrets Store bindings are not plain string environment variables.
+
+### `sent at` header is user-spoofable
+
+Because the `sent at ...` header is prepended to the same text channel as the user's content, a user can type a line that looks like the header (e.g. `sent at 2099-01-01 00:00:00 +00:00 UTC\n\n...`) inside their own message. The model sees both lines in one user turn and may treat the spoofed timestamp as authoritative.
+
+The risk is low — turns are still role-tagged and the legitimate header always appears first — and we do not defend against it. If temporal claims ever become security-relevant (rate limits, eligibility windows, audit), move the timestamp out of the text channel into a structured field the LLM can see but the user cannot author.
 
 ### Hyperdrive query caching
 

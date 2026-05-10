@@ -10,8 +10,7 @@ thoth/
 │   ├── conv-agent/      # Conversation backend, deployed as a Cloudflare Worker
 │   ├── web/             # React + Vite web app
 │   └── mobile/          # React Native scaffold (placeholder)
-├── deployment/          # local + dev deploy scripts, wrangler configs, docker-compose
-├── integration/         # docker-compose + script for integration-test infra
+├── deployment/          # local + dev deploy scripts, wrangler configs, docker-compose, system-test runner
 └── docs/                # Architecture and design docs
 ```
 
@@ -210,16 +209,16 @@ packages/conv-agent/node_modules/.bin/wrangler hyperdrive update <hyperdrive-id>
 
 The current dev Hyperdrive id is listed in `deployment/dev/wrangler-cloud-dev.toml`.
 
-## Running Integration Tests
+## Running System Tests
 
-The integration suite drives an already-running `conv-agent` Worker over HTTP. The test runner does not start or stop services, and it does not run Flyway migrations.
+The system test suite drives an already-running `conv-agent` Worker over HTTP against real infrastructure (Postgres, R2, the LLM provider). The test runner does not start or stop services, and it does not run Flyway migrations.
 
 Run against the local profile:
 
 ```sh
 ./deployment/run-flyway-migrations.sh local
 ./deployment/local/launch-all.sh start
-./deployment/integrations/run-integration-tests.sh
+./deployment/system-tests/run-system-tests.sh
 ```
 
 When you are done with the local stack:
@@ -232,15 +231,15 @@ Run against the deployed dev profile:
 
 ```sh
 ./deployment/run-flyway-migrations.sh dev
-./deployment/integrations/run-integration-tests.sh dev
+./deployment/system-tests/run-system-tests.sh dev
 ```
 
-[`deployment/integrations/run-integration-tests.sh`](./deployment/integrations/run-integration-tests.sh) supports `local` and `dev` profiles:
+[`deployment/system-tests/run-system-tests.sh`](./deployment/system-tests/run-system-tests.sh) supports `local` and `dev` profiles:
 
 1. Loads `TEMP_BEARER_TOKEN` from `~/.thoth/{profile}-secrets.env`.
 2. Sets `CONV_AGENT_URL` to `http://127.0.0.1:3001` for `local` or `https://conv-agent.yashrahmed.workers.dev` for `dev`.
 3. Polls `{CONV_AGENT_URL}/health` until the worker is ready.
-4. Runs `bun test --timeout 180000 src/integration` from `packages/conv-agent`. The suite (`src/integration/conv-agent-it.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
+4. Runs `bun test --timeout 180000 src/system-tests` from `packages/conv-agent`. The suite (`src/system-tests/conv-agent-st.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
 
 Pass extra Bun test arguments after the optional profile.
 

@@ -25,7 +25,7 @@ case "$PROFILE" in
     ;;
   *)
     echo "Unsupported profile: $PROFILE" >&2
-    echo "Usage: ./deployment/integrations/run-integration-tests.sh [profile=${DEFAULT_PROFILE}] [bun test args...]" >&2
+    echo "Usage: ./deployment/system-tests/run-system-tests.sh [profile=${DEFAULT_PROFILE}] [bun test args...]" >&2
     echo "Supported profiles: local, dev" >&2
     exit 1
     ;;
@@ -85,8 +85,8 @@ while ! curl -sS -o /dev/null -f "$CONV_AGENT_URL/health"; do
   sleep 1
 done
 
-echo "Running conv-agent integration tests with profile '$PROFILE'."
+echo "Running conv-agent system tests with profile '$PROFILE'."
 echo "Target: $CONV_AGENT_URL"
 
 cd "$REPO_ROOT/packages/conv-agent"
-bun test --timeout 180000 src/integration/conv-agent-it.test.ts "$@"
+bun test --timeout 180000 src/system-tests/conv-agent-st.test.ts "$@"

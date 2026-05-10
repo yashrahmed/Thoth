@@ -10,7 +10,7 @@ const COMPLETION_TIMEOUT_MS = 30_000;
 const COMPLETION_POLL_INTERVAL_MS = 200;
 
 if (!BEARER_TOKEN) {
-  throw new Error("CONV_AGENT_BEARER_TOKEN is required to run integration tests.");
+  throw new Error("CONV_AGENT_BEARER_TOKEN is required to run system tests.");
 }
 
 const AUTH_HEADERS: Record<string, string> = { authorization: `Bearer ${BEARER_TOKEN}` };
@@ -36,7 +36,7 @@ interface MessagePage {
   readonly pageSize: number;
 }
 
-describe("conv-agent HTTP integration", () => {
+describe("conv-agent HTTP system test", () => {
   beforeAll(async () => {
     const response = await fetch(`${BASE_URL}/health`);
 

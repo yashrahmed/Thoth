@@ -19,4 +19,4 @@ fi
 set +a
 
 cd "$REPO_ROOT"
-bun test --timeout 180000 packages/conv-agent/src/integration/llm-file-upload-it.test.ts
+bun test --timeout 180000 packages/conv-agent/src/system-tests/llm-file-upload-st.test.ts

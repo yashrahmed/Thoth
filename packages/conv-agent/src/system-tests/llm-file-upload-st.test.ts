@@ -20,7 +20,7 @@ const TEST_FILE_FOLDER = "conv-agent/test-files";
 const DEFAULT_BLOB_STORAGE_REGION = "auto";
 const SIGNED_URL_EXPIRES_IN_SECONDS = 600;
 
-describe("LLM file upload integration", () => {
+describe("LLM file upload system test", () => {
   test("uploads a test image to R2, signs it, sends it to the LLM, and prints the response", async () => {
     const response = await completeWithUploadedTestFile();
 
@@ -78,7 +78,7 @@ async function completeWithUploadedTestFile(): Promise<string> {
   );
   const now = new Date();
   const signedUrlResult = await fileSignedUrlGenerator.createSignedUrl(
-    new DomainFile("llm-file-upload-it-file", "llm-file-upload-it-message", uploadResult.value, filename, TEST_FILE_MIME_TYPE, fileBytes.byteLength, now, now),
+    new DomainFile("llm-file-upload-st-file", "llm-file-upload-st-message", uploadResult.value, filename, TEST_FILE_MIME_TYPE, fileBytes.byteLength, now, now),
     { expiry_time_sec: SIGNED_URL_EXPIRES_IN_SECONDS },
   );
 

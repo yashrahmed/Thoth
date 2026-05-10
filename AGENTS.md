@@ -89,7 +89,7 @@ Place behavior by responsibility rather than by convenience.
 
 - Keep SQL migrations as the source of truth for persistence shape.
 - Keep domain entities and contracts independent from the database schema.
-- Add repository integration tests that run against the local Postgres
+- Add repository system tests that run against the local Postgres
   container and exercise contracts end to end.
 - Prefer this approach to preserve explicit SQL control, avoid ORM lock-in,
   and catch schema drift with real database-backed verification.

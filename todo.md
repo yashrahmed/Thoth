@@ -1,24 +1,21 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Examine async usage in the context of worker execution.
-2. Understand the Cloudflare security model.
-3. Integrate an actual LLM and make it useful locally.
-   1. Integrate into completions flow.
-      1. Would signed URL's be generated for all messages with files everytime? If so, then this needs to be fixed.
-   2. Perform a local test + Figure out md rendering.
-   3. Test with dev deployment.
-   4. Integrate timestamps (and deltas into the message payload)?
-4. Trials for Auth + Supporting Oauth and multitenancy.
-5. Understand how CF agents work.
-6. Performance improvments.
+1. Integrate timestamps (and deltas into the message payload)?
+2. Trials for Auth + Supporting Oauth and multitenancy.
+3. Examine async usage in the context of worker execution.
+4. Performance improvments.
    1. Separate worker for completions?
    2. Research Worker KV cache.
-   3. ...TBD..I do not have that many ideas as of now.
+   3. Figure out a way around repeated signing.
+5. Understand how CF agents work.
+6. Understand the Cloudflare security model.
 7. Set up a basic deploy pipeline.
 
 #### UI
 1. Build a basic but chat UI.
+2. Checkout [OpenWeb UI](https://docs.openwebui.com/).
+3. Figure out md rendering.
 
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.
  ```I will move this into a new project. I wish to be able to build a graph where the node describes the code components```.
@@ -37,6 +34,7 @@
 Open Question -
 
 1. How do I improve LLM planning?
-   1. You don't. A human in the loop system is a must at this point in time.
-   2. Increase the bandwidth b/w the LLMs plans and the engineer making it easier to navigate the codebase and understand the machine's intent. See #2.
-   3. For now, it may be prudent to develop tools to enable "gardening".
+   1. Experiment with building workflows.****
+   2. You don't. A human in the loop system is a must at this point in time.
+   3. Increase the bandwidth b/w the LLMs plans and the engineer making it easier to navigate the codebase and understand the machine's intent. See #2.
+   4. For now, it may be prudent to develop tools to enable "gardening".

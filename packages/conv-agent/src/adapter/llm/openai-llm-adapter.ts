@@ -6,8 +6,6 @@ import type { LlmCompletionService } from "../../domain/contracts/llm-completion
 import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
-import { withSentAtHeader } from "./sent-at-header";
-import { SYSTEM_PROMPT } from "./system-prompt";
 
 export const OPENAI_LLM_MODEL = "gpt-5.5";
 const MAX_TOOL_CALL_ROUNDS = 5;
@@ -39,7 +37,7 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
 
   async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>> {
     try {
-      const completionMessages = await this.complete([new SystemMessage(SYSTEM_PROMPT), ...messages.map(toLangChainMessage)]);
+      const completionMessages = await this.complete(messages.map(toLangChainMessage));
 
       if (completionMessages.length === 0) {
         return success({ messages: [] });
@@ -98,7 +96,7 @@ function toLangChainMessage(message: LlmCompletionInputMessage): BaseMessage {
     case LLMMessageType.User:
       return toHumanMessage(message);
     case LLMMessageType.Assistant:
-      return new AIMessage(withSentAtHeader(message));
+      return new AIMessage(message.content);
     case LLMMessageType.System:
       return new SystemMessage(message.content);
     case LLMMessageType.Tool:
@@ -108,20 +106,22 @@ function toLangChainMessage(message: LlmCompletionInputMessage): BaseMessage {
 }
 
 function toHumanMessage(message: LlmCompletionInputMessage): HumanMessage {
-  const text = withSentAtHeader(message);
-
   if (message.files.length === 0) {
-    return new HumanMessage(text);
+    return new HumanMessage(message.content);
   }
 
   return new HumanMessage({
-    content: toHumanMessageContentBlocks(message, text),
+    content: toHumanMessageContentBlocks(message),
     response_metadata: { output_version: "v1" },
   });
 }
 
-function toHumanMessageContentBlocks(message: LlmCompletionInputMessage, text: string): ContentBlock[] {
-  const contentBlocks: ContentBlock[] = [{ type: "text", text }];
+function toHumanMessageContentBlocks(message: LlmCompletionInputMessage): ContentBlock[] {
+  const contentBlocks: ContentBlock[] = [];
+
+  if (message.content.length > 0) {
+    contentBlocks.push({ type: "text", text: message.content });
+  }
 
   contentBlocks.push(
     ...message.files.map((file) => ({

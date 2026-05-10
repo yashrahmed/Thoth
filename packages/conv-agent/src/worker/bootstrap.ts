@@ -26,6 +26,7 @@ import { DeleteConversationGraphDomainService } from "../domain/services/delete-
 import { FileAccessDomainService } from "../domain/services/file-access-domain-service";
 import { FileDomainService } from "../domain/services/file-domain-service";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
+import { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
 import type { BlobStorageConfig, LlmConfig } from "../config/config";
@@ -99,12 +100,16 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
 
   const llmCompletionDispatcher = new CloudflareQueueLlmCompletionDispatcher(env.LLM_QUEUE);
+  const llmPromptDomainService = new LlmPromptDomainService();
+  const fileAccessDomainService = new FileAccessDomainService(fileSignedUrlGenerator);
+  const openAiLlmAdapter = new OpenAiLlmAdapter(llmConfig);
   const llmCompletionFlow = new LlmCompletionFlow(
     messageDomainService,
     fileDomainService,
-    new FileAccessDomainService(fileSignedUrlGenerator),
-    new OpenAiLlmAdapter(llmConfig),
+    fileAccessDomainService,
+    openAiLlmAdapter,
     appendUserMessageDomainService,
+    llmPromptDomainService,
   );
 
   const httpHandler = createConversationHttpHandler({

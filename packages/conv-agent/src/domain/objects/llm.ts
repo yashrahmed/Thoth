@@ -16,7 +16,6 @@ export interface LlmCompletionInputFile {
 export interface LlmCompletionInputMessage {
   readonly type: LLMMessageType;
   readonly content: string;
-  readonly createdAt: Date;
   readonly files: ReadonlyArray<LlmCompletionInputFile>;
 }
 

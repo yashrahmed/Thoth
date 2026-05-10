@@ -1,6 +1,7 @@
 import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import type { FileAccessDomainService, SignedFileAccess } from "../domain/services/file-access-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
+import type { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-service";
 import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../domain/objects/llm";
 import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
@@ -22,6 +23,7 @@ export class LlmCompletionFlow {
     private readonly fileAccessDomainService: FileAccessDomainService,
     private readonly llmCompletionService: LlmCompletionPort,
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
+    private readonly llmPromptDomainService: LlmPromptDomainService,
   ) {}
 
   async execute(request: LlmCompletionRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
@@ -136,11 +138,12 @@ export class LlmCompletionFlow {
       filesByMessageId.set(file.messageId, messageFiles);
     }
 
-    return messages.map((message) => ({
+    const renderedMessages = messages.map((message) => ({
       type: message.type,
-      content: message.content,
-      createdAt: message.createdAt,
+      content: this.llmPromptDomainService.renderMessageContent(message),
       files: filesByMessageId.get(message.id) ?? [],
     }));
+
+    return [this.llmPromptDomainService.buildSystemPrompt(), ...renderedMessages];
   }
 }

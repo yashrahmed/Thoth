@@ -33,7 +33,6 @@ describe("LLM file upload integration", () => {
       {
         type: LLMMessageType.User,
         content: TEXT_ONLY_TEST_MESSAGE,
-        createdAt: new Date(),
         files: [],
       },
     ]);
@@ -91,7 +90,6 @@ async function completeWithUploadedTestFile(): Promise<string> {
     {
       type: LLMMessageType.User,
       content: TEST_MESSAGE,
-      createdAt: now,
       files: [
         {
           filename,

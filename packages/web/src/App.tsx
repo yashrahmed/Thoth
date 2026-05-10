@@ -655,7 +655,10 @@ function MessageBubble(props: { readonly message: ChatMessage }) {
     <article style={isUserMessage ? userBubbleWrapStyle : assistantBubbleWrapStyle}>
       <div style={isUserMessage ? userBubbleStyle : assistantBubbleStyle}>
         <div style={bubbleMetaStyle}>
-          <span>{isUserMessage ? "You" : "Assistant"}</span>
+          <div style={bubbleMetaLeftStyle}>
+            <span>{isUserMessage ? "You" : "Assistant"}</span>
+            <span style={bubbleTimestampStyle}>{formatMessageTimestamp(props.message.createdAt)}</span>
+          </div>
           <span>#{props.message.sequenceNumber}</span>
         </div>
         {props.message.content ? <p style={messageTextStyle}>{props.message.content}</p> : null}
@@ -884,6 +887,17 @@ function formatTimestamp(isoTimestamp: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatMessageTimestamp(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return isoTimestamp;
+  }
+
+  const iso = date.toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)} +00:00 UTC`;
 }
 
 function formatFileSize(sizeInBytes: number): string {
@@ -1228,6 +1242,20 @@ const bubbleMetaStyle: React.CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.1em",
   opacity: 0.72,
+};
+
+const bubbleMetaLeftStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "10px",
+  alignItems: "baseline",
+  flexWrap: "wrap",
+};
+
+const bubbleTimestampStyle: React.CSSProperties = {
+  fontVariantNumeric: "tabular-nums",
+  letterSpacing: "0.04em",
+  textTransform: "none",
+  opacity: 0.85,
 };
 
 const messageTextStyle: React.CSSProperties = {

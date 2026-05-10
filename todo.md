@@ -1,21 +1,23 @@
 ### Track 1 - Developing the app in a traditional way.
 
 #### Backend
-1. Integrate timestamps (and deltas into the message payload)?
+1. Examine async usage in the context of worker execution.
 2. Trials for Auth + Supporting Oauth and multitenancy.
-3. Examine async usage in the context of worker execution.
+3. Add support for conversation names.
 4. Performance improvments.
-   1. Separate worker for completions?
-   2. Research Worker KV cache.
-   3. Figure out a way around repeated signing.
+   1. Separate worker for completions? -- Doesn't really work. Confirm.
+   2. See ctx.waitUntil to skip queue write?
+   3. Research Worker KV cache.
+   4. Figure out a way around repeated signing.
 5. Understand how CF agents work.
 6. Understand the Cloudflare security model.
-7. Set up a basic deploy pipeline.
+7.  Set up a basic deploy pipeline.
 
 #### UI
 1. Build a basic but chat UI.
 2. Checkout [OpenWeb UI](https://docs.openwebui.com/).
 3. Figure out md rendering.
+4. Build a model picker.
 
 ### Track 2 - Develop a mechanism to visualize the code structure and plan code changes.
  ```I will move this into a new project. I wish to be able to build a graph where the node describes the code components```.

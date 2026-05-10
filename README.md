@@ -176,6 +176,7 @@ Format details:
 - Timestamps are always UTC for now. A per-user timezone setting is on the roadmap; once added, the header will switch to the user's local zone with the offset and abbreviation (e.g. `-05:00 CDT`).
 - System and tool messages are not stamped. System messages are directives, not turns; tool messages are model-generated and have no meaningful authoring time.
 - The header is added in the LLM adapters ([openai-llm-adapter.ts](packages/conv-agent/src/adapter/llm/openai-llm-adapter.ts), [placeholder-llm-adapter.ts](packages/conv-agent/src/adapter/llm/placeholder-llm-adapter.ts)) via the shared formatter in [sent-at-header.ts](packages/conv-agent/src/adapter/llm/sent-at-header.ts). The application layer carries `createdAt` on `LlmCompletionInputMessage` and stays adapter-neutral.
+- Because assistant turns also carry the header, the model would otherwise learn to mimic the format and emit a literal `sent at ...` line at the top of its replies. The OpenAI adapter prepends a [system prompt](packages/conv-agent/src/adapter/llm/system-prompt.ts) on every call instructing the model to treat the header as system-injected metadata and never reproduce it. This is defense-in-depth, not a guarantee — see the caveat below.
 
 ## Caveats
 

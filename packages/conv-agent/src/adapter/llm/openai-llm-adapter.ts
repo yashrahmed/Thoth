@@ -7,6 +7,7 @@ import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 import { withSentAtHeader } from "./sent-at-header";
+import { SYSTEM_PROMPT } from "./system-prompt";
 
 export const OPENAI_LLM_MODEL = "gpt-5.5";
 const MAX_TOOL_CALL_ROUNDS = 5;
@@ -38,7 +39,7 @@ export class OpenAiLlmAdapter implements LlmCompletionService {
 
   async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>> {
     try {
-      const completionMessages = await this.complete(messages.map(toLangChainMessage));
+      const completionMessages = await this.complete([new SystemMessage(SYSTEM_PROMPT), ...messages.map(toLangChainMessage)]);
 
       if (completionMessages.length === 0) {
         return success({ messages: [] });

@@ -4,17 +4,19 @@ import type { File, MessageWithFiles } from "./message-types";
 
 export class ConversationResponse {
   readonly id: string;
+  readonly title: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 
-  constructor(id: string, createdAt: string, updatedAt: string) {
+  constructor(id: string, title: string | null, createdAt: string, updatedAt: string) {
     this.id = id;
+    this.title = title;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }
 
   static fromConversation(conversation: Conversation): ConversationResponse {
-    return new ConversationResponse(conversation.id, conversation.createdAt.toISOString(), conversation.updatedAt.toISOString());
+    return new ConversationResponse(conversation.id, conversation.title, conversation.createdAt.toISOString(), conversation.updatedAt.toISOString());
   }
 }
 

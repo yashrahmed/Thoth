@@ -6,6 +6,7 @@ import type { PostgresDatabase } from "./postgres-database";
 
 interface ConversationRow {
   readonly id: string;
+  readonly title: string | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
 }
@@ -16,9 +17,9 @@ export class PostgresConversationRepository implements ConversationRepository {
   async upsertConversationRow(record: Omit<Conversation, "id">): Promise<Result<Conversation, StoreError>> {
     try {
       const rows = await this.sql<ConversationRow[]>`
-        insert into thoth.conversations (created_at, updated_at)
-        values (${record.createdAt.toISOString()}, ${record.updatedAt.toISOString()})
-        returning id, created_at, updated_at
+        insert into thoth.conversations (title, created_at, updated_at)
+        values (${record.title}, ${record.createdAt.toISOString()}, ${record.updatedAt.toISOString()})
+        returning id, title, created_at, updated_at
       `;
 
       return mapRow(rows[0], StoreOperation.Persist);
@@ -30,7 +31,7 @@ export class PostgresConversationRepository implements ConversationRepository {
   async selectConversationRow(conversationId: string): Promise<Result<Conversation, NotFoundError | StoreError>> {
     try {
       const rows = await this.sql<ConversationRow[]>`
-        select id, created_at, updated_at
+        select id, title, created_at, updated_at
         from thoth.conversations
         where id = ${conversationId}
       `;
@@ -51,7 +52,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     try {
       const offset = (request.pageNum - 1) * request.pageSize;
       const rows = await this.sql<ConversationRow[]>`
-        select id, created_at, updated_at
+        select id, title, created_at, updated_at
         from thoth.conversations
         order by updated_at desc, id desc
         limit ${request.pageSize}
@@ -96,7 +97,7 @@ function mapRow(row: ConversationRow | undefined, operation: StoreOperation): Re
   }
 
   try {
-    return success(new Conversation(row.id, toDate(row.created_at), toDate(row.updated_at)));
+    return success(new Conversation(row.id, row.title, toDate(row.created_at), toDate(row.updated_at)));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Conversation, operation, error.message));

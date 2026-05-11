@@ -1,20 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  FileArchive,
-  FileCode,
-  FileImage,
-  FileMusic,
-  FileQuestionMark,
-  FileSpreadsheet,
-  FileText,
-  FileType,
-  FileVideoCamera,
-  Presentation,
-  type LucideIcon,
-} from "lucide-react";
+import { FileArchive, FileCode, FileImage, FileMusic, FileQuestionMark, FileSpreadsheet, FileText, FileType, FileVideoCamera, Presentation, type LucideIcon } from "lucide-react";
 
 type ConversationResponse = {
   readonly id: string;
+  readonly title: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 };
@@ -424,12 +413,15 @@ export function App() {
     setSelectedFiles((currentFiles) => currentFiles.filter((_, index) => index !== indexToRemove));
   }
 
+  const activeConversation = conversations.find((conversation) => conversation.id === conversationId) ?? null;
+
   return (
     <div style={shellStyle}>
       <style>{globalStyles}</style>
       <div className="chat-frame" style={frameStyle}>
         <ConversationSidebar
           conversations={conversations}
+          activeConversation={activeConversation}
           conversationId={conversationId}
           booting={booting}
           sending={sending}
@@ -451,6 +443,8 @@ export function App() {
 
         <ChatPanel
           scrollerRef={scrollerRef}
+          conversation={activeConversation}
+          conversationId={conversationId}
           booting={booting}
           sending={sending}
           messages={messages}
@@ -469,6 +463,7 @@ export function App() {
 
 function ConversationSidebar(props: {
   readonly conversations: ReadonlyArray<ConversationResponse>;
+  readonly activeConversation: ConversationResponse | null;
   readonly conversationId: string;
   readonly booting: boolean;
   readonly sending: boolean;
@@ -494,7 +489,8 @@ function ConversationSidebar(props: {
       <div style={statusPanelStyle}>
         <StatusRow label="Endpoint" value={CONV_AGENT_URL} mono />
         <StatusRow label="Profile" value={THOTH_PROFILE} />
-        <StatusRow label="Conversation" value={props.conversationId || "Starting..."} mono />
+        <StatusRow label="Conversation" value={props.activeConversation ? formatConversationTitle(props.activeConversation.title) : "Starting..."} />
+        <StatusRow label="Conversation ID" value={props.conversationId || "Starting..."} mono />
         <StatusRow label="State" value={formatUiState(props.booting, props.sending, props.refreshing)} />
       </div>
 
@@ -585,7 +581,7 @@ function ConversationListItem(props: {
         }}
         style={conversationSelectButtonStyle}
       >
-        <span style={conversationButtonTitleStyle}>{formatConversationLabel(props.conversation.id)}</span>
+        <span style={conversationButtonTitleStyle}>{formatConversationTitle(props.conversation.title)}</span>
         <span style={conversationButtonMetaStyle}>{formatTimestamp(props.conversation.updatedAt)}</span>
       </button>
       <button
@@ -594,7 +590,7 @@ function ConversationListItem(props: {
           void props.onDelete(props.conversation.id);
         }}
         disabled={props.isDeleting}
-        aria-label={`Delete conversation ${props.conversation.id}`}
+        aria-label={`Delete conversation ${formatConversationTitle(props.conversation.title)}`}
         style={deleteConversationButtonStyle}
       >
         <TrashIcon />
@@ -605,6 +601,8 @@ function ConversationListItem(props: {
 
 function ChatPanel(props: {
   readonly scrollerRef: React.RefObject<HTMLDivElement | null>;
+  readonly conversation: ConversationResponse | null;
+  readonly conversationId: string;
   readonly booting: boolean;
   readonly sending: boolean;
   readonly messages: ReadonlyArray<ChatMessage>;
@@ -618,6 +616,13 @@ function ChatPanel(props: {
 }) {
   return (
     <main style={chatPanelStyle}>
+      <header style={chatHeaderStyle}>
+        <div style={chatHeaderTextStyle}>
+          <p style={chatHeaderEyebrowStyle}>Current Conversation</p>
+          <h2 style={chatHeaderTitleStyle}>{props.conversation ? formatConversationTitle(props.conversation.title) : "No Title"}</h2>
+        </div>
+        <span style={chatHeaderMetaStyle}>{props.conversationId ? formatConversationLabel(props.conversationId) : "Starting..."}</span>
+      </header>
       <MessageList scrollerRef={props.scrollerRef} booting={props.booting} messages={props.messages} />
       <Composer
         booting={props.booting}
@@ -863,7 +868,20 @@ function isArchiveFile(mimeType: string, extension: string): boolean {
 }
 
 function isCodeFile(mimeType: string, extension: string): boolean {
-  return CODE_FILE_EXTENSIONS.has(extension) || mimeType.includes("json") || mimeType.includes("xml") || mimeType.includes("yaml") || mimeType.includes("toml") || mimeType.includes("javascript");
+  return (
+    CODE_FILE_EXTENSIONS.has(extension) ||
+    mimeType.includes("json") ||
+    mimeType.includes("xml") ||
+    mimeType.includes("yaml") ||
+    mimeType.includes("toml") ||
+    mimeType.includes("javascript")
+  );
+}
+
+function formatConversationTitle(title: string | null): string {
+  const normalizedTitle = title?.trim();
+
+  return normalizedTitle ? normalizedTitle : "No Title";
 }
 
 function formatConversationLabel(id: string): string {
@@ -1142,8 +1160,10 @@ const deleteConversationButtonStyle: React.CSSProperties = {
 };
 
 const conversationButtonTitleStyle: React.CSSProperties = {
-  fontFamily: '"SFMono-Regular", Menlo, Consolas, monospace',
   fontSize: "0.86rem",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const conversationButtonMetaStyle: React.CSSProperties = {
@@ -1185,13 +1205,51 @@ const errorCardStyle: React.CSSProperties = {
 
 const chatPanelStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateRows: "minmax(0, 1fr) auto",
+  gridTemplateRows: "auto minmax(0, 1fr) auto",
   borderRadius: "32px",
   overflow: "hidden",
   background: "linear-gradient(180deg, rgba(247, 241, 232, 0.12), rgba(247, 241, 232, 0.06))",
   border: "1px solid rgba(255, 214, 179, 0.16)",
   boxShadow: "0 28px 100px rgba(0, 0, 0, 0.32)",
   backdropFilter: "blur(14px)",
+};
+
+const chatHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "16px",
+  padding: "22px 28px",
+  borderBottom: "1px solid rgba(255, 214, 179, 0.16)",
+  background: "rgba(22, 14, 11, 0.54)",
+};
+
+const chatHeaderTextStyle: React.CSSProperties = {
+  minWidth: 0,
+};
+
+const chatHeaderEyebrowStyle: React.CSSProperties = {
+  margin: "0 0 6px",
+  color: "rgba(247, 241, 232, 0.56)",
+  fontSize: "0.72rem",
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+};
+
+const chatHeaderTitleStyle: React.CSSProperties = {
+  margin: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: "1.35rem",
+  lineHeight: 1.2,
+};
+
+const chatHeaderMetaStyle: React.CSSProperties = {
+  flexShrink: 0,
+  color: "rgba(247, 241, 232, 0.62)",
+  fontFamily: '"SFMono-Regular", Menlo, Consolas, monospace',
+  fontSize: "0.8rem",
 };
 
 const messageListStyle: React.CSSProperties = {

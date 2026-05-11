@@ -55,9 +55,10 @@ describe("conv-agent HTTP system test", () => {
 
       expect(createResponse.status).toBe(201);
 
-      const createdConversation = (await createResponse.json()) as { readonly id: string };
+      const createdConversation = (await createResponse.json()) as { readonly id: string; readonly title: string | null };
 
       expect(createdConversation.id).toEqual(expect.any(String));
+      expect(createdConversation.title).toBeNull();
       conversationId = createdConversation.id;
 
       for (let index = 1; index <= 10; index += 1) {
@@ -95,7 +96,7 @@ describe("conv-agent HTTP system test", () => {
       const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { headers: AUTH_HEADERS });
 
       expect(conversationResponse.status).toBe(200);
-      expect(((await conversationResponse.json()) as { readonly id: string }).id).toBe(conversationId);
+      expect(await conversationResponse.json()).toMatchObject({ id: conversationId, title: null });
 
       const deleteResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
 
@@ -132,8 +133,9 @@ describe("conv-agent HTTP system test", () => {
 
       expect(createResponse.status).toBe(201);
 
-      const createdConversation = (await createResponse.json()) as { readonly id: string };
+      const createdConversation = (await createResponse.json()) as { readonly id: string; readonly title: string | null };
 
+      expect(createdConversation.title).toBeNull();
       conversationId = createdConversation.id;
 
       const userContent = "Reply with a short greeting.";
@@ -162,7 +164,7 @@ describe("conv-agent HTTP system test", () => {
 
       expect(assistantMessage).toBeDefined();
       expect(assistantMessage?.content.length).toBeGreaterThan(0);
-      expect((assistantMessage?.sequenceNumber ?? 0)).toBeGreaterThan(1);
+      expect(assistantMessage?.sequenceNumber ?? 0).toBeGreaterThan(1);
     } finally {
       if (conversationId) {
         await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });

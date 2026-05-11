@@ -15,6 +15,7 @@ export class ConversationDomainService {
   async createConversation(): Promise<Result<Conversation, StoreError>> {
     const timestamp = this.now();
     const recordValidationResult = this.validateConversationRecord({
+      title: null,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -24,6 +25,7 @@ export class ConversationDomainService {
     }
 
     const result = await this.conversationRepository.upsertConversationRow({
+      title: null,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -67,6 +69,7 @@ export class ConversationDomainService {
 
   private validateConversationRecord(record: Omit<Conversation, "id">): Result<void, ValidationError> {
     return firstFailure(
+      this.validateConversationTitle(record.title),
       this.genericValidationService.requireValidDate(record.createdAt, "createdAt"),
       this.genericValidationService.requireValidDate(record.updatedAt, "updatedAt"),
     );
@@ -75,10 +78,21 @@ export class ConversationDomainService {
   private validateConversation(conversation: Conversation, operation: StoreOperation): Result<Conversation, StoreError> {
     const validationResult = firstFailure(
       this.genericValidationService.requireNonEmptyString(conversation.id, "id"),
+      this.validateConversationTitle(conversation.title),
       this.genericValidationService.requireValidDate(conversation.createdAt, "createdAt"),
       this.genericValidationService.requireValidDate(conversation.updatedAt, "updatedAt"),
     );
 
     return validationResult.ok ? success(conversation) : failure(new StoreError(EntityType.Conversation, operation, validationResult.error.message));
+  }
+
+  private validateConversationTitle(title: string | null): Result<void, ValidationError> {
+    if (title === null) {
+      return success(undefined);
+    }
+
+    const titleResult = this.genericValidationService.requireNonEmptyString(title, "title");
+
+    return titleResult.ok ? success(undefined) : titleResult;
   }
 }

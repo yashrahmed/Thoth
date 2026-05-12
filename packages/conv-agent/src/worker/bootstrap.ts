@@ -19,6 +19,7 @@ import { GetConversationFlow } from "../application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "../application/get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "../application/list-conversations-flow";
 import { LlmCompletionFlow } from "../application/llm-completion-flow";
+import { UpdateConvFlow } from "../application/update-conv-flow";
 import { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { BlobDomainService } from "../domain/services/blob-domain-service";
 import { ConversationDomainService } from "../domain/services/conversation-domain-service";
@@ -65,10 +66,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     secretAccessKey: requireString(env.BLOB_STORAGE_SECRET_ACCESS_KEY, "BLOB_STORAGE_SECRET_ACCESS_KEY"),
   };
 
-  const blobRepository = new R2BlobRepository(
-    blobStorageConfig,
-    blobStorageCredentials,
-  );
+  const blobRepository = new R2BlobRepository(blobStorageConfig, blobStorageCredentials);
   const fileSignedUrlGenerator = new R2FileSignedUrlGenerator(
     {
       ...blobStorageConfig,
@@ -117,6 +115,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     createConversation: new CreateConversationFlow(conversationDomainService),
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),
+    updateConv: new UpdateConvFlow(conversationDomainService),
     deleteConversation: new DeleteConversationFlow(deleteConversationGraphDomainService, blobDomainService),
     appendMessageToConversation: new AppendMessageToConversationFlow(
       conversationDomainService,

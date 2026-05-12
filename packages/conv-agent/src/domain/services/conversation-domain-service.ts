@@ -1,6 +1,6 @@
 import type { ConversationRepository } from "../contracts/conversation-repository";
 import type { Conversation } from "../objects/conversation";
-import { EntityType, StoreError, StoreOperation, type NotFoundError, type ValidationError } from "../objects/errors";
+import { EntityType, StoreError, StoreOperation, ValidationError, type NotFoundError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { andThenAsync, failure, firstFailure, success } from "../objects/result";
 import { GenericValidationService } from "./generic-validation-service";
@@ -63,6 +63,35 @@ export class ConversationDomainService {
     return success(conversations);
   }
 
+  async renameConversation(conversationId: string, title: string | null): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
+    const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const titleResult = this.normalizeConversationTitle(title);
+
+    if (!titleResult.ok) {
+      return titleResult;
+    }
+
+    const updatedAt = this.now();
+    const updatedAtResult = this.genericValidationService.requireValidDate(updatedAt, "updatedAt");
+
+    if (!updatedAtResult.ok) {
+      return updatedAtResult;
+    }
+
+    const result = await this.conversationRepository.updateConversationTitleRow({
+      conversationId: conversationIdResult.value,
+      title: titleResult.value,
+      updatedAt,
+    });
+
+    return result.ok ? this.validateConversation(result.value, StoreOperation.Update) : result;
+  }
+
   async delete(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
     return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.conversationRepository.deleteConversationRow(id));
   }
@@ -94,5 +123,16 @@ export class ConversationDomainService {
     const titleResult = this.genericValidationService.requireNonEmptyString(title, "title");
 
     return titleResult.ok ? success(undefined) : titleResult;
+  }
+
+  private normalizeConversationTitle(title: string | null): Result<string, ValidationError> {
+    if (title === null) {
+      return failure(new ValidationError("title", "title must be present."));
+    }
+
+    const normalizedTitle = title.trim();
+    const titleResult = this.genericValidationService.requireNonEmptyString(normalizedTitle, "title");
+
+    return titleResult.ok ? success(normalizedTitle) : titleResult;
   }
 }

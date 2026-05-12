@@ -211,7 +211,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
   return (req: Request) => app.fetch(req);
 }
 
-async function parseUpdateConversationRequest(req: Request, conversationId: string): Promise<TransportResult<{ readonly conversationId: string; readonly title: string }>> {
+async function parseUpdateConversationRequest(req: Request, conversationId: string): Promise<TransportResult<{ readonly conversationId: string; readonly title: string | null }>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
@@ -230,8 +230,8 @@ async function parseUpdateConversationRequest(req: Request, conversationId: stri
     return transportFailure("body", "body must be a JSON object.");
   }
 
-  if (typeof body.title !== "string") {
-    return transportFailure("title", "title must be present.");
+  if (typeof body.title !== "string" && body.title !== null) {
+    return transportFailure("title", "title must be a string or null.");
   }
 
   return {

@@ -44,9 +44,9 @@ export class GetConversationRequest {
 
 export class UpdateConversationRequest {
   readonly conversationId: string;
-  readonly title: string;
+  readonly title: string | null;
 
-  constructor(conversationId: string, title: string) {
+  constructor(conversationId: string, title: string | null) {
     this.conversationId = conversationId;
     this.title = title;
   }

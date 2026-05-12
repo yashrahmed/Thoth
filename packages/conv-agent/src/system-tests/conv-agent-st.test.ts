@@ -84,6 +84,27 @@ describe("conv-agent HTTP system test", () => {
       expect(updatedConversation.title).toBe(title);
       expect(Date.parse(updatedConversation.updatedAt)).toBeGreaterThanOrEqual(Date.parse(createdConversation.updatedAt));
 
+      const nullTitleResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: {
+          ...AUTH_HEADERS,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ title: null }),
+      });
+
+      expect(nullTitleResponse.status).toBe(400);
+
+      const nullTitleBody = (await nullTitleResponse.json()) as { readonly error: { readonly kind: string; readonly fieldName: string; readonly message: string } };
+
+      expect(nullTitleBody).toEqual({
+        error: {
+          kind: "ValidationError",
+          fieldName: "title",
+          message: "title must be present.",
+        },
+      });
+
       const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { headers: AUTH_HEADERS });
 
       expect(conversationResponse.status).toBe(200);

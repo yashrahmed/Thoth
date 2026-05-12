@@ -36,12 +36,62 @@ interface MessagePage {
   readonly pageSize: number;
 }
 
+interface ConversationItem {
+  readonly id: string;
+  readonly title: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 describe("conv-agent HTTP system test", () => {
   beforeAll(async () => {
     const response = await fetch(`${BASE_URL}/health`);
 
     if (!response.ok) {
       throw new Error(`conv-agent health check failed at ${BASE_URL}/health (status ${response.status}).`);
+    }
+  });
+
+  test("updates a conversation title and cleans up", async () => {
+    let conversationId: string | undefined;
+
+    try {
+      const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+
+      expect(createResponse.status).toBe(201);
+
+      const createdConversation = (await createResponse.json()) as ConversationItem;
+
+      expect(createdConversation.id).toEqual(expect.any(String));
+      expect(createdConversation.title).toBeNull();
+      conversationId = createdConversation.id;
+
+      const title = "Planning Notes";
+      const updateResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: {
+          ...AUTH_HEADERS,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ title }),
+      });
+
+      expect(updateResponse.status).toBe(200);
+
+      const updatedConversation = (await updateResponse.json()) as ConversationItem;
+
+      expect(updatedConversation.id).toBe(conversationId);
+      expect(updatedConversation.title).toBe(title);
+      expect(Date.parse(updatedConversation.updatedAt)).toBeGreaterThanOrEqual(Date.parse(createdConversation.updatedAt));
+
+      const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { headers: AUTH_HEADERS });
+
+      expect(conversationResponse.status).toBe(200);
+      expect(await conversationResponse.json()).toMatchObject({ id: conversationId, title });
+    } finally {
+      if (conversationId) {
+        await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
     }
   });
 

@@ -11,6 +11,7 @@ import type { DeleteConversationFlow } from "../../application/delete-conversati
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
 import { type GetMessagesOnConversationFlow } from "../../application/get-messages-on-conversation-flow";
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
+import type { UpdateConvFlow } from "../../application/update-conv-flow";
 import { ConversationResponse, MessageResponse, PageResponse } from "../../domain/objects/response-types";
 
 interface TransportValidationError {
@@ -40,6 +41,7 @@ interface ConversationHttpHandlerDeps {
   readonly createConversation: CreateConversationFlow;
   readonly getConversation: GetConversationFlow;
   readonly listConversations: ListConversationsFlow;
+  readonly updateConv: UpdateConvFlow;
   readonly deleteConversation: DeleteConversationFlow;
   readonly appendMessageToConversation: AppendMessageToConversationFlow;
   readonly appendMessageDirect: AppendMessageToConversationFlow;
@@ -178,6 +180,23 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     return c.json(ConversationResponse.fromConversation(result.value));
   });
 
+  app.patch("/conversations/:id", async (c) => {
+    const conversationId = c.req.param("id");
+    const updateRequestResult = await parseUpdateConversationRequest(c.req.raw, conversationId);
+
+    if (!updateRequestResult.ok) {
+      return mapError(c, updateRequestResult.error);
+    }
+
+    const result = await deps.updateConv.execute(updateRequestResult.value);
+
+    if (!result.ok) {
+      return mapError(c, result.error);
+    }
+
+    return c.json(ConversationResponse.fromConversation(result.value));
+  });
+
   app.delete("/conversations/:id", async (c) => {
     const conversationId = c.req.param("id");
     const result = await deps.deleteConversation.execute({ conversationId });
@@ -190,6 +209,38 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
   });
 
   return (req: Request) => app.fetch(req);
+}
+
+async function parseUpdateConversationRequest(req: Request, conversationId: string): Promise<TransportResult<{ readonly conversationId: string; readonly title: string }>> {
+  const contentType = req.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    return transportFailure("content-type", "content-type must be application/json.");
+  }
+
+  let body: unknown;
+
+  try {
+    body = await req.json();
+  } catch {
+    return transportFailure("body", "body must be valid JSON.");
+  }
+
+  if (!isRecord(body)) {
+    return transportFailure("body", "body must be a JSON object.");
+  }
+
+  if (typeof body.title !== "string") {
+    return transportFailure("title", "title must be present.");
+  }
+
+  return {
+    ok: true,
+    value: {
+      conversationId,
+      title: body.title,
+    },
+  };
 }
 
 function mapError(c: { json: (data: unknown, status: number) => Response }, error: HandlerError): Response {
@@ -281,6 +332,10 @@ function transportFailure(fieldName: string, message: string): TransportResult<n
       message,
     },
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isMessageType(value: string): value is ApplicationMessageType {

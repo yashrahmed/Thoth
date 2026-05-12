@@ -41,3 +41,13 @@ export class GetConversationRequest {
     this.conversationId = conversationId;
   }
 }
+
+export class UpdateConversationRequest {
+  readonly conversationId: string;
+  readonly title: string;
+
+  constructor(conversationId: string, title: string) {
+    this.conversationId = conversationId;
+    this.title = title;
+  }
+}

@@ -9,6 +9,7 @@ export enum StoreOperation {
   Read = "read",
   Remove = "remove",
   ReadPage = "readPage",
+  Update = "update",
 }
 
 export class ValidationError {

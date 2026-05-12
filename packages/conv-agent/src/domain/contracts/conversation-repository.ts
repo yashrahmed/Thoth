@@ -6,5 +6,10 @@ export interface ConversationRepository {
   upsertConversationRow(record: Omit<Conversation, "id">): Promise<Result<Conversation, StoreError>>;
   selectConversationRow(conversationId: string): Promise<Result<Conversation, NotFoundError | StoreError>>;
   selectConversationPage(request: { readonly pageNum: number; readonly pageSize: number }): Promise<Result<Conversation[], StoreError>>;
+  updateConversationTitleRow(request: {
+    readonly conversationId: string;
+    readonly title: string;
+    readonly updatedAt: Date;
+  }): Promise<Result<Conversation, NotFoundError | StoreError>>;
   deleteConversationRow(conversationId: string): Promise<Result<void, StoreError>>;
 }

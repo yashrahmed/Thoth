@@ -77,6 +77,32 @@ export class PostgresConversationRepository implements ConversationRepository {
     }
   }
 
+  async updateConversationTitleRow(request: {
+    readonly conversationId: string;
+    readonly title: string;
+    readonly updatedAt: Date;
+  }): Promise<Result<Conversation, NotFoundError | StoreError>> {
+    try {
+      const rows = await this.sql<ConversationRow[]>`
+        update thoth.conversations
+        set title = ${request.title},
+            updated_at = ${request.updatedAt.toISOString()}
+        where id = ${request.conversationId}
+        returning id, title, created_at, updated_at
+      `;
+
+      const row = rows[0];
+
+      if (!row) {
+        return failure(new NotFoundError(EntityType.Conversation, request.conversationId));
+      }
+
+      return mapRow(row, StoreOperation.Update);
+    } catch (error) {
+      return failure(new StoreError(EntityType.Conversation, StoreOperation.Update, getErrorMessage(error)));
+    }
+  }
+
   async deleteConversationRow(conversationId: string): Promise<Result<void, StoreError>> {
     try {
       await this.sql`

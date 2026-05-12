@@ -63,6 +63,35 @@ export class ConversationDomainService {
     return success(conversations);
   }
 
+  async renameConversation(conversationId: string, title: string): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
+    const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const titleResult = this.normalizeConversationTitle(title);
+
+    if (!titleResult.ok) {
+      return titleResult;
+    }
+
+    const updatedAt = this.now();
+    const updatedAtResult = this.genericValidationService.requireValidDate(updatedAt, "updatedAt");
+
+    if (!updatedAtResult.ok) {
+      return updatedAtResult;
+    }
+
+    const result = await this.conversationRepository.updateConversationTitleRow({
+      conversationId: conversationIdResult.value,
+      title: titleResult.value,
+      updatedAt,
+    });
+
+    return result.ok ? this.validateConversation(result.value, StoreOperation.Update) : result;
+  }
+
   async delete(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
     return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.conversationRepository.deleteConversationRow(id));
   }
@@ -94,5 +123,12 @@ export class ConversationDomainService {
     const titleResult = this.genericValidationService.requireNonEmptyString(title, "title");
 
     return titleResult.ok ? success(undefined) : titleResult;
+  }
+
+  private normalizeConversationTitle(title: string): Result<string, ValidationError> {
+    const normalizedTitle = title.trim();
+    const titleResult = this.genericValidationService.requireNonEmptyString(normalizedTitle, "title");
+
+    return titleResult.ok ? success(normalizedTitle) : titleResult;
   }
 }

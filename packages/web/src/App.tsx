@@ -1,5 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { FileArchive, FileCode, FileImage, FileMusic, FileQuestionMark, FileSpreadsheet, FileText, FileType, FileVideoCamera, Presentation, type LucideIcon } from "lucide-react";
+import {
+  Check,
+  FileArchive,
+  FileCode,
+  FileImage,
+  FileMusic,
+  FileQuestionMark,
+  FileSpreadsheet,
+  FileText,
+  FileType,
+  FileVideoCamera,
+  Pencil,
+  Presentation,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 type ConversationResponse = {
   readonly id: string;
@@ -155,8 +170,10 @@ export function App() {
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [sending, setSending] = useState(false);
   const [deletingConversationId, setDeletingConversationId] = useState("");
+  const [updatingTitle, setUpdatingTitle] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [titleError, setTitleError] = useState("");
   const [composerError, setComposerError] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
@@ -307,7 +324,55 @@ export function App() {
     setDraft("");
     setSelectedFiles([]);
     setComposerError("");
+    setTitleError("");
     await loadMessages(id);
+  }
+
+  async function updateConversationTitle(id: string, title: string): Promise<boolean> {
+    if (!id) {
+      setTitleError("Select a conversation before updating the title.");
+      return false;
+    }
+
+    setUpdatingTitle(true);
+    setTitleError("");
+
+    try {
+      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${id}`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readResponseErrorMessage(response, `Conversation title update failed with ${response.status}.`));
+      }
+
+      const updatedConversation = (await response.json()) as ConversationResponse;
+
+      setConversations((currentConversations) => {
+        let replaced = false;
+        const nextConversations = currentConversations.map((conversation) => {
+          if (conversation.id !== updatedConversation.id) {
+            return conversation;
+          }
+
+          replaced = true;
+          return updatedConversation;
+        });
+
+        return replaced ? nextConversations : [updatedConversation, ...currentConversations];
+      });
+
+      return true;
+    } catch (caughtError) {
+      setTitleError(caughtError instanceof Error ? caughtError.message : "Unable to update the conversation title.");
+      return false;
+    } finally {
+      setUpdatingTitle(false);
+    }
   }
 
   async function deleteConversation(id: string): Promise<void> {
@@ -447,10 +512,13 @@ export function App() {
           conversationId={conversationId}
           booting={booting}
           sending={sending}
+          updatingTitle={updatingTitle}
           messages={messages}
           draft={draft}
           selectedFiles={selectedFiles}
+          titleError={titleError}
           composerError={composerError}
+          onUpdateConversationTitle={updateConversationTitle}
           onDraftChange={setDraft}
           onSendMessage={sendMessage}
           onFileSelection={handleFileSelection}
@@ -605,21 +673,92 @@ function ChatPanel(props: {
   readonly conversationId: string;
   readonly booting: boolean;
   readonly sending: boolean;
+  readonly updatingTitle: boolean;
   readonly messages: ReadonlyArray<ChatMessage>;
   readonly draft: string;
   readonly selectedFiles: ReadonlyArray<File>;
+  readonly titleError: string;
   readonly composerError: string;
+  readonly onUpdateConversationTitle: (conversationId: string, title: string) => Promise<boolean>;
   readonly onDraftChange: (draft: string) => void;
   readonly onSendMessage: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   readonly onFileSelection: (event: React.ChangeEvent<HTMLInputElement>) => void;
   readonly onRemoveSelectedFile: (index: number) => void;
 }) {
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+
+  useEffect(() => {
+    setEditingTitle(false);
+    setTitleDraft(props.conversation?.title ?? "");
+  }, [props.conversation?.id]);
+
+  useEffect(() => {
+    if (!editingTitle) {
+      setTitleDraft(props.conversation?.title ?? "");
+    }
+  }, [editingTitle, props.conversation?.title]);
+
+  async function submitTitleUpdate(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!props.conversation) {
+      return;
+    }
+
+    const updated = await props.onUpdateConversationTitle(props.conversation.id, titleDraft);
+
+    if (updated) {
+      setEditingTitle(false);
+    }
+  }
+
+  function cancelTitleUpdate(): void {
+    setTitleDraft(props.conversation?.title ?? "");
+    setEditingTitle(false);
+  }
+
   return (
     <main style={chatPanelStyle}>
       <header style={chatHeaderStyle}>
         <div style={chatHeaderTextStyle}>
           <p style={chatHeaderEyebrowStyle}>Current Conversation</p>
-          <h2 style={chatHeaderTitleStyle}>{props.conversation ? formatConversationTitle(props.conversation.title) : "No Title"}</h2>
+          {editingTitle ? (
+            <form className="title-edit-form" onSubmit={(event) => void submitTitleUpdate(event)} style={titleEditFormStyle}>
+              <input
+                aria-label="Conversation title"
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                disabled={props.updatingTitle}
+                placeholder="No Title"
+                style={titleEditInputStyle}
+              />
+              <button type="submit" disabled={props.updatingTitle} aria-label="Save conversation title" title="Save title" style={titleIconButtonStyle}>
+                <Check size={16} strokeWidth={2} />
+              </button>
+              <button type="button" disabled={props.updatingTitle} onClick={cancelTitleUpdate} aria-label="Cancel title edit" title="Cancel" style={titleIconButtonStyle}>
+                <X size={16} strokeWidth={2} />
+              </button>
+            </form>
+          ) : (
+            <div style={chatHeaderTitleRowStyle}>
+              <h2 style={chatHeaderTitleStyle}>{props.conversation ? formatConversationTitle(props.conversation.title) : "No Title"}</h2>
+              <button
+                type="button"
+                disabled={!props.conversation || props.booting}
+                onClick={() => {
+                  setTitleDraft(props.conversation?.title ?? "");
+                  setEditingTitle(true);
+                }}
+                aria-label="Edit conversation title"
+                title="Edit title"
+                style={titleIconButtonStyle}
+              >
+                <Pencil size={16} strokeWidth={1.9} />
+              </button>
+            </div>
+          )}
+          {props.titleError ? <p style={titleErrorStyle}>{props.titleError}</p> : null}
         </div>
         <span style={chatHeaderMetaStyle}>{props.conversationId ? formatConversationLabel(props.conversationId) : "Starting..."}</span>
       </header>
@@ -855,6 +994,43 @@ function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<s
   return `${url.pathname}${url.search}`;
 }
 
+async function readResponseErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.clone().json()) as unknown;
+    const message = extractResponseErrorMessage(body);
+
+    if (message) {
+      return message;
+    }
+  } catch {
+    // Fall through to the transport-level fallback.
+  }
+
+  return fallback;
+}
+
+function extractResponseErrorMessage(body: unknown): string | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+
+  if (typeof body.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  const error = body.error;
+
+  if (isRecord(error) && typeof error.message === "string" && error.message.trim()) {
+    return error.message;
+  }
+
+  return null;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null;
+}
+
 function isSpreadsheetFile(mimeType: string, extension: string): boolean {
   return SPREADSHEET_FILE_EXTENSIONS.has(extension) || mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType === "text/csv";
 }
@@ -990,6 +1166,7 @@ const globalStyles = `
   }
 
   button,
+  input,
   textarea {
     font: inherit;
   }
@@ -1218,6 +1395,7 @@ const chatHeaderStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  flexWrap: "wrap",
   gap: "16px",
   padding: "22px 28px",
   borderBottom: "1px solid rgba(255, 214, 179, 0.16)",
@@ -1226,6 +1404,8 @@ const chatHeaderStyle: React.CSSProperties = {
 
 const chatHeaderTextStyle: React.CSSProperties = {
   minWidth: 0,
+  display: "grid",
+  gap: "6px",
 };
 
 const chatHeaderEyebrowStyle: React.CSSProperties = {
@@ -1243,6 +1423,54 @@ const chatHeaderTitleStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
   fontSize: "1.35rem",
   lineHeight: 1.2,
+};
+
+const chatHeaderTitleRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, auto) auto",
+  justifyContent: "start",
+  alignItems: "center",
+  gap: "10px",
+  minWidth: 0,
+};
+
+const titleEditFormStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 420px) auto auto",
+  alignItems: "center",
+  gap: "8px",
+  maxWidth: "min(100%, 560px)",
+};
+
+const titleEditInputStyle: React.CSSProperties = {
+  minWidth: 0,
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: "12px",
+  border: "1px solid rgba(255, 214, 179, 0.2)",
+  background: "rgba(12, 8, 7, 0.48)",
+  color: "#f7f1e8",
+  outline: "none",
+};
+
+const titleIconButtonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "34px",
+  height: "34px",
+  borderRadius: "999px",
+  border: "1px solid rgba(255, 214, 179, 0.16)",
+  background: "rgba(255, 248, 240, 0.06)",
+  color: "#f7f1e8",
+  cursor: "pointer",
+};
+
+const titleErrorStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#ffd1cb",
+  fontSize: "0.84rem",
+  lineHeight: 1.4,
 };
 
 const chatHeaderMetaStyle: React.CSSProperties = {

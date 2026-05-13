@@ -196,6 +196,55 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 
+  test("appends to two conversations back-to-back and both receive completions", async () => {
+    let firstConversationId: string | undefined;
+    let secondConversationId: string | undefined;
+
+    try {
+      const firstCreate = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+      expect(firstCreate.status).toBe(201);
+      firstConversationId = ((await firstCreate.json()) as { readonly id: string }).id;
+
+      const firstAppend = await fetch(`${BASE_URL}/conversations/${firstConversationId}/add-to-conv`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData("Reply with a short greeting on conversation A."),
+      });
+
+      expect(firstAppend.status).toBe(204);
+
+      // Immediately switch to a second conversation and append before A's completion lands.
+      const secondCreate = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+      expect(secondCreate.status).toBe(201);
+      secondConversationId = ((await secondCreate.json()) as { readonly id: string }).id;
+
+      const secondAppend = await fetch(`${BASE_URL}/conversations/${secondConversationId}/add-to-conv`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData("Reply with a short greeting on conversation B."),
+      });
+
+      expect(secondAppend.status).toBe(204);
+
+      // Both conversations must end up with an assistant reply.
+      await waitForAssistantReply(secondConversationId);
+      await waitForAssistantReply(firstConversationId);
+
+      const firstPage = await fetchPage(firstConversationId, 1, 50);
+      const secondPage = await fetchPage(secondConversationId, 1, 50);
+
+      expect(firstPage.items.some((item) => item.type === "assistant")).toBe(true);
+      expect(secondPage.items.some((item) => item.type === "assistant")).toBe(true);
+    } finally {
+      if (firstConversationId) {
+        await fetch(`${BASE_URL}/conversations/${firstConversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
+      if (secondConversationId) {
+        await fetch(`${BASE_URL}/conversations/${secondConversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
+    }
+  });
+
   test("posts a single user message and receives an assistant completion reply", async () => {
     let conversationId: string | undefined;
 
@@ -243,6 +292,14 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 });
+
+function buildUserMessageFormData(content: string): FormData {
+  const formData = new FormData();
+  formData.set("type", "user");
+  formData.set("content", content);
+
+  return formData;
+}
 
 function buildImageMessageFormData(imageBytes: ArrayBuffer, content: string): FormData {
   const formData = new FormData();

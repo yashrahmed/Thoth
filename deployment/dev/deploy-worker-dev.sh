@@ -101,19 +101,6 @@ read_toml_string() {
   sed -n "s/^${key} = \"\\(.*\\)\"/\\1/p" "$file" | head -n 1
 }
 
-read_consumer_queue() {
-  awk '
-    /^\[\[queues\.consumers\]\]/ { in_block = 1; next }
-    /^\[/ { in_block = 0 }
-    in_block && /^queue = / {
-      sub(/^queue = "/, "")
-      sub(/"$/, "")
-      print
-      exit
-    }
-  ' "$1"
-}
-
 read_hyperdrive_id() {
   awk '
     /^\[\[hyperdrive\]\]/ { in_block = 1; next }
@@ -131,10 +118,9 @@ smoke_test_dependencies() {
   echo "Smoke testing Cloudflare dependencies..."
 
   hyperdrive_id="$(read_hyperdrive_id "$WRANGLER_CONFIG_FILE")"
-  queue_name="$(read_consumer_queue "$WRANGLER_CONFIG_FILE")"
   bucket_name="$(read_toml_string "BLOB_STORAGE_BUCKET" "$WRANGLER_CONFIG_FILE")"
 
-  if [ -z "$hyperdrive_id" ] || [ -z "$queue_name" ] || [ -z "$bucket_name" ]; then
+  if [ -z "$hyperdrive_id" ] || [ -z "$bucket_name" ]; then
     echo "Could not parse dependency identifiers from $WRANGLER_CONFIG_FILE." >&2
     exit 1
   fi
@@ -147,12 +133,6 @@ smoke_test_dependencies() {
   fi
   echo "  Hyperdrive: $hyperdrive_id ok"
 
-  if ! bun x wrangler queues list --config "$WRANGLER_CONFIG_FILE" 2>/dev/null | grep -q "$queue_name"; then
-    echo "Queue $queue_name not found on this Cloudflare account." >&2
-    exit 1
-  fi
-  echo "  Queue: $queue_name ok"
-
   if ! bun x wrangler r2 bucket list --config "$WRANGLER_CONFIG_FILE" 2>/dev/null | grep -q "$bucket_name"; then
     echo "R2 bucket $bucket_name not found on this Cloudflare account." >&2
     exit 1
@@ -160,23 +140,8 @@ smoke_test_dependencies() {
   echo "  R2 bucket: $bucket_name ok"
 }
 
-remove_queue_consumer() {
-  worker_name="$(read_toml_string 'name' "$WRANGLER_CONFIG_FILE")"
-  queue_name="$(read_consumer_queue "$WRANGLER_CONFIG_FILE")"
-
-  if [ -z "$worker_name" ] || [ -z "$queue_name" ]; then
-    echo "Could not parse worker or queue name from $WRANGLER_CONFIG_FILE." >&2
-    exit 1
-  fi
-
-  echo "Detaching $worker_name from queue $queue_name..."
-  cd "$WORKER_PACKAGE_DIR"
-  bun x wrangler queues consumer remove "$queue_name" "$worker_name" --config "$WRANGLER_CONFIG_FILE" \
-    || echo "Consumer was not attached (or already removed); continuing."
-}
-
 teardown_worker() {
-  echo "Deleting conv-agent Worker (Hyperdrive, Queue, R2 bindings are left intact)..."
+  echo "Deleting conv-agent Worker (Hyperdrive and R2 bindings are left intact)..."
   cd "$WORKER_PACKAGE_DIR"
   bun x wrangler delete --config "$WRANGLER_CONFIG_FILE"
 }
@@ -193,7 +158,6 @@ case "$COMMAND" in
   teardown)
     ensure_wrangler_config
     ensure_logged_in
-    remove_queue_consumer
     teardown_worker
     echo "Teardown complete."
     ;;

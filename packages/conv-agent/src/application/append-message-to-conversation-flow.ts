@@ -1,13 +1,13 @@
 import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { type FileDomainService } from "../domain/services/file-domain-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import type { LLMCompletionDispatcher } from "../domain/contracts/llm-completion-dispatcher";
 import type { MessageDomainService } from "../domain/services/message-domain-service";
 import { ValidationError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { failure, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
 import { type AppendMessageRequest } from "../domain/objects/request-types";
 import type { AppendMessageRecord } from "../domain/objects/message-types";
+import type { LLMCompletionRunService } from "../domain/contracts/llm-completion-run-service";
 
 export { type AppendMessageRequest } from "../domain/objects/request-types";
 export { type Attachment } from "../domain/objects/request-types";
@@ -19,7 +19,7 @@ export class AppendMessageToConversationFlow {
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
-    private readonly llmCompletionDispatcher: LLMCompletionDispatcher,
+    private readonly llmCompletionRunService: LLMCompletionRunService,
   ) {}
 
   async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
@@ -62,13 +62,7 @@ export class AppendMessageToConversationFlow {
       return deleteUploadedBlobsResult.ok ? createUserMessageResult : deleteUploadedBlobsResult;
     }
 
-    const dispatchResult = await this.llmCompletionDispatcher.dispatch({
-      messageId: createUserMessageResult.value.id,
-    });
-
-    if (!dispatchResult.ok) {
-      return dispatchResult;
-    }
+    this.llmCompletionRunService.run({ messageId: createUserMessageResult.value.id });
 
     return { ok: true, value: undefined };
   }

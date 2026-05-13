@@ -1,6 +1,5 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { createConversationHttpHandler } from "../adapter/inbound/conversation-http-handler";
-import { createQueueLlmCompletionHandler } from "../adapter/inbound/cf-queue-llm-completion-handler";
 import { R2BlobRepository } from "../adapter/blob/r2-blob-repository";
 import { R2FileSignedUrlGenerator } from "../adapter/blob/r2-file-signed-url-generator";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
@@ -9,16 +8,15 @@ import { createPostgresDatabase, type PostgresDatabase } from "../adapter/postgr
 import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresFileRepository } from "../adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
-import { CloudflareQueueLlmCompletionDispatcher, type LlmCompletionQueueMessage } from "../adapter/queue/cf-queue-llm-completion-dispatcher";
-import { NoOpLlmCompletionDispatcher } from "../adapter/queue/noop-llm-completion-dispatcher";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
+import { BackgroundLLMCompletionRunService } from "../domain/services/background-llm-completion-run-service";
+import { NoOpLLMCompletionRunService } from "../domain/services/noop-llm-completion-run-service";
 import { CreateConversationFlow } from "../application/create-conversation-flow";
 import { DeleteConversationFlow } from "../application/delete-conversation-flow";
 import { GetConversationFlow } from "../application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "../application/get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "../application/list-conversations-flow";
-import { LlmCompletionFlow } from "../application/llm-completion-flow";
 import { UpdateConvFlow } from "../application/update-conv-flow";
 import { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { BlobDomainService } from "../domain/services/blob-domain-service";
@@ -34,7 +32,6 @@ import type { BlobStorageConfig, LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
   HYPERDRIVE: Hyperdrive;
-  LLM_QUEUE: Queue<LlmCompletionQueueMessage>;
   BLOB_STORAGE_ENDPOINT: string;
   BLOB_STORAGE_BUCKET: string;
   BLOB_STORAGE_REGION: string;
@@ -46,9 +43,8 @@ export interface WorkerEnv {
 }
 
 interface WorkerDeps {
-  readonly database: PostgresDatabase;
   readonly httpHandler: (request: Request) => Response | Promise<Response>;
-  readonly queueHandler: (batch: MessageBatch<LlmCompletionQueueMessage>) => Promise<void>;
+  readonly shutdown: () => Promise<void>;
 }
 
 // Cloudflare Workers forbids reusing I/O objects (TCP sockets, streams, etc.) across requests.
@@ -97,18 +93,40 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const messageContentDomainService = new MessageContentDomainService(genericValidationService);
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
 
-  const llmCompletionDispatcher = new CloudflareQueueLlmCompletionDispatcher(env.LLM_QUEUE);
   const llmPromptDomainService = new LlmPromptDomainService();
   const fileAccessDomainService = new FileAccessDomainService(fileSignedUrlGenerator);
   const openAiLlmAdapter = new OpenAiLlmAdapter(llmConfig);
-  const llmCompletionFlow = new LlmCompletionFlow(
+
+  // Collect background tasks (e.g. LLM completion) here. The worker registers a
+  // single ctx.waitUntil(shutdown()) so all background work finishes before the
+  // shared postgres connection is closed. Tradeoff vs the prior queue: no retry,
+  // no DLQ. Completions can be lost if the isolate is evicted before shutdown.
+  const pendingBackgroundTasks: Promise<unknown>[] = [];
+  const scheduleBackgroundTask = (task: Promise<unknown>): void => {
+    pendingBackgroundTasks.push(
+      task.catch((error: unknown) => {
+        console.error("[conv-agent] unhandled background task rejection", error);
+      }),
+    );
+  };
+
+  const backgroundCompletionRunService = new BackgroundLLMCompletionRunService(
     messageDomainService,
     fileDomainService,
     fileAccessDomainService,
     openAiLlmAdapter,
     appendUserMessageDomainService,
     llmPromptDomainService,
+    scheduleBackgroundTask,
   );
+  const noopCompletionRunService = new NoOpLLMCompletionRunService();
+
+  const shutdown = async (): Promise<void> => {
+    if (pendingBackgroundTasks.length > 0) {
+      await Promise.allSettled(pendingBackgroundTasks);
+    }
+    await database.end({ timeout: 5 });
+  };
 
   const httpHandler = createConversationHttpHandler({
     tempBearerToken: requireString(env.TEMP_BEARER_TOKEN, "TEMP_BEARER_TOKEN"),
@@ -122,23 +140,21 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
       appendUserMessageDomainService,
       messageDomainService,
       fileDomainService,
-      llmCompletionDispatcher,
+      backgroundCompletionRunService,
     ),
     // The /append-direct route persists user messages without triggering an LLM completion,
-    // so it shares the append flow but skips the queue dispatch via a no-op dispatcher.
+    // so it shares the append flow but uses a no-op runner.
     appendMessageDirect: new AppendMessageToConversationFlow(
       conversationDomainService,
       appendUserMessageDomainService,
       messageDomainService,
       fileDomainService,
-      new NoOpLlmCompletionDispatcher(),
+      noopCompletionRunService,
     ),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });
 
-  const queueHandler = createQueueLlmCompletionHandler(llmCompletionFlow);
-
-  return { database, httpHandler, queueHandler };
+  return { httpHandler, shutdown };
 }
 
 function requireString(value: string | undefined, name: string): string {

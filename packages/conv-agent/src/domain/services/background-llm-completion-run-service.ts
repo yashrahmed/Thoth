@@ -1,33 +1,55 @@
-import type { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
-import type { FileAccessDomainService, SignedFileAccess } from "../domain/services/file-access-domain-service";
-import { type FileDomainService } from "../domain/services/file-domain-service";
-import type { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-service";
-import type { MessageDomainService } from "../domain/services/message-domain-service";
-import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../domain/objects/llm";
-import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
-import { success, type Result } from "../domain/objects/result";
-import type { Message } from "../domain/objects/message-types";
+import type { LlmService } from "../contracts/llm-service";
+import type { LLMCompletionRunService, RunLlmCompletionInput } from "../contracts/llm-completion-run-service";
+import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../objects/llm";
+import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../objects/errors";
+import { success, type Result } from "../objects/result";
+import type { Message } from "../objects/message-types";
+import type { AppendUserMessageDomainService } from "./append-user-message-domain-service";
+import type { FileAccessDomainService, SignedFileAccess } from "./file-access-domain-service";
+import { type FileDomainService } from "./file-domain-service";
+import type { LlmPromptDomainService } from "./llm-prompt-domain-service";
+import type { MessageDomainService } from "./message-domain-service";
 
-interface LlmCompletionRequest {
-  readonly messageId: string;
-}
-
-interface LlmCompletionPort {
-  llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>>;
-}
-
-export class LlmCompletionFlow {
+/**
+ * Runs the LLM completion as a background task scheduled via the supplied
+ * scheduler (typically `ctx.waitUntil` on Cloudflare Workers). Errors are
+ * logged but not propagated — there is no retry path.
+ */
+export class BackgroundLLMCompletionRunService implements LLMCompletionRunService {
   constructor(
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
     private readonly fileAccessDomainService: FileAccessDomainService,
-    private readonly llmCompletionService: LlmCompletionPort,
+    private readonly llmService: LlmService,
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
     private readonly llmPromptDomainService: LlmPromptDomainService,
+    private readonly scheduleBackgroundTask: (task: Promise<unknown>) => void,
   ) {}
 
-  async execute(request: LlmCompletionRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
-    const triggerMessageResult = await this.messageDomainService.findById(request.messageId);
+  run(input: RunLlmCompletionInput): void {
+    this.scheduleBackgroundTask(this.executeAndLog(input.messageId));
+  }
+
+  private async executeAndLog(messageId: string): Promise<void> {
+    try {
+      const result = await this.execute(messageId);
+
+      if (!result.ok) {
+        console.error("[conv-agent] background LLM completion failed", {
+          messageId,
+          error: this.serializeCompletionError(result.error),
+        });
+      }
+    } catch (error) {
+      console.error("[conv-agent] background LLM completion threw", {
+        messageId,
+        error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+      });
+    }
+  }
+
+  private async execute(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
+    const triggerMessageResult = await this.messageDomainService.findById(messageId);
 
     if (!triggerMessageResult.ok) {
       return triggerMessageResult;
@@ -61,7 +83,7 @@ export class LlmCompletionFlow {
     }
 
     const llmInput = this.buildLlmInputMessages(allMessagesResult.value, signedFilesResult.value);
-    const llmResult = await this.llmCompletionService.llmComplete(llmInput);
+    const llmResult = await this.llmService.llmComplete(llmInput);
 
     if (!llmResult.ok) {
       return llmResult;
@@ -145,5 +167,14 @@ export class LlmCompletionFlow {
     }));
 
     return [this.llmPromptDomainService.buildSystemPrompt(), ...renderedMessages];
+  }
+
+  private serializeCompletionError(error: ValidationError | NotFoundError | StoreError | LlmError): Record<string, unknown> {
+    return {
+      kind: error.constructor.name,
+      message: "message" in error ? error.message : undefined,
+      entityType: "entityType" in error ? error.entityType : undefined,
+      id: "id" in error ? error.id : undefined,
+    };
   }
 }

@@ -2,7 +2,7 @@ import { AIMessage, type BaseMessage, type ContentBlock, HumanMessage, SystemMes
 import { ChatOpenAI } from "@langchain/openai";
 
 import type { LlmConfig } from "../../config/config";
-import type { LlmCompletionService } from "../../domain/contracts/llm-completion-service";
+import type { LlmService } from "../../domain/contracts/llm-service";
 import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
@@ -16,7 +16,7 @@ export interface OpenAiTool {
   execute(args: Record<string, unknown>): Promise<string>;
 }
 
-export class OpenAiLlmAdapter implements LlmCompletionService {
+export class OpenAiLlmAdapter implements LlmService {
   private readonly model: ChatOpenAI;
   private readonly toolsByName: ReadonlyMap<string, OpenAiTool>;
 

@@ -1,5 +1,4 @@
 import { buildWorkerDeps, type WorkerEnv } from "./bootstrap";
-import type { LlmCompletionQueueMessage } from "../adapter/queue/cf-queue-llm-completion-dispatcher";
 
 export type { WorkerEnv } from "./bootstrap";
 
@@ -23,17 +22,7 @@ export default {
         headers: { "content-type": "application/json", ...CORS_HEADERS },
       });
     } finally {
-      ctx.waitUntil(deps.database.end({ timeout: 5 }));
+      ctx.waitUntil(deps.shutdown());
     }
   },
-
-  async queue(batch, env, ctx): Promise<void> {
-    const deps = buildWorkerDeps(env);
-
-    try {
-      await deps.queueHandler(batch);
-    } finally {
-      ctx.waitUntil(deps.database.end({ timeout: 5 }));
-    }
-  },
-} satisfies ExportedHandler<WorkerEnv, LlmCompletionQueueMessage>;
+} satisfies ExportedHandler<WorkerEnv>;

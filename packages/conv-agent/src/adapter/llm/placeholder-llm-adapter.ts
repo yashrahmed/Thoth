@@ -1,10 +1,10 @@
 import type { LlmConfig } from "../../config/config";
-import type { LlmCompletionService } from "../../domain/contracts/llm-completion-service";
+import type { LlmService } from "../../domain/contracts/llm-service";
 import type { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { success, type Result } from "../../domain/objects/result";
 
-export class PlaceholderLlmAdapter implements LlmCompletionService {
+export class PlaceholderLlmAdapter implements LlmService {
   constructor(private readonly config: LlmConfig) {}
 
   async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>> {

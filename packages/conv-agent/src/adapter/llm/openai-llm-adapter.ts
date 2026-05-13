@@ -47,7 +47,8 @@ export class OpenAiLlmAdapter implements LlmService {
         messages: completionMessages,
       });
     } catch (error) {
-      return failure(new LlmError(getErrorMessage(error)));
+      const code = error instanceof TimeoutError ? "timeout" : "other";
+      return failure(new LlmError(getErrorMessage(error), code));
     }
   }
 
@@ -142,6 +143,13 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected OpenAI LLM completion error.";
 }
 
+class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -149,7 +157,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
     return await Promise.race([
       promise,
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+        timeout = setTimeout(() => reject(new TimeoutError(message)), timeoutMs);
       }),
     ]);
   } finally {

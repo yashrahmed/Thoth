@@ -40,8 +40,13 @@ export class StoreError {
   ) {}
 }
 
+export type LlmErrorCode = "timeout" | "other";
+
 export class LlmError {
   readonly kind = "LlmError";
 
-  constructor(readonly message: string) {}
+  constructor(
+    readonly message: string,
+    readonly code: LlmErrorCode = "other",
+  ) {}
 }

@@ -1,7 +1,7 @@
 import type { LlmService } from "../contracts/llm-service";
 import type { LLMCompletionRunService, RunLlmCompletionInput } from "../contracts/llm-completion-run-service";
 import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../objects/llm";
-import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../objects/errors";
+import { LlmError, ValidationError, type LlmErrorCode, type NotFoundError, type StoreError } from "../objects/errors";
 import { success, type Result } from "../objects/result";
 import type { Message } from "../objects/message-types";
 import type { AppendUserMessageDomainService } from "./append-user-message-domain-service";
@@ -10,10 +10,22 @@ import { type FileDomainService } from "./file-domain-service";
 import type { LlmPromptDomainService } from "./llm-prompt-domain-service";
 import type { MessageDomainService } from "./message-domain-service";
 
+interface CompletionContext {
+  readonly conversationId: string;
+  readonly llmInput: ReadonlyArray<LlmCompletionInputMessage>;
+}
+
+const FALLBACK_MESSAGE_BY_CODE: Record<LlmErrorCode, string> = {
+  timeout: "Sorry — the assistant timed out while generating a reply. Please try again.",
+  other: "Sorry — the assistant could not generate a reply. Please try again.",
+};
+
 /**
  * Runs the LLM completion as a background task scheduled via the supplied
  * scheduler (typically `ctx.waitUntil` on Cloudflare Workers). Errors are
- * logged but not propagated — there is no retry path.
+ * logged. On `LlmError` (e.g. timeout, provider error) a generic assistant
+ * message is appended to the conversation so the failure is visible to the
+ * user instead of silently dropped. There is no retry path.
  */
 export class BackgroundLLMCompletionRunService implements LLMCompletionRunService {
   constructor(
@@ -32,12 +44,45 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
 
   private async executeAndLog(messageId: string): Promise<void> {
     try {
-      const result = await this.execute(messageId);
+      const contextResult = await this.resolveCompletionContext(messageId);
 
-      if (!result.ok) {
+      if (!contextResult.ok) {
+        // Validation/NotFound/StoreError happen before we reach the LLM. The
+        // most common case is the supersede ValidationError, which is intentional
+        // (a newer user message will trigger its own completion). Don't write a
+        // fallback assistant message — just log.
         console.error("[conv-agent] background LLM completion failed", {
           messageId,
-          error: this.serializeCompletionError(result.error),
+          phase: "context",
+          error: this.serializeCompletionError(contextResult.error),
+        });
+        return;
+      }
+
+      const { conversationId, llmInput } = contextResult.value;
+      const llmResult = await this.llmService.llmComplete(llmInput);
+
+      if (!llmResult.ok) {
+        console.error("[conv-agent] background LLM completion failed", {
+          messageId,
+          phase: "llm",
+          error: this.serializeCompletionError(llmResult.error),
+        });
+        await this.persistFallbackAssistantMessage(messageId, conversationId, llmResult.error.code);
+        return;
+      }
+
+      if (llmResult.value.messages.length === 0) {
+        return;
+      }
+
+      const persistResult = await this.appendCompletionMessages(conversationId, llmResult.value.messages);
+
+      if (!persistResult.ok) {
+        console.error("[conv-agent] background LLM completion failed", {
+          messageId,
+          phase: "persist",
+          error: this.serializeCompletionError(persistResult.error),
         });
       }
     } catch (error) {
@@ -48,7 +93,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     }
   }
 
-  private async execute(messageId: string): Promise<Result<void, ValidationError | NotFoundError | StoreError | LlmError>> {
+  private async resolveCompletionContext(messageId: string): Promise<Result<CompletionContext, ValidationError | NotFoundError | StoreError>> {
     const triggerMessageResult = await this.messageDomainService.findById(messageId);
 
     if (!triggerMessageResult.ok) {
@@ -82,18 +127,27 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
       return signedFilesResult;
     }
 
-    const llmInput = this.buildLlmInputMessages(allMessagesResult.value, signedFilesResult.value);
-    const llmResult = await this.llmService.llmComplete(llmInput);
+    return success({
+      conversationId: triggerMessage.conversationId,
+      llmInput: this.buildLlmInputMessages(allMessagesResult.value, signedFilesResult.value),
+    });
+  }
 
-    if (!llmResult.ok) {
-      return llmResult;
+  private async persistFallbackAssistantMessage(messageId: string, conversationId: string, code: LlmErrorCode): Promise<void> {
+    const fallbackMessage: LlmCompletionMessage = {
+      type: LLMMessageType.Assistant,
+      content: FALLBACK_MESSAGE_BY_CODE[code],
+    };
+
+    const persistResult = await this.appendCompletionMessages(conversationId, [fallbackMessage]);
+
+    if (!persistResult.ok) {
+      console.error("[conv-agent] failed to persist fallback assistant message", {
+        messageId,
+        conversationId,
+        error: this.serializeCompletionError(persistResult.error),
+      });
     }
-
-    if (llmResult.value.messages.length === 0) {
-      return { ok: true, value: undefined };
-    }
-
-    return this.appendCompletionMessages(triggerMessage.conversationId, llmResult.value.messages);
   }
 
   private async appendCompletionMessages(
@@ -170,11 +224,17 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
   }
 
   private serializeCompletionError(error: ValidationError | NotFoundError | StoreError | LlmError): Record<string, unknown> {
-    return {
+    const base: Record<string, unknown> = {
       kind: error.constructor.name,
       message: "message" in error ? error.message : undefined,
       entityType: "entityType" in error ? error.entityType : undefined,
       id: "id" in error ? error.id : undefined,
     };
+
+    if (error instanceof LlmError) {
+      base.code = error.code;
+    }
+
+    return base;
   }
 }

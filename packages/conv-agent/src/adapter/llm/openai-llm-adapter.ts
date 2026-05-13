@@ -7,7 +7,7 @@ import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
-export const OPENAI_LLM_MODEL = "gpt-5.5";
+export const OPENAI_LLM_MODEL = "gpt-5.4";
 const MAX_TOOL_CALL_ROUNDS = 5;
 const OPENAI_REQUEST_TIMEOUT_MS = 10_000;
 
@@ -28,7 +28,7 @@ export class OpenAiLlmAdapter implements LlmService {
       apiKey: config.apiKey,
       model: OPENAI_LLM_MODEL,
       useResponsesApi: true,
-      reasoning: { effort: "medium" },
+      reasoning: { effort: "low" },
       maxRetries: 2,
       timeout: OPENAI_REQUEST_TIMEOUT_MS,
     });

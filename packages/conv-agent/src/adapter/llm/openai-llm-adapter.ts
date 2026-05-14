@@ -36,12 +36,16 @@ function getOrCreateChatOpenAI(config: LlmConfig): ChatOpenAI {
     return cachedChatOpenAI;
   }
 
+  // maxRetries=0 disables LangChain's built-in retry loop. The background
+  // completion runner already surfaces LlmError as a visible fallback message
+  // (see BackgroundLLMCompletionRunService), so a slow self-heal would only
+  // delay the failure the user already sees. Fast failure beats slow retry.
   cachedChatOpenAI = new ChatOpenAI({
     apiKey: config.apiKey,
     model: OPENAI_LLM_MODEL,
     useResponsesApi: true,
     reasoning: { effort: "low" },
-    maxRetries: 2,
+    maxRetries: 0,
     timeout: OPENAI_REQUEST_TIMEOUT_MS,
   });
   cachedChatOpenAIApiKey = config.apiKey;

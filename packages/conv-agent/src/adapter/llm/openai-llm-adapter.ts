@@ -16,6 +16,39 @@ export interface OpenAiTool {
   execute(args: Record<string, unknown>): Promise<string>;
 }
 
+// Module-scope cache for the ChatOpenAI client. The dependency graph (and the
+// adapter wrapping this client) is rebuilt per request because Cloudflare
+// Workers forbids reusing I/O objects across requests — but ChatOpenAI itself
+// is a config + fetch-closure wrapper with no live socket, so it is safe to
+// hoist. Reusing it skips LangChain's per-request setup (zod schema build,
+// validator wiring). The cache is keyed on apiKey so an env rotation or a
+// system test with a different key transparently gets its own client.
+//
+// A cached copy is not always available: cold isolates start empty and pay
+// the first-request construction cost, and any apiKey change invalidates the
+// entry. Callers must treat this as a best-effort hot-path optimization, not
+// a guarantee.
+let cachedChatOpenAI: ChatOpenAI | undefined;
+let cachedChatOpenAIApiKey: string | undefined;
+
+function getOrCreateChatOpenAI(config: LlmConfig): ChatOpenAI {
+  if (cachedChatOpenAI && cachedChatOpenAIApiKey === config.apiKey) {
+    return cachedChatOpenAI;
+  }
+
+  cachedChatOpenAI = new ChatOpenAI({
+    apiKey: config.apiKey,
+    model: OPENAI_LLM_MODEL,
+    useResponsesApi: true,
+    reasoning: { effort: "low" },
+    maxRetries: 2,
+    timeout: OPENAI_REQUEST_TIMEOUT_MS,
+  });
+  cachedChatOpenAIApiKey = config.apiKey;
+
+  return cachedChatOpenAI;
+}
+
 export class OpenAiLlmAdapter implements LlmService {
   private readonly model: ChatOpenAI;
   private readonly toolsByName: ReadonlyMap<string, OpenAiTool>;
@@ -24,14 +57,7 @@ export class OpenAiLlmAdapter implements LlmService {
     config: LlmConfig,
     tools: ReadonlyArray<OpenAiTool> = [],
   ) {
-    this.model = new ChatOpenAI({
-      apiKey: config.apiKey,
-      model: OPENAI_LLM_MODEL,
-      useResponsesApi: true,
-      reasoning: { effort: "low" },
-      maxRetries: 2,
-      timeout: OPENAI_REQUEST_TIMEOUT_MS,
-    });
+    this.model = getOrCreateChatOpenAI(config);
     this.toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
   }
 

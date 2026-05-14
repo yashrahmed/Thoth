@@ -45,6 +45,34 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
+  async selectMessageRowByIdAndConversationId(messageId: string, conversationId: string): Promise<Result<Message, NotFoundError | StoreError>> {
+    try {
+      const rows = await this.sql<MessageRow[]>`
+        select
+          id,
+          conversation_id,
+          type,
+          sequence_number,
+          content,
+          created_at,
+          updated_at
+        from thoth.messages
+        where id = ${messageId}
+          and conversation_id = ${conversationId}
+      `;
+
+      const row = rows[0];
+
+      if (!row) {
+        return failure(new NotFoundError(EntityType.Message, messageId));
+      }
+
+      return mapRow(row, StoreOperation.Read);
+    } catch (error) {
+      return failure(new StoreError(EntityType.Message, StoreOperation.Read, getErrorMessage(error)));
+    }
+  }
+
   async selectMessagePage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }) {
     try {
       const fromSequence = (request.pageNum - 1) * request.pageSize + 1;

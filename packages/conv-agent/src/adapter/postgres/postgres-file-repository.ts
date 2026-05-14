@@ -137,6 +137,30 @@ export class PostgresFileRepository implements FileRepository {
     }
   }
 
+  async selectFileRowsByConversationId(conversationId: string): Promise<Result<File[], StoreError>> {
+    try {
+      const rows = await this.sql<FileRow[]>`
+        select
+          f.id,
+          f.message_id,
+          f.canonical_url,
+          f.filename,
+          f.mime_type,
+          f.size_in_bytes,
+          f.created_at,
+          f.updated_at
+        from thoth.files f
+        join thoth.messages m on m.id = f.message_id
+        where m.conversation_id = ${conversationId}
+        order by f.created_at asc, f.id asc
+      `;
+
+      return mapRows(rows, StoreOperation.Read);
+    } catch (error) {
+      return failure(new StoreError(EntityType.File, StoreOperation.Read, getErrorMessage(error)));
+    }
+  }
+
   async deleteFileRow(id: string): Promise<Result<void, StoreError>> {
     try {
       await this.sql`

@@ -62,7 +62,7 @@ export class AppendMessageToConversationFlow {
       return deleteUploadedBlobsResult.ok ? createUserMessageResult : deleteUploadedBlobsResult;
     }
 
-    this.llmCompletionRunService.run({ messageId: createUserMessageResult.value.id });
+    this.llmCompletionRunService.run({ messageId: createUserMessageResult.value.id, conversationId: request.conversationId });
 
     return { ok: true, value: undefined };
   }

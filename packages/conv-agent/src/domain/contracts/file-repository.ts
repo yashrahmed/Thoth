@@ -7,6 +7,7 @@ export interface FileRepository {
   selectFileRow(id: string): Promise<Result<File, NotFoundError | StoreError>>;
   selectFileRows(ids: ReadonlyArray<string>): Promise<Result<File[], StoreError>>;
   selectFileRowsByMessageIds(messageIds: ReadonlyArray<string>): Promise<Result<File[], StoreError>>;
+  selectFileRowsByConversationId(conversationId: string): Promise<Result<File[], StoreError>>;
   deleteFileRow(id: string): Promise<Result<void, StoreError>>;
   deleteFileRows(ids: ReadonlyArray<string>): Promise<Result<void, StoreError>>;
   deleteFileRowsByMessageIds(messageIds: ReadonlyArray<string>): Promise<Result<void, StoreError>>;

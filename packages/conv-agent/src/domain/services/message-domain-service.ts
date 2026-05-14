@@ -19,6 +19,19 @@ export class MessageDomainService {
     return andThenAsync(this.genericValidationService.requireNonEmptyString(messageId, "messageId"), (id) => this.messageRepository.selectMessageRow(id));
   }
 
+  async findByIdInConversation(messageId: string, conversationId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
+    const validationResult = firstFailure(
+      this.genericValidationService.requireNonEmptyString(messageId, "messageId"),
+      this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"),
+    );
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
+    return this.messageRepository.selectMessageRowByIdAndConversationId(messageId, conversationId);
+  }
+
   async findPage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<Message[], StoreError>> {
     return this.messageRepository.selectMessagePage(request);
   }

@@ -1,5 +1,6 @@
 export interface RunLlmCompletionInput {
   readonly messageId: string;
+  readonly conversationId: string;
 }
 
 /**

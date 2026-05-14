@@ -39,12 +39,12 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
   ) {}
 
   run(input: RunLlmCompletionInput): void {
-    this.scheduleBackgroundTask(this.executeAndLog(input.messageId));
+    this.scheduleBackgroundTask(this.executeAndLog(input.messageId, input.conversationId));
   }
 
-  private async executeAndLog(messageId: string): Promise<void> {
+  private async executeAndLog(messageId: string, conversationId: string): Promise<void> {
     try {
-      const contextResult = await this.resolveCompletionContext(messageId);
+      const contextResult = await this.resolveCompletionContext(messageId, conversationId);
 
       if (!contextResult.ok) {
         // Validation/NotFound/StoreError happen before we reach the LLM. The
@@ -59,7 +59,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
         return;
       }
 
-      const { conversationId, llmInput } = contextResult.value;
+      const { llmInput } = contextResult.value;
       const llmResult = await this.llmService.llmComplete(llmInput);
 
       if (!llmResult.ok) {
@@ -93,32 +93,29 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     }
   }
 
-  private async resolveCompletionContext(messageId: string): Promise<Result<CompletionContext, ValidationError | NotFoundError | StoreError>> {
-    const triggerMessageResult = await this.messageDomainService.findById(messageId);
+  private async resolveCompletionContext(messageId: string, conversationId: string): Promise<Result<CompletionContext, ValidationError | NotFoundError | StoreError>> {
+    const [triggerMessageResult, allMessagesResult, filesResult] = await Promise.all([
+      this.messageDomainService.findByIdInConversation(messageId, conversationId),
+      this.messageDomainService.findAll(conversationId),
+      this.fileDomainService.getFilesByConversation(conversationId),
+    ]);
 
     if (!triggerMessageResult.ok) {
       return triggerMessageResult;
     }
 
-    const triggerMessage = triggerMessageResult.value;
-    const allMessagesResult = await this.messageDomainService.findAll(triggerMessage.conversationId);
-
     if (!allMessagesResult.ok) {
       return allMessagesResult;
     }
 
-    const triggerValidationResult = this.validateTriggerMessage(triggerMessage, allMessagesResult.value);
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    const triggerValidationResult = this.validateTriggerMessage(triggerMessageResult.value, allMessagesResult.value);
 
     if (!triggerValidationResult.ok) {
       return triggerValidationResult;
-    }
-
-    const filesResult = await this.fileDomainService.getFilesOnMessages({
-      messageIds: allMessagesResult.value.map((message) => message.id),
-    });
-
-    if (!filesResult.ok) {
-      return filesResult;
     }
 
     const signedFilesResult = await this.fileAccessDomainService.createSignedFileAccess(filesResult.value);
@@ -128,7 +125,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     }
 
     return success({
-      conversationId: triggerMessage.conversationId,
+      conversationId,
       llmInput: this.buildLlmInputMessages(allMessagesResult.value, signedFilesResult.value),
     });
   }

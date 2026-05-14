@@ -85,6 +85,30 @@ export class FileDomainService {
     return traverseAsync(request.files, (file) => this.uploadBlob(file));
   }
 
+  async getFilesByConversation(conversationId: string): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
+    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), async (id) => {
+      const filesResult = await this.fileRepository.selectFileRowsByConversationId(id);
+
+      if (!filesResult.ok) {
+        return filesResult;
+      }
+
+      const files: FileEntity[] = [];
+
+      for (const file of filesResult.value) {
+        const fileValidationResult = this.validateFile(file, StoreOperation.Read);
+
+        if (!fileValidationResult.ok) {
+          return fileValidationResult;
+        }
+
+        files.push(fileValidationResult.value);
+      }
+
+      return success(files);
+    });
+  }
+
   async getFilesOnMessages(request: { readonly messageIds: ReadonlyArray<string> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
     if (request.messageIds.length === 0) {
       return success([]);

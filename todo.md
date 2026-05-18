@@ -17,6 +17,47 @@
 5. Understand the Cloudflare security model.
 6. Idempotency and refresh protection.
 7. Set up a basic deploy pipeline.
+8. Advanced Oauth -
+   1. Production hardening:
+      1. HTTPS everywhere; `Secure` cookie attribute; `__Host-` prefix for session cookie.
+      2. CSRF middleware for non-OAuth POSTs (separate from OAuth `state`).
+      3. Rate limiting on `/login` and `/callback`.
+      4. Server-side session expiry (idle timeout + absolute timeout); don't rely on the cookie alone.
+      5. Session rotation on privilege change (rotate sid after login, after role change).
+      6. Distributed session storage (Redis / DB) once there's more than one server process.
+      7. Revocation: `/logout`, "log out everywhere", account deletion cascades to sessions.
+   2. Token mechanics:
+      1. Refresh tokens — long-lived, used to rotate access tokens without re-prompting the user.
+      2. Distinguish access token vs id_token vs refresh token (different audiences, lifetimes, storage).
+      3. JWT signature verification with JWKS via `jose` (replace the v1 "decode without verify" shortcut).
+      4. Token introspection (RFC 7662) vs self-contained JWTs — when to use which.
+   3. OpenID Connect details on top of plain OAuth:
+      1. `nonce` parameter (defends against a different replay attack than `state`).
+      2. Discovery document at `/.well-known/openid-configuration` — auto-config endpoints/JWKS.
+      3. UserInfo endpoint — alternative to reading identity from the id_token.
+      4. Standard claims: sub, email, name, picture, email_verified, iss, aud, exp, iat.
+      5. Logout flows: front-channel, back-channel, RP-initiated logout.
+   4. Other OAuth flows (learn when needed):
+      1. Client Credentials — machine-to-machine, no user involved.
+      2. Device Code — for smart TVs, CLIs, anything without a browser.
+      3. Token Exchange (RFC 8693) — proxying identity between services.
+      4. Skip: Implicit and Resource Owner Password (both deprecated).
+   5. Multi-tenant / multi-IdP:
+      1. Namespace routes (`/auth/<provider>/...`) once a second IdP is added.
+      2. Account linking — same email from Google + GitHub → one user or two?
+      3. IdP-initiated SSO vs SP-initiated.
+      4. Just-in-Time provisioning of user records on first login.
+      5. SAML for enterprise customers (different protocol, similar problems).
+   6. Authorization (the other half — what the user can do, not just who they are):
+      1. OAuth scopes vs app-internal permissions.
+      2. RBAC / ABAC / ReBAC — pick a model.
+      3. Policy engines (OPA, Cedar) when rules get complex.
+      4. Per-request authorization vs per-session authorization.
+   7. Frontier (ignore until specifically needed):
+      1. mTLS-bound tokens (RFC 8705).
+      2. DPoP — proof-of-possession tokens (RFC 9449).
+      3. FAPI 2.0 — banking-grade OAuth profile.
+      4. Verifiable Credentials / DIDs / wallet-based flows.
 
 #### UI
 1. Build a basic but chat UI.

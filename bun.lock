@@ -18,8 +18,8 @@
         "typescript-eslint": "^8.57.0",
       },
     },
-    "packages/auth-server": {
-      "name": "@thoth/auth-server",
+    "packages/proxy-server": {
+      "name": "@thoth/proxy-server",
       "version": "0.0.1",
       "dependencies": {
         "hono": "^4.12.9",
@@ -567,7 +567,7 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@thoth/auth-server": ["@thoth/auth-server@workspace:packages/auth-server"],
+    "@thoth/proxy-server": ["@thoth/proxy-server@workspace:packages/proxy-server"],
 
     "@thoth/conv-agent": ["@thoth/conv-agent@workspace:packages/conv-agent"],
 

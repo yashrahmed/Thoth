@@ -1,10 +1,10 @@
 {
-  "name": "@thoth/auth-server",
+  "name": "@thoth/proxy-server",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --hot src/index.ts",
+    "dev": "bun --hot src/local/index.ts",
     "build": "bun x tsc --noEmit",
     "typecheck": "bun x tsc --noEmit"
   },

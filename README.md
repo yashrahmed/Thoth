@@ -8,6 +8,7 @@ A fake ChatGPT which will do great things one day...but not today.
 thoth/
 ├── packages/
 │   ├── conv-agent/      # Conversation backend, deployed as a Cloudflare Worker
+│   ├── proxy-server/     # OAuth client + authenticated proxy for conv-agent
 │   ├── web/             # React + Vite web app
 │   └── mobile/          # React Native scaffold (placeholder)
 ├── deployment/          # local + dev deploy scripts, wrangler configs, docker-compose, system-test runner
@@ -16,21 +17,30 @@ thoth/
 
 The conv-agent's hexagonal layout (`domain/`, `application/`, `adapter/`, `worker/`) lives inside `packages/conv-agent/src/`.
 
+The proxy-server follows the same package conventions for its smaller surface:
+
+- `adapter/inbound/` contains the Hono HTTP handler that owns OAuth routes, session-cookie checks, and request proxying.
+- `config/` contains runtime config and session-store types.
+- `worker/bootstrap.ts` maps Cloudflare Worker bindings into the proxy dependencies.
+- `worker/index.ts` is the Cloudflare Worker entrypoint used by Wrangler.
+- `local/bootstrap.ts` maps local environment variables into the proxy dependencies.
+- `local/index.ts` is the Bun local entrypoint used by the local launcher.
+
 ## Tech Stack
 
-| Concern            | Choice                                                               |
-| ------------------ | -------------------------------------------------------------------- |
-| Backend runtime    | Cloudflare Workers (workerd) — `wrangler dev` locally via miniflare  |
-| Tooling runtime    | Bun                                                                  |
-| Language           | TypeScript                                                           |
-| HTTP framework     | Hono (running inside the Worker `fetch` handler)                     |
-| Queue              | Cloudflare Queues (producer + consumer bindings on the same Worker)  |
-| Database           | Postgres (+ pgvector image), via `postgres.js` fronted by Hyperdrive |
-| Blob storage       | Cloudflare R2 over the S3 protocol; MinIO locally                    |
-| Web                | React 19 + Vite                                                      |
-| Mobile             | React Native (scaffold only)                                         |
-| Architecture       | Hexagonal + DDD                                                      |
-| Monorepo           | Bun workspaces                                                       |
+| Concern         | Choice                                                               |
+| --------------- | -------------------------------------------------------------------- |
+| Backend runtime | Cloudflare Workers (workerd) — `wrangler dev` locally via miniflare  |
+| Tooling runtime | Bun                                                                  |
+| Language        | TypeScript                                                           |
+| HTTP framework  | Hono (running inside the Worker `fetch` handler)                     |
+| Queue           | Cloudflare Queues (producer + consumer bindings on the same Worker)  |
+| Database        | Postgres (+ pgvector image), via `postgres.js` fronted by Hyperdrive |
+| Blob storage    | Cloudflare R2 over the S3 protocol; MinIO locally                    |
+| Web             | React 19 + Vite                                                      |
+| Mobile          | React Native (scaffold only)                                         |
+| Architecture    | Hexagonal + DDD                                                      |
+| Monorepo        | Bun workspaces                                                       |
 
 ### R2 access choice
 
@@ -38,9 +48,9 @@ Blob storage uses R2 through its S3-compatible API instead of native Worker R2 b
 
 ## Configuration
 
-The local backend launcher runs a fully local stack: [`deployment/local/wrangler-local.toml`](./deployment/local/wrangler-local.toml), `~/.thoth/local-secrets.env`, local Postgres, and local MinIO.
+The local backend launcher runs a fully local stack: [`deployment/local/wrangler-local.toml`](./deployment/local/wrangler-local.toml), `~/.thoth/local-secrets.env`, local Postgres, local MinIO, `conv-agent`, and `proxy-server`.
 
-The dev backend is deployed to Cloudflare Workers with [`deployment/dev/deploy-worker-dev.sh`](./deployment/dev/deploy-worker-dev.sh) and [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml).
+The dev backend and proxy are deployed to Cloudflare Workers with [`deployment/dev/deploy-worker-dev.sh`](./deployment/dev/deploy-worker-dev.sh), [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml), and [`deployment/dev/wrangler-proxy-server-dev.toml`](./deployment/dev/wrangler-proxy-server-dev.toml).
 
 ### Credential setup
 
@@ -54,23 +64,26 @@ mkdir -p ~/.thoth
 cp deployment/local/local-secrets.env.example ~/.thoth/local-secrets.env
 ```
 
-Then edit `~/.thoth/local-secrets.env` if you need non-default local Postgres or MinIO values, and set `LLM_API_KEY` there or export `LLM_API_KEY` before launching the local backend.
+Then edit `~/.thoth/local-secrets.env` if you need non-default local Postgres or MinIO values, set `LLM_API_KEY`, and set the Google OAuth values used by `proxy-server`.
 
-For the deployed dev Worker and local UI-to-dev flow, create `~/.thoth/dev-secrets.env` with:
+For the deployed dev Workers and local UI-to-dev flow, create `~/.thoth/dev-secrets.env` with:
 
 - `BLOB_STORAGE_ACCESS_KEY_ID`
 - `BLOB_STORAGE_SECRET_ACCESS_KEY`
 - `LLM_API_KEY`
 - `TEMP_BEARER_TOKEN`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
 
 `MIGRATION_DATABASE_URL` is also required when running dev database migrations manually.
 
 ## Deploying Dev
 
-The dev Worker runs fully on Cloudflare infrastructure and is exposed at:
+The dev Workers run fully on Cloudflare infrastructure and are exposed at:
 
 ```text
 https://conv-agent.yashrahmed.workers.dev
+https://proxy-server.yashrahmed.workers.dev
 ```
 
 Deploy from the repo root:
@@ -83,9 +96,11 @@ The deploy script:
 
 1. Reads dev credentials from `~/.thoth/dev-secrets.env`.
 2. Verifies Wrangler authentication.
-3. Smoke-tests the configured Hyperdrive, Queue, and R2 bucket.
+3. Smoke-tests the configured Hyperdrive and R2 bucket.
 4. Runs `wrangler deploy` for `conv-agent`.
-5. Uploads required Worker secrets with `wrangler secret put`.
+5. Uploads required `conv-agent` secrets with `wrangler secret put`.
+6. Runs `wrangler deploy` for `proxy-server`.
+7. Uploads required `proxy-server` secrets with `wrangler secret put`.
 
 To delete the dev Worker while leaving Hyperdrive, Queue, and R2 resources intact:
 
@@ -96,6 +111,7 @@ To delete the dev Worker while leaving Hyperdrive, Queue, and R2 resources intac
 ## Running Locally
 
 Pre-requisites:
+
 - Bun and Docker.
 - `~/.thoth/local-secrets.env` in place with `MIGRATION_DATABASE_URL` populated.
 
@@ -104,7 +120,7 @@ Pre-requisites:
    ```sh
    ./deployment/run-flyway-migrations.sh local
    ```
-3. Start the backend stack (Postgres, MinIO, conv-agent Worker on `:3001`):
+3. Start the backend stack (Postgres, MinIO, `conv-agent` on `:3001`, and `proxy-server` on `:8788`):
    ```sh
    ./deployment/local/launch-all.sh start
    ```
@@ -113,7 +129,7 @@ Pre-requisites:
    ./deployment/local/launch-all.sh stop
    ```
 
-Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
+Logs land in `/tmp/thoth-local/logs/conv-agent.log` and `/tmp/thoth-local/logs/proxy-server.log`.
 
 ### How the local launch works
 
@@ -126,12 +142,13 @@ Logs for the worker land in `/tmp/thoth-local/logs/conv-agent.log`.
    - the local Cloudflare Queue (no LocalStack/SQS needed),
    - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the local config's `localConnectionString`.
 5. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
+6. Launches `packages/proxy-server/src/local/index.ts` on port `8788`. The proxy validates the `sid` cookie for API requests, strips browser auth/cookie headers, injects `Authorization: Bearer $TEMP_BEARER_TOKEN`, and relays the request to `conv-agent`.
 
 Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh). The `local` target requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
 
 ## Launching The UI
 
-The web UI runs locally with Vite on `:5173`. It always calls the backend through a local Vite proxy at `/api`; browser code does not receive the bearer token.
+The web UI runs locally with Vite on `:5173`. It calls the backend through the proxy server at `/api`; browser code does not receive the bearer token.
 
 Start the UI against the local Worker:
 
@@ -139,10 +156,11 @@ Start the UI against the local Worker:
 ./deployment/local/launch-web.sh
 ```
 
-This uses `~/.thoth/local-secrets.env` and proxies:
+This proxies:
 
 ```text
-/api -> http://127.0.0.1:3001
+/api -> http://127.0.0.1:8788
+/auth -> http://127.0.0.1:8788
 ```
 
 Start the UI against the deployed dev Worker:
@@ -151,13 +169,14 @@ Start the UI against the deployed dev Worker:
 ./deployment/local/launch-web.sh dev
 ```
 
-This uses `~/.thoth/dev-secrets.env` and proxies:
+This proxies:
 
 ```text
-/api -> https://conv-agent.yashrahmed.workers.dev
+/api -> https://proxy-server.yashrahmed.workers.dev
+/auth -> https://proxy-server.yashrahmed.workers.dev
 ```
 
-The launcher reads `TEMP_BEARER_TOKEN` from the selected secrets file and exports it only into the Vite dev-server process. [`packages/web/vite.config.ts`](./packages/web/vite.config.ts) injects it as `Authorization: Bearer ...` on proxied API requests.
+[`packages/web/vite.config.ts`](./packages/web/vite.config.ts) only forwards local `/api` and `/auth` traffic to the proxy server. The proxy is the only component that knows the backend bearer token.
 
 ## Temporal Awareness
 
@@ -172,6 +191,7 @@ sent at 2026-05-10 14:30:22 +00:00 UTC
 ```
 
 Format details:
+
 - Timestamps are always UTC for now. A per-user timezone setting is on the roadmap; once added, the header will switch to the user's local zone with the offset and abbreviation (e.g. `-05:00 CDT`).
 - System and tool messages are not stamped. System messages are directives, not turns; tool messages are model-generated and have no meaningful authoring time.
 - The header rendering and the system preamble live in [llm-prompt-domain-service.ts](packages/conv-agent/src/domain/services/llm-prompt-domain-service.ts). The `LlmCompletionFlow` calls the service to shape every message and to prepend the system prompt before handing the result to the LLM adapter, which stays prompt-agnostic. New LLM adapters inherit the behavior automatically.

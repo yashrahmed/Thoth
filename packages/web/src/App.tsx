@@ -56,7 +56,7 @@ type MessagePageResponse = {
   readonly pageSize: number;
 };
 
-const CONV_AGENT_URL = import.meta.env.VITE_CONV_AGENT_URL?.trim() || "/api";
+const THOTH_API_URL = import.meta.env.VITE_THOTH_API_URL?.trim() || "/api";
 const THOTH_PROFILE = import.meta.env.VITE_THOTH_PROFILE?.trim() || "local";
 const MESSAGE_PAGE_SIZE = 50;
 const CONVERSATION_PAGE_SIZE = 40;
@@ -549,13 +549,11 @@ function ConversationSidebar(props: {
       <div>
         <p style={eyebrowStyle}>Thoth</p>
         <h1 style={titleStyle}>Conversation UI</h1>
-        <p style={bodyStyle}>
-          Minimal chat client for <code>conv-agent</code>.
-        </p>
+        <p style={bodyStyle}>Minimal chat client for Thoth.</p>
       </div>
 
       <div style={statusPanelStyle}>
-        <StatusRow label="Endpoint" value={CONV_AGENT_URL} mono />
+        <StatusRow label="Endpoint" value={THOTH_API_URL} mono />
         <StatusRow label="Profile" value={THOTH_PROFILE} />
         <StatusRow label="Conversation" value={props.activeConversation ? formatConversationTitle(props.activeConversation.title) : "Starting..."} />
         <StatusRow label="Conversation ID" value={props.conversationId || "Starting..."} mono />
@@ -979,7 +977,7 @@ function getFileExtension(filename: string): string {
 }
 
 function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<string, string>>): string {
-  const base = CONV_AGENT_URL.endsWith("/") ? CONV_AGENT_URL.slice(0, -1) : CONV_AGENT_URL;
+  const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
   const isAbsoluteBase = /^https?:\/\//i.test(base);
   const url = isAbsoluteBase ? new URL(path, base) : new URL(`${base}${path}`, window.location.origin);
 

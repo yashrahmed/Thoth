@@ -12,12 +12,15 @@ COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 COMPOSE_ENV_FILE="$SCRIPT_DIR/data/.env"
 MINIO_ENDPOINT="http://127.0.0.1:9000"
 WORKER_PORT=3001
+PROXY_SERVER_PORT=8788
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
+PROXY_SERVER_PACKAGE_DIR="$REPO_ROOT/packages/proxy-server"
 WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
 CREDS_FILE="$CREDENTIALS_DIR/local-secrets.env"
 CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
 WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
 REQUIRED_WORKER_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY LLM_API_KEY TEMP_BEARER_TOKEN"
+REQUIRED_PROXY_SERVER_SECRETS="GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET TEMP_BEARER_TOKEN"
 
 if [ -z "$COMMAND" ]; then
   echo "Usage: ./deployment/local/launch-all.sh <start|stop>"
@@ -144,6 +147,13 @@ write_dev_vars() {
       exit 1
     fi
   done
+
+  for secret_name in $REQUIRED_PROXY_SERVER_SECRETS; do
+    if [ -z "$(read_secret_value "$secret_name" "$CREDS_FILE")" ]; then
+      echo "Missing $secret_name in $CREDS_FILE."
+      exit 1
+    fi
+  done
 }
 
 start_worker() {
@@ -184,6 +194,41 @@ stop_worker() {
   rm -f "$WORKER_DEV_VARS"
 }
 
+start_proxy_server() {
+  service_name="proxy-server"
+  pid_file="$STATE_DIR/$service_name.pid"
+  log_file="$LOG_DIR/$service_name.log"
+
+  if [ -f "$pid_file" ]; then
+    existing_pid="$(cat "$pid_file")"
+    if kill -0 "$existing_pid" 2>/dev/null; then
+      echo "$service_name is already running with pid $existing_pid."
+      return
+    fi
+    rm -f "$pid_file"
+  fi
+
+  port_pids="$(lsof -ti tcp:"$PROXY_SERVER_PORT" || true)"
+  if [ -n "$port_pids" ]; then
+    echo "$service_name could not start because port $PROXY_SERVER_PORT is already in use."
+    exit 1
+  fi
+
+  (
+    cd "$PROXY_SERVER_PACKAGE_DIR"
+    nohup env PORT="$PROXY_SERVER_PORT" CONV_AGENT_URL="http://127.0.0.1:$WORKER_PORT" WEB_ORIGIN="http://localhost:5173" bun --env-file "$CREDS_FILE" src/local/index.ts >"$log_file" 2>&1 &
+    echo "$!" >"$pid_file"
+  )
+
+  wrapper_pid="$(cat "$pid_file")"
+
+  wait_for_service_listener "$service_name" "$pid_file" "$PROXY_SERVER_PORT" "$wrapper_pid" "$log_file"
+}
+
+stop_proxy_server() {
+  kill_service_pids "proxy-server" "$STATE_DIR/proxy-server.pid" "$PROXY_SERVER_PORT" || echo "proxy-server is not running."
+}
+
 wait_for_dependencies() {
   attempts=0
 
@@ -212,13 +257,16 @@ stop_database() {
 
 case "$COMMAND" in
   start)
+    stop_proxy_server
     stop_worker
     stop_database
     write_dev_vars
     start_database
     start_worker
+    start_proxy_server
     ;;
   stop)
+    stop_proxy_server
     stop_worker
     stop_database
     ;;

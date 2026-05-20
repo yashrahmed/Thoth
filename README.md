@@ -50,6 +50,112 @@ The local backend launcher runs a fully local stack: [`deployment/local/wrangler
 
 The dev backend and proxy are deployed to Cloudflare Workers with [`deployment/dev/deploy-worker-dev.sh`](./deployment/dev/deploy-worker-dev.sh), [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml), and [`deployment/dev/wrangler-proxy-server-dev.toml`](./deployment/dev/wrangler-proxy-server-dev.toml).
 
+### Cloudflare Access dev app setup
+
+The dev `conv-agent` Worker is protected by a Cloudflare Access self-hosted
+application named `conv-agent-dev`. The Access app gates
+`https://conv-agent.yashrahmed.workers.dev` before requests reach the Worker.
+
+Create or update the app in Cloudflare Zero Trust:
+
+1. Go to **Zero Trust** -> **Access controls** -> **Applications**.
+2. Create an application under **Self-hosted and private**.
+3. Choose the **Workers** destination type.
+4. Set the application name to `conv-agent-dev`.
+5. Set the destination/domain to `conv-agent.yashrahmed.workers.dev`.
+6. In the application identity provider settings, select only the Google
+   identity provider. The current Google IdP id is
+   `86130f45-78cf-4879-8213-50ec35304992`.
+7. Enable automatic redirect to the identity provider because the app has only
+   one allowed IdP.
+8. Enable the HTTP-only cookie attribute.
+9. Leave the binding cookie disabled unless a later Worker binding flow needs
+   it.
+10. Leave OPTIONS preflight bypass disabled unless browser CORS preflights fail
+    before authentication.
+
+The app configuration should have this shape:
+
+```json
+{
+  "name": "conv-agent-dev",
+  "type": "self_hosted",
+  "allowed_idps": ["86130f45-78cf-4879-8213-50ec35304992"],
+  "auto_redirect_to_identity": true,
+  "session_duration": "24h",
+  "domain": "conv-agent.yashrahmed.workers.dev",
+  "destinations": [
+    {
+      "type": "public",
+      "uri": "conv-agent.yashrahmed.workers.dev",
+      "zone_name": "yashrahmed.workers.dev"
+    }
+  ],
+  "app_launcher_visible": true,
+  "enable_binding_cookie": false,
+  "http_only_cookie_attribute": true,
+  "options_preflight_bypass": false,
+  "self_hosted_domains": ["conv-agent.yashrahmed.workers.dev"]
+}
+```
+
+Attach two policies to the app.
+
+For browser access, add an allow policy for authenticated Google users. The app
+itself is already restricted to the Google IdP, so the policy can allow every
+authenticated user:
+
+```json
+{
+  "name": "Allow all logged in users (dev)",
+  "decision": "allow",
+  "include": [
+    {
+      "everyone": {}
+    }
+  ],
+  "exclude": [],
+  "require": []
+}
+```
+
+For automated dev tests, create an Access service token under **Access
+controls** -> **Service credentials** -> **Service Tokens**, then attach it with
+a Service Auth policy. The policy action must be **Service Auth**, which appears
+as `non_identity` in JSON. Using `allow` for a service token causes Cloudflare
+Access to redirect to the browser login flow instead of accepting the token.
+
+```json
+{
+  "name": "Allow dev service tokens",
+  "decision": "non_identity",
+  "include": [
+    {
+      "service_token": {
+        "token_id": "958c9e74-ec96-4d15-bf66-5e62d49c8ad7"
+      }
+    }
+  ],
+  "exclude": [],
+  "require": []
+}
+```
+
+Store the generated service-token client id and client secret in
+`~/.thoth/dev-secrets.env`:
+
+```sh
+CF_ACCESS_CLIENT_ID=...
+CF_ACCESS_CLIENT_SECRET=...
+```
+
+Do not commit those values. To verify the service-token path without printing
+credentials, run:
+
+```sh
+./deployment/dev/test-access-service-token.sh
+```
+
 ### Credential setup
 
 Credentials are loaded from `~/.thoth`, outside the Git checkout.

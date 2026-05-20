@@ -50,11 +50,29 @@ The local backend launcher runs a fully local stack: [`deployment/local/wrangler
 
 The dev backend and proxy are deployed to Cloudflare Workers with [`deployment/dev/deploy-worker-dev.sh`](./deployment/dev/deploy-worker-dev.sh), [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml), and [`deployment/dev/wrangler-proxy-server-dev.toml`](./deployment/dev/wrangler-proxy-server-dev.toml).
 
-### Cloudflare Access dev app setup
+### Dev OAuth and Cloudflare Access setup
 
 The dev `conv-agent` Worker is protected by a Cloudflare Access self-hosted
 application named `conv-agent-dev`. The Access app gates
 `https://conv-agent.yashrahmed.workers.dev` before requests reach the Worker.
+Browser authentication is delegated to Google OAuth through Cloudflare Access;
+the Worker does not receive or store the Google OAuth client secret.
+
+Create or update the Google OAuth client first:
+
+1. Go to **Google Cloud Console** -> **APIs & Services** -> **Credentials**.
+2. Create or edit the OAuth 2.0 client named `thoth-oauth-client`.
+3. Set the authorized JavaScript origin to:
+   ```text
+   https://cold-surf-f14c.cloudflareaccess.com
+   ```
+4. Set the authorized redirect URI to:
+   ```text
+   https://cold-surf-f14c.cloudflareaccess.com/cdn-cgi/access/callback
+   ```
+5. Copy the OAuth client id and client secret into the Cloudflare Zero Trust
+   Google identity provider configuration. The client id is safe to identify in
+   setup notes, but the client secret must not be committed.
 
 Create or update the app in Cloudflare Zero Trust:
 

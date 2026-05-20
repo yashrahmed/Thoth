@@ -19,6 +19,7 @@ WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
 CREDS_FILE="$CREDENTIALS_DIR/local-secrets.env"
 CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
 WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
+PROXY_SERVER_WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-proxy-server-local.toml"
 REQUIRED_WORKER_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY LLM_API_KEY TEMP_BEARER_TOKEN"
 REQUIRED_PROXY_SERVER_SECRETS="GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET TEMP_BEARER_TOKEN"
 
@@ -132,6 +133,11 @@ write_dev_vars() {
     exit 1
   fi
 
+  if [ ! -f "$PROXY_SERVER_WRANGLER_CONFIG_FILE" ]; then
+    echo "Missing Wrangler config file: $PROXY_SERVER_WRANGLER_CONFIG_FILE."
+    exit 1
+  fi
+
   cp "$CREDS_FILE" "$WORKER_DEV_VARS"
 
   if [ -z "$(read_secret_value "LLM_API_KEY" "$WORKER_DEV_VARS")" ] && [ -n "${LLM_API_KEY:-}" ]; then
@@ -216,7 +222,9 @@ start_proxy_server() {
 
   (
     cd "$PROXY_SERVER_PACKAGE_DIR"
-    nohup env PORT="$PROXY_SERVER_PORT" CONV_AGENT_URL="http://127.0.0.1:$WORKER_PORT" WEB_ORIGIN="http://localhost:5173" bun --env-file "$CREDS_FILE" src/local/index.ts >"$log_file" 2>&1 &
+    # Run the proxy through Wrangler too, so local and deployed proxy-server
+    # both use the Cloudflare Worker entrypoint.
+    nohup bun exec --env-file "$WORKER_DEV_VARS" "bun x wrangler dev --config \"$PROXY_SERVER_WRANGLER_CONFIG_FILE\" --port \"$PROXY_SERVER_PORT\" --inspector-port 0" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
 

@@ -22,9 +22,7 @@ The proxy-server follows the same package conventions for its smaller surface:
 - `adapter/inbound/` contains the Hono HTTP handler that owns OAuth routes, session-cookie checks, and request proxying.
 - `config/` contains runtime config and session-store types.
 - `worker/bootstrap.ts` maps Cloudflare Worker bindings into the proxy dependencies.
-- `worker/index.ts` is the Cloudflare Worker entrypoint used by Wrangler.
-- `local/bootstrap.ts` maps local environment variables into the proxy dependencies.
-- `local/index.ts` is the Bun local entrypoint used by the local launcher.
+- `worker/index.ts` is the Cloudflare Worker entrypoint used by Wrangler locally and in dev deploys.
 
 ## Tech Stack
 
@@ -48,7 +46,7 @@ Blob storage uses R2 through its S3-compatible API instead of native Worker R2 b
 
 ## Configuration
 
-The local backend launcher runs a fully local stack: [`deployment/local/wrangler-local.toml`](./deployment/local/wrangler-local.toml), `~/.thoth/local-secrets.env`, local Postgres, local MinIO, `conv-agent`, and `proxy-server`.
+The local backend launcher runs a fully local stack: [`deployment/local/wrangler-local.toml`](./deployment/local/wrangler-local.toml), [`deployment/local/wrangler-proxy-server-local.toml`](./deployment/local/wrangler-proxy-server-local.toml), `~/.thoth/local-secrets.env`, local Postgres, local MinIO, `conv-agent`, and `proxy-server`.
 
 The dev backend and proxy are deployed to Cloudflare Workers with [`deployment/dev/deploy-worker-dev.sh`](./deployment/dev/deploy-worker-dev.sh), [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml), and [`deployment/dev/wrangler-proxy-server-dev.toml`](./deployment/dev/wrangler-proxy-server-dev.toml).
 
@@ -142,7 +140,7 @@ Logs land in `/tmp/thoth-local/logs/conv-agent.log` and `/tmp/thoth-local/logs/p
    - the local Cloudflare Queue (no LocalStack/SQS needed),
    - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the local config's `localConnectionString`.
 5. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
-6. Launches `packages/proxy-server/src/local/index.ts` on port `8788`. The proxy validates the `sid` cookie for API requests, strips browser auth/cookie headers, injects `Authorization: Bearer $TEMP_BEARER_TOKEN`, and relays the request to `conv-agent`.
+6. Launches `wrangler dev` from `packages/proxy-server` with the local proxy config on port `8788`. The proxy validates the `sid` cookie for API requests, strips browser auth/cookie headers, injects `Authorization: Bearer $TEMP_BEARER_TOKEN`, and relays the request to `conv-agent`.
 
 Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh). The `local` target requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
 

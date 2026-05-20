@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --hot src/local/index.ts",
+    "dev": "bun x wrangler dev --config ../../deployment/local/wrangler-proxy-server-local.toml",
     "build": "bun x tsc --noEmit",
     "typecheck": "bun x tsc --noEmit"
   },

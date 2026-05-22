@@ -18,6 +18,21 @@ The conv-agent's hexagonal layout (`domain/`, `application/`, `adapter/`, `worke
 
 Authentication for the deployed dev `conv-agent` is handled by Cloudflare Access in front of the Worker. The Worker verifies the `Cf-Access-Jwt-Assertion` header on every non-public request using the JWKS published by the team domain; see [`packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts`](./packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts). The local profile omits the Access config vars and runs without JWT enforcement.
 
+### Append flow idempotency
+
+The current append-message persistence path locks the conversation row while it
+allocates the next `sequence_number`, so concurrent appends to the same
+conversation are ordered consistently. That lock does not make append requests
+idempotent: a double click or retried request still creates a second valid
+message with the next sequence number.
+
+Do not treat the existing sequence lock as duplicate prevention. Reliable
+append-flow idempotency requires a data-model change that records message
+lineage or client intent separately, such as tracking the previous message on
+each message and enforcing the expected relationship when appending. Until that
+model exists, the backend can preserve sequence integrity but cannot guarantee
+that duplicate append attempts collapse into one operation.
+
 ## Tech Stack
 
 | Concern         | Choice                                                               |

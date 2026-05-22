@@ -2,14 +2,13 @@
 
 #### Milestone 1
 1. Trials for Auth + Supporting Oauth and multitenancy.
-   1. Modify UI to support CF access login.
-   2. Add support for a single user authorization.
+   1. Add support for a single user authorization.
+   2. Build a small user management system.
    3. Deploy UI to dev.
-2. Examine async usage in the context of worker execution.
-3. Clean up readme.md.
-4. Idempotency and refresh protection.
-5. Build a small user management system.
-6. Prettify the UI.
+2. Idempotency and refresh protection.
+3. Examine async usage in the context of worker execution.
+4. Clean up readme.md.
+5. Prettify the UI.
    
 #### Post Milestone 1
 1. Plan to split the UI and the server.****

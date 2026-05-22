@@ -85,20 +85,19 @@ Create or update the app in Cloudflare Zero Trust:
    it.
 10. Leave OPTIONS preflight bypass disabled unless browser CORS preflights fail
     before authentication.
-11. Configure the application's **CORS settings** so the browser dev UI at
-    `http://localhost:5173` (Vite default) can call the protected origin
-    cross-origin with credentials:
-    - **Access-Control-Allow-Origins**: `http://localhost:5173` (add deployed UI
-      origins later).
+11. Configure the application's **CORS settings** so browser clients can call
+    the protected origin cross-origin with credentials:
+    - **Access-Control-Allow-Origins**: allow all origins for dev convenience.
     - **Access-Control-Allow-Credentials**: enabled.
     - **Access-Control-Allow-Methods**: `GET, POST, PATCH, DELETE, OPTIONS`.
     - **Access-Control-Allow-Headers**: `Content-Type`.
     - Leave wildcards off — wildcards are incompatible with credentialed
       requests.
 
-    The Worker does not run its own CORS middleware; the browser relies on CF
-    Access to emit the correct CORS headers on both the preflight and the
-    actual response.
+    The Worker reflects the request `Origin` header on non-`/auth/*` responses
+    instead of using `*`, because credentialed browser requests require a
+    concrete `Access-Control-Allow-Origin` value. This is intentionally broad
+    for the dev Access app; tighten it before exposing non-dev data.
 
 The app configuration should have this shape:
 

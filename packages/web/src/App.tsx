@@ -58,6 +58,7 @@ type MessagePageResponse = {
 
 const THOTH_API_URL = import.meta.env.VITE_THOTH_API_URL?.trim() || "/api";
 const THOTH_PROFILE = import.meta.env.VITE_THOTH_PROFILE?.trim() || "local";
+const ACCESS_LOGIN_SESSION_KEY = "THOTH_LOGGED_IN";
 const MESSAGE_PAGE_SIZE = 50;
 const CONVERSATION_PAGE_SIZE = 40;
 const IMAGE_FILE_EXTENSIONS = new Set(["avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "svg", "tif", "tiff", "webp"]);
@@ -178,6 +179,10 @@ export function App() {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (startAccessLoginIfNeeded()) {
+      return;
+    }
+
     void initializeConversationView();
   }, []);
 
@@ -980,14 +985,29 @@ function getFileExtension(filename: string): string {
 // CF_Authorization cookie (cross-origin requires credentials: 'include') and an
 // expired/missing session triggers the CF Access login bounce.
 async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(input, { ...init, credentials: "include" });
+  try {
+    const response = await fetch(input, { ...init, credentials: "include" });
 
-  if (response.status === 401) {
-    redirectToLogin();
-    throw new Error("Not authenticated. Redirecting to sign in.");
+    if (response.status === 401 || response.status === 403) {
+      if (startAccessLoginIfNeeded()) {
+        throw new Error("Not authenticated. Redirecting to sign in.");
+      }
+
+      throw new Error(`Not authenticated. Access login was already attempted and the API returned ${response.status}.`);
+    }
+
+    return response;
+  } catch (error) {
+    if (isRemoteAccessBackend() && error instanceof TypeError) {
+      if (startAccessLoginIfNeeded()) {
+        throw new Error("Not authenticated. Redirecting to sign in.");
+      }
+
+      throw new Error("Unable to reach conv-agent after Access login was attempted.");
+    }
+
+    throw error;
   }
-
-  return response;
 }
 
 function redirectToLogin(): void {
@@ -1000,6 +1020,24 @@ function redirectToLogin(): void {
   const url = new URL(`${base}/auth/login`);
   url.searchParams.set("redirect_uri", window.location.href);
   window.location.href = url.toString();
+}
+
+function startAccessLoginIfNeeded(): boolean {
+  if (!isRemoteAccessBackend()) {
+    return false;
+  }
+
+  if (window.sessionStorage.getItem(ACCESS_LOGIN_SESSION_KEY) === "true") {
+    return false;
+  }
+
+  window.sessionStorage.setItem(ACCESS_LOGIN_SESSION_KEY, "true");
+  redirectToLogin();
+  return true;
+}
+
+function isRemoteAccessBackend(): boolean {
+  return /^https?:\/\//i.test(THOTH_API_URL);
 }
 
 function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<string, string>>): string {

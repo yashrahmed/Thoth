@@ -238,7 +238,7 @@ export function App() {
         pageSize: String(CONVERSATION_PAGE_SIZE),
       });
 
-      const response = await fetch(url);
+      const response = await apiFetch(url);
 
       if (!response.ok) {
         throw new Error(`Conversation list failed with ${response.status}.`);
@@ -261,7 +261,7 @@ export function App() {
     setComposerError("");
 
     try {
-      const response = await fetch(buildConvAgentRequestUrl("/conversations"), {
+      const response = await apiFetch(buildConvAgentRequestUrl("/conversations"), {
         method: "POST",
       });
 
@@ -295,7 +295,7 @@ export function App() {
         pageSize: String(MESSAGE_PAGE_SIZE),
       });
 
-      const response = await fetch(url);
+      const response = await apiFetch(url);
 
       if (!response.ok) {
         throw new Error(`Message fetch failed with ${response.status}.`);
@@ -338,7 +338,7 @@ export function App() {
     setTitleError("");
 
     try {
-      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${id}`), {
+      const response = await apiFetch(buildConvAgentRequestUrl(`/conversations/${id}`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -380,7 +380,7 @@ export function App() {
     setError("");
 
     try {
-      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${id}`), {
+      const response = await apiFetch(buildConvAgentRequestUrl(`/conversations/${id}`), {
         method: "DELETE",
       });
 
@@ -443,7 +443,7 @@ export function App() {
         formData.append("attachment", file);
       }
 
-      const response = await fetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/add-to-conv`), {
+      const response = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/add-to-conv`), {
         method: "POST",
         body: formData,
       });
@@ -974,6 +974,32 @@ function getFileExtension(filename: string): string {
   }
 
   return normalizedFilename.slice(extensionStart + 1);
+}
+
+// All conv-agent calls go through this wrapper so the browser always sends the
+// CF_Authorization cookie (cross-origin requires credentials: 'include') and an
+// expired/missing session triggers the CF Access login bounce.
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, { ...init, credentials: "include" });
+
+  if (response.status === 401) {
+    redirectToLogin();
+    throw new Error("Not authenticated. Redirecting to sign in.");
+  }
+
+  return response;
+}
+
+function redirectToLogin(): void {
+  const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
+
+  if (!/^https?:\/\//i.test(base)) {
+    return;
+  }
+
+  const url = new URL(`${base}/auth/login`);
+  url.searchParams.set("redirect_uri", window.location.href);
+  window.location.href = url.toString();
 }
 
 function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<string, string>>): string {

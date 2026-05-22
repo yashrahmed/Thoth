@@ -7,8 +7,8 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 DEFAULT_PROFILE="dev"
 PROFILE="$DEFAULT_PROFILE"
 WEB_PACKAGE_DIR="$REPO_ROOT/packages/web"
-DEV_PROXY_SERVER_URL="https://proxy-server.yashrahmed.workers.dev"
-PROXY_SERVER_TARGET=""
+DEV_CONV_AGENT_URL="https://conv-agent.yashrahmed.workers.dev"
+CONV_AGENT_TARGET=""
 
 if [ "${1:-}" != "" ] && [ "${1#-}" = "$1" ]; then
   PROFILE="$1"
@@ -25,7 +25,7 @@ case "$PROFILE" in
     exit 1
     ;;
   dev)
-    PROXY_SERVER_TARGET="$DEV_PROXY_SERVER_URL"
+    CONV_AGENT_TARGET="$DEV_CONV_AGENT_URL"
     ;;
   *)
     echo "Unsupported profile: $PROFILE" >&2
@@ -35,12 +35,11 @@ case "$PROFILE" in
     ;;
 esac
 
-export THOTH_PROXY_URL="$PROXY_SERVER_TARGET"
-export VITE_THOTH_API_URL="/api"
+export VITE_THOTH_API_URL="$CONV_AGENT_TARGET"
 export VITE_THOTH_PROFILE="$PROFILE"
 
 echo "Starting web UI with profile '$PROFILE'."
-echo "Proxying $VITE_THOTH_API_URL and /auth -> $THOTH_PROXY_URL"
+echo "Calling conv-agent at $VITE_THOTH_API_URL (no Vite proxy; browser sends CF_Authorization cookie cross-origin)."
 
 cd "$WEB_PACKAGE_DIR"
 exec bunx vite "$@"

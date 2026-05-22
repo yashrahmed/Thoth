@@ -85,6 +85,20 @@ Create or update the app in Cloudflare Zero Trust:
    it.
 10. Leave OPTIONS preflight bypass disabled unless browser CORS preflights fail
     before authentication.
+11. Configure the application's **CORS settings** so the browser dev UI at
+    `http://localhost:5173` (Vite default) can call the protected origin
+    cross-origin with credentials:
+    - **Access-Control-Allow-Origins**: `http://localhost:5173` (add deployed UI
+      origins later).
+    - **Access-Control-Allow-Credentials**: enabled.
+    - **Access-Control-Allow-Methods**: `GET, POST, PATCH, DELETE, OPTIONS`.
+    - **Access-Control-Allow-Headers**: `Content-Type`.
+    - Leave wildcards off — wildcards are incompatible with credentialed
+      requests.
+
+    The Worker does not run its own CORS middleware; the browser relies on CF
+    Access to emit the correct CORS headers on both the preflight and the
+    actual response.
 
 The app configuration should have this shape:
 
@@ -260,13 +274,36 @@ Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/
 
 ## Launching The UI
 
-> [!WARNING]
-> The local web flow is temporarily broken following the removal of `proxy-server`.
-> `launch-web.sh` and `packages/web/vite.config.ts` still reference the deleted
-> proxy URLs. The web app needs to be migrated to talk directly to the
-> Cloudflare-Access-protected `conv-agent` (with credentialed CORS and a popup
-> or full-navigation login flow) before local UI dev works again. Tracked as
-> follow-up; backend and system-test flows are unaffected.
+The web UI runs locally on Vite (default port `5173`) and points at the deployed
+Cloudflare-Access-protected `conv-agent` directly — there is no Vite proxy.
+
+```sh
+./deployment/local/launch-web.sh dev
+```
+
+How auth works in this configuration:
+
+1. The browser issues fetch calls to `https://conv-agent.yashrahmed.workers.dev`
+   with `credentials: 'include'`, so the `CF_Authorization` cookie (set on
+   `*.workers.dev`) is sent cross-origin.
+2. CF Access validates the cookie and injects `Cf-Access-Jwt-Assertion`; the
+   Worker verifies the JWT and serves the response. CF Access also injects the
+   CORS response headers (`Access-Control-Allow-Origin`,
+   `Access-Control-Allow-Credentials`) based on the app's CORS settings, so the
+   browser permits the JS to read the body.
+3. If the cookie is missing or expired the Worker returns 401, and the web app
+   navigates the page to `<conv-agent>/auth/login?redirect_uri=<current URL>`.
+   That endpoint is protected by CF Access, so the IdP flow runs, the cookie
+   gets set on the conv-agent origin, and the handler 302s the user back to the
+   UI.
+
+Pre-requisite: the CF Access app has CORS configured for
+`http://localhost:5173` with credentials enabled — see the Access app setup
+section above.
+
+The `local` profile of `launch-web.sh` is intentionally rejected: the local
+`conv-agent` runs without JWT verification (no Cloudflare Access in front), so
+there is no login flow to complete and no cookie to set.
 
 ## Temporal Awareness
 

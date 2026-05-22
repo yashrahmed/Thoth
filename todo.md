@@ -2,15 +2,15 @@
 
 #### Milestone 1
 1. Trials for Auth + Supporting Oauth and multitenancy.
-   1. Consolidate proxy worker into conv-agent and simplify.
-   2. Modify UI to support CF access login.
-   3. Add support for a single user authorization.
-   4. Deploy UI to dev.
+   1. Modify UI to support CF access login.
+   2. Add support for a single user authorization.
+   3. Deploy UI to dev.
 2. Examine async usage in the context of worker execution.
 3. Clean up readme.md.
-4. Build a small user management system.
-5. Idempotency and refresh protection.
-
+4. Idempotency and refresh protection.
+5. Build a small user management system.
+6. Prettify the UI.
+   
 #### Post Milestone 1
 1. Plan to split the UI and the server.****
 2. Domain setup for local testing.

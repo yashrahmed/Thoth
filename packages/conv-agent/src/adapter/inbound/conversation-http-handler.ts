@@ -13,6 +13,13 @@ import { type GetMessagesOnConversationFlow } from "../../application/get-messag
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
 import type { UpdateConvFlow } from "../../application/update-conv-flow";
 import { ConversationResponse, MessageResponse, PageResponse } from "../../domain/objects/response-types";
+import type { AccessIdentity, AccessJwtVerificationService } from "./services/access-jwt-verification-service";
+
+const ACCESS_JWT_HEADER = "cf-access-jwt-assertion";
+
+interface HandlerVariables {
+  identity: AccessIdentity;
+}
 
 interface TransportValidationError {
   readonly kind: "ValidationError";
@@ -37,7 +44,7 @@ type ApplicationMessageType = ApplicationAppendMessageRequest["type"];
 type ApplicationContent = ApplicationAppendMessageRequest["content"];
 
 interface ConversationHttpHandlerDeps {
-  readonly tempBearerToken: string;
+  readonly accessVerification: AccessJwtVerificationService | null;
   readonly createConversation: CreateConversationFlow;
   readonly getConversation: GetConversationFlow;
   readonly listConversations: ListConversationsFlow;
@@ -51,31 +58,50 @@ interface ConversationHttpHandlerDeps {
 const PUBLIC_PATHS = new Set(["/", "/health"]);
 
 export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps): (req: Request) => Response | Promise<Response> {
-  const app = new Hono();
+  const app = new Hono<{ Variables: HandlerVariables }>();
 
   app.use("*", cors());
 
-  const expectedAuthorization = `Bearer ${deps.tempBearerToken}`;
+  const { accessVerification } = deps;
 
-  app.use("*", async (c, next) => {
-    if (PUBLIC_PATHS.has(c.req.path)) {
-      return next();
-    }
+  if (accessVerification) {
+    app.use("*", async (c, next) => {
+      if (PUBLIC_PATHS.has(c.req.path)) {
+        return next();
+      }
 
-    if (c.req.header("authorization") !== expectedAuthorization) {
-      return c.json(
-        {
-          error: {
-            kind: "UnauthorizedError",
-            message: "Missing or invalid bearer token.",
+      const token = c.req.header(ACCESS_JWT_HEADER);
+
+      if (!token) {
+        return c.json(
+          {
+            error: {
+              kind: "UnauthorizedError",
+              message: "Missing Cf-Access-Jwt-Assertion header.",
+            },
           },
-        },
-        401,
-      );
-    }
+          401,
+        );
+      }
 
-    return next();
-  });
+      const result = await accessVerification.verify(token);
+
+      if (!result.ok) {
+        return c.json(
+          {
+            error: {
+              kind: "UnauthorizedError",
+              message: `Invalid Cf-Access-Jwt-Assertion: ${result.reason}`,
+            },
+          },
+          401,
+        );
+      }
+
+      c.set("identity", result.identity);
+      return next();
+    });
+  }
 
   app.onError((error, c) => {
     const message = error instanceof Error ? error.message : "Unexpected conv-agent error.";

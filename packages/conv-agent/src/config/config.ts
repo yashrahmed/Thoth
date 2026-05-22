@@ -8,3 +8,8 @@ export interface BlobStorageConfig {
 export interface LlmConfig {
   readonly apiKey: string;
 }
+
+export interface AccessConfig {
+  readonly teamDomain: string;
+  readonly aud: string;
+}

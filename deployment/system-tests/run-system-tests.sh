@@ -63,18 +63,37 @@ if [ ! -f "$CREDS_FILE" ]; then
   exit 1
 fi
 
-bearer_token="$(read_secret_value "TEMP_BEARER_TOKEN" "$CREDS_FILE")"
+# Dev conv-agent is fronted by Cloudflare Access. The system tests authenticate
+# via a CF Access service token; Access mints the JWT that conv-agent verifies.
+# Local conv-agent has no Access in front of it and runs without JWT enforcement.
+if [ "$PROFILE" = "dev" ]; then
+  cf_access_client_id="$(read_secret_value "CF_ACCESS_CLIENT_ID" "$CREDS_FILE")"
+  cf_access_client_secret="$(read_secret_value "CF_ACCESS_CLIENT_SECRET" "$CREDS_FILE")"
 
-if [ -z "$bearer_token" ]; then
-  echo "Missing TEMP_BEARER_TOKEN in $CREDS_FILE." >&2
-  exit 1
+  if [ -z "$cf_access_client_id" ] || [ -z "$cf_access_client_secret" ]; then
+    echo "Missing CF_ACCESS_CLIENT_ID or CF_ACCESS_CLIENT_SECRET in $CREDS_FILE." >&2
+    exit 1
+  fi
+
+  export CF_ACCESS_CLIENT_ID="$cf_access_client_id"
+  export CF_ACCESS_CLIENT_SECRET="$cf_access_client_secret"
 fi
 
-export CONV_AGENT_BEARER_TOKEN="$bearer_token"
 export CONV_AGENT_URL="$CONV_AGENT_TARGET"
 
+health_check() {
+  if [ "$PROFILE" = "dev" ]; then
+    curl -sS -o /dev/null -f \
+      -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+      -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+      "$CONV_AGENT_URL/health"
+  else
+    curl -sS -o /dev/null -f "$CONV_AGENT_URL/health"
+  fi
+}
+
 attempts=0
-while ! curl -sS -o /dev/null -f "$CONV_AGENT_URL/health"; do
+while ! health_check; do
   attempts=$((attempts + 1))
 
   if [ "$attempts" -ge 60 ]; then

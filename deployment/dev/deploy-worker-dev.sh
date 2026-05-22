@@ -8,13 +8,10 @@ CREDENTIALS_DIR="$HOME/.thoth"
 PROFILE="dev"
 CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
 WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-cloud-dev.toml"
-PROXY_SERVER_WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-proxy-server-dev.toml"
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
-PROXY_SERVER_PACKAGE_DIR="$REPO_ROOT/packages/proxy-server"
 COMMAND="${1:-}"
 
-CONV_AGENT_REQUIRED_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY LLM_API_KEY TEMP_BEARER_TOKEN"
-PROXY_SERVER_REQUIRED_SECRETS="GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET TEMP_BEARER_TOKEN"
+CONV_AGENT_REQUIRED_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY LLM_API_KEY"
 
 usage() {
   echo "Usage: ./deployment/dev/deploy-worker-dev.sh <deploy|teardown>"
@@ -54,11 +51,6 @@ ensure_wrangler_config() {
     echo "Missing Wrangler config file: $WRANGLER_CONFIG_FILE." >&2
     exit 1
   fi
-
-  if [ ! -f "$PROXY_SERVER_WRANGLER_CONFIG_FILE" ]; then
-    echo "Missing Wrangler config file: $PROXY_SERVER_WRANGLER_CONFIG_FILE." >&2
-    exit 1
-  fi
 }
 
 ensure_deploy_inputs() {
@@ -69,7 +61,7 @@ ensure_deploy_inputs() {
     exit 1
   fi
 
-  for secret_name in $CONV_AGENT_REQUIRED_SECRETS $PROXY_SERVER_REQUIRED_SECRETS; do
+  for secret_name in $CONV_AGENT_REQUIRED_SECRETS; do
     secret_value="$(get_env_value "$secret_name" "$CREDS_FILE")"
     if [ -z "$secret_value" ]; then
       echo "Missing $secret_name in $CREDS_FILE." >&2
@@ -93,12 +85,6 @@ deploy_worker() {
   bun x wrangler deploy --config "$WRANGLER_CONFIG_FILE"
 }
 
-deploy_proxy_server() {
-  echo "Deploying proxy-server Worker..."
-  cd "$PROXY_SERVER_PACKAGE_DIR"
-  bun x wrangler deploy --config "$PROXY_SERVER_WRANGLER_CONFIG_FILE"
-}
-
 upload_conv_agent_secrets() {
   cd "$WORKER_PACKAGE_DIR"
 
@@ -106,16 +92,6 @@ upload_conv_agent_secrets() {
     secret_value="$(get_env_value "$secret_name" "$CREDS_FILE")"
     echo "Uploading conv-agent secret: $secret_name"
     printf '%s' "$secret_value" | bun x wrangler secret put "$secret_name" --config "$WRANGLER_CONFIG_FILE"
-  done
-}
-
-upload_proxy_server_secrets() {
-  cd "$PROXY_SERVER_PACKAGE_DIR"
-
-  for secret_name in $PROXY_SERVER_REQUIRED_SECRETS; do
-    secret_value="$(get_env_value "$secret_name" "$CREDS_FILE")"
-    echo "Uploading proxy-server secret: $secret_name"
-    printf '%s' "$secret_value" | bun x wrangler secret put "$secret_name" --config "$PROXY_SERVER_WRANGLER_CONFIG_FILE"
   done
 }
 
@@ -170,12 +146,6 @@ teardown_worker() {
   bun x wrangler delete --config "$WRANGLER_CONFIG_FILE"
 }
 
-teardown_proxy_server() {
-  echo "Deleting proxy-server Worker..."
-  cd "$PROXY_SERVER_PACKAGE_DIR"
-  bun x wrangler delete --config "$PROXY_SERVER_WRANGLER_CONFIG_FILE"
-}
-
 case "$COMMAND" in
   deploy)
     ensure_deploy_inputs
@@ -183,14 +153,11 @@ case "$COMMAND" in
     smoke_test_dependencies
     deploy_worker
     upload_conv_agent_secrets
-    deploy_proxy_server
-    upload_proxy_server_secrets
     echo "Deploy complete."
     ;;
   teardown)
     ensure_wrangler_config
     ensure_logged_in
-    teardown_proxy_server
     teardown_worker
     echo "Teardown complete."
     ;;

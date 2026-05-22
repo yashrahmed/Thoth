@@ -18,16 +18,6 @@
         "typescript-eslint": "^8.57.0",
       },
     },
-    "packages/proxy-server": {
-      "name": "@thoth/proxy-server",
-      "version": "0.0.1",
-      "dependencies": {
-        "hono": "^4.12.9",
-      },
-      "devDependencies": {
-        "@types/bun": "^1.3.10",
-      },
-    },
     "packages/conv-agent": {
       "name": "@thoth/conv-agent",
       "version": "0.0.1",
@@ -37,6 +27,7 @@
         "@langchain/core": "^1.1.44",
         "@langchain/openai": "^1.4.5",
         "hono": "^4.12.9",
+        "jose": "^5.9.6",
         "postgres": "^3.4.7",
       },
       "devDependencies": {
@@ -47,6 +38,16 @@
     "packages/mobile": {
       "name": "@thoth/mobile",
       "version": "0.0.1",
+    },
+    "packages/proxy-server": {
+      "name": "@thoth/proxy-server",
+      "version": "0.0.1",
+      "dependencies": {
+        "hono": "^4.12.9",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.10",
+      },
     },
     "packages/web": {
       "name": "@thoth/web",
@@ -567,11 +568,11 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@thoth/proxy-server": ["@thoth/proxy-server@workspace:packages/proxy-server"],
-
     "@thoth/conv-agent": ["@thoth/conv-agent@workspace:packages/conv-agent"],
 
     "@thoth/mobile": ["@thoth/mobile@workspace:packages/mobile"],
+
+    "@thoth/proxy-server": ["@thoth/proxy-server@workspace:packages/proxy-server"],
 
     "@thoth/web": ["@thoth/web@workspace:packages/web"],
 
@@ -964,6 +965,8 @@
     "isexe": ["isexe@2.0.0", "", {}, "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw=="],
 
     "jiti": ["jiti@2.6.1", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ=="],
+
+    "jose": ["jose@5.10.0", "", {}, "sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg=="],
 
     "js-tiktoken": ["js-tiktoken@1.0.21", "", { "dependencies": { "base64-js": "^1.5.1" } }, "sha512-biOj/6M5qdgx5TKjDnFT1ymSpM5tbd3ylwDtrQvFQSu0Z7bBYko2dF+W/aUkXUPuk6IVpRxk/3Q2sHOzGlS36g=="],
 

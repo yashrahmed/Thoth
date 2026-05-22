@@ -1,5 +1,6 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { createConversationHttpHandler } from "../adapter/inbound/conversation-http-handler";
+import { AccessJwtVerificationService } from "../adapter/inbound/services/access-jwt-verification-service";
 import { R2BlobRepository } from "../adapter/blob/r2-blob-repository";
 import { R2FileSignedUrlGenerator } from "../adapter/blob/r2-file-signed-url-generator";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
@@ -28,7 +29,7 @@ import { GenericValidationService } from "../domain/services/generic-validation-
 import { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
-import type { BlobStorageConfig, LlmConfig } from "../config/config";
+import type { AccessConfig, BlobStorageConfig, LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
   HYPERDRIVE: Hyperdrive;
@@ -39,7 +40,8 @@ export interface WorkerEnv {
   BLOB_STORAGE_ACCESS_KEY_ID: string;
   BLOB_STORAGE_SECRET_ACCESS_KEY: string;
   LLM_API_KEY: string;
-  TEMP_BEARER_TOKEN: string;
+  CF_ACCESS_TEAM_DOMAIN?: string;
+  CF_ACCESS_AUD?: string;
 }
 
 interface WorkerDeps {
@@ -128,8 +130,10 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     await database.end({ timeout: 5 });
   };
 
+  const accessVerification = buildAccessVerification(env);
+
   const httpHandler = createConversationHttpHandler({
-    tempBearerToken: requireString(env.TEMP_BEARER_TOKEN, "TEMP_BEARER_TOKEN"),
+    accessVerification,
     createConversation: new CreateConversationFlow(conversationDomainService),
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),
@@ -163,4 +167,22 @@ function requireString(value: string | undefined, name: string): string {
   }
 
   return value;
+}
+
+// Worker requires both Access vars together. Local profile omits both and runs
+// without JWT verification because Cloudflare Access never fronts local requests.
+function buildAccessVerification(env: WorkerEnv): AccessJwtVerificationService | null {
+  const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
+  const aud = env.CF_ACCESS_AUD;
+
+  if (!teamDomain && !aud) {
+    return null;
+  }
+
+  const config: AccessConfig = {
+    teamDomain: requireString(teamDomain, "CF_ACCESS_TEAM_DOMAIN"),
+    aud: requireString(aud, "CF_ACCESS_AUD"),
+  };
+
+  return new AccessJwtVerificationService(config);
 }

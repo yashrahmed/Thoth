@@ -1,0 +1,26 @@
+name = "conv-agent"
+main = "../../packages/conv-agent/src/worker/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "61caa9d56c5a0143bfda0f07fd01088a"
+
+
+[dev]
+port = 3001
+
+[vars]
+BLOB_STORAGE_ENDPOINT = "https://61caa9d56c5a0143bfda0f07fd01088a.r2.cloudflarestorage.com"
+BLOB_STORAGE_BUCKET = "thoth-obj-store-dev"
+BLOB_STORAGE_REGION = "auto"
+BLOB_STORAGE_FOLDER = "conv-agent"
+CF_ACCESS_TEAM_DOMAIN = "https://cold-surf-f14c.cloudflareaccess.com"
+CF_ACCESS_AUD = "48f817a69e3b4c11d1b0245a878e5b15365c94033c1e2d8f79d3ba19b7147ac4"
+
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "e57e915a3b8c49f496b31f39b367e993"
+
+[observability]
+enabled = true

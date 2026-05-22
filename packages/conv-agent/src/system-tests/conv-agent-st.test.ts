@@ -4,16 +4,22 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, test } from "bun:test";
 
 const BASE_URL = process.env.CONV_AGENT_URL ?? "http://127.0.0.1:3001";
-const BEARER_TOKEN = process.env.CONV_AGENT_BEARER_TOKEN;
+const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID;
+const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET;
 const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
 const COMPLETION_TIMEOUT_MS = 30_000;
 const COMPLETION_POLL_INTERVAL_MS = 200;
 
-if (!BEARER_TOKEN) {
-  throw new Error("CONV_AGENT_BEARER_TOKEN is required to run system tests.");
-}
-
-const AUTH_HEADERS: Record<string, string> = { authorization: `Bearer ${BEARER_TOKEN}` };
+// Dev: send the Access service-token headers so Cloudflare Access mints a JWT
+// and forwards it to conv-agent. 
+// Local: no Access in front, no JWT enforcement, no headers needed.
+const AUTH_HEADERS: Record<string, string> =
+  CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET
+    ? {
+        "cf-access-client-id": CF_ACCESS_CLIENT_ID,
+        "cf-access-client-secret": CF_ACCESS_CLIENT_SECRET,
+      }
+    : {};
 
 type MessageType = "user" | "assistant" | "system" | "tool";
 
@@ -45,7 +51,7 @@ interface ConversationItem {
 
 describe("conv-agent HTTP system test", () => {
   beforeAll(async () => {
-    const response = await fetch(`${BASE_URL}/health`);
+    const response = await fetch(`${BASE_URL}/health`, { headers: AUTH_HEADERS });
 
     if (!response.ok) {
       throw new Error(`conv-agent health check failed at ${BASE_URL}/health (status ${response.status}).`);

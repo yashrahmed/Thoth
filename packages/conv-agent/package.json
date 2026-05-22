@@ -17,6 +17,7 @@
     "@langchain/core": "^1.1.44",
     "@langchain/openai": "^1.4.5",
     "hono": "^4.12.9",
+    "jose": "^5.9.6",
     "postgres": "^3.4.7"
   },
   "devDependencies": {

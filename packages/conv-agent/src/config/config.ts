@@ -13,3 +13,8 @@ export interface AccessConfig {
   readonly teamDomain: string;
   readonly aud: string;
 }
+
+export interface AuthConfig {
+  readonly allowedUserEmails: ReadonlyArray<string>;
+  readonly allowedServiceTokenClientIds: ReadonlyArray<string>;
+}

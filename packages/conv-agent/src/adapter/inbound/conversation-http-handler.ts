@@ -11,8 +11,9 @@ import type { GetConversationFlow } from "../../application/get-conversation-flo
 import { type GetMessagesOnConversationFlow } from "../../application/get-messages-on-conversation-flow";
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
 import type { UpdateConvFlow } from "../../application/update-conv-flow";
+import type { AccessIdentityAuthorizer } from "../../domain/contracts/access-identity-authorizer";
+import type { AccessIdentity, AccessIdentityVerifier } from "../../domain/contracts/access-identity-verifier";
 import { ConversationResponse, MessageResponse, PageResponse } from "../../domain/objects/response-types";
-import type { AccessIdentity, AccessJwtVerificationService } from "./services/access-jwt-verification-service";
 
 const ACCESS_JWT_HEADER = "cf-access-jwt-assertion";
 
@@ -43,7 +44,8 @@ type ApplicationMessageType = ApplicationAppendMessageRequest["type"];
 type ApplicationContent = ApplicationAppendMessageRequest["content"];
 
 interface ConversationHttpHandlerDeps {
-  readonly accessVerification: AccessJwtVerificationService | null;
+  readonly accessVerification: AccessIdentityVerifier | null;
+  readonly accessIdentityAuthorizer: AccessIdentityAuthorizer | null;
   readonly createConversation: CreateConversationFlow;
   readonly getConversation: GetConversationFlow;
   readonly listConversations: ListConversationsFlow;
@@ -59,7 +61,7 @@ const PUBLIC_PATHS = new Set(["/", "/health"]);
 export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps): (req: Request) => Response | Promise<Response> {
   const app = new Hono<{ Variables: HandlerVariables }>();
 
-  const { accessVerification } = deps;
+  const { accessIdentityAuthorizer, accessVerification } = deps;
 
   if (accessVerification) {
     app.use("*", async (c, next) => {
@@ -93,6 +95,22 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
           },
           401,
         );
+      }
+
+      if (accessIdentityAuthorizer) {
+        const isAuthorized = await accessIdentityAuthorizer.isAuthorized(result.identity);
+
+        if (!isAuthorized) {
+          return c.json(
+            {
+              error: {
+                kind: "ForbiddenError",
+                message: "Access identity is not authorized for conv-agent.",
+              },
+            },
+            403,
+          );
+        }
       }
 
       c.set("identity", result.identity);

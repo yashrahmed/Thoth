@@ -1,11 +1,12 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { createConversationHttpHandler } from "../adapter/inbound/conversation-http-handler";
 import { AccessJwtVerificationService } from "../adapter/inbound/services/access-jwt-verification-service";
+import { StaticAccessIdentityAuthorizer } from "../adapter/inbound/services/static-access-identity-authorizer";
 import { R2BlobRepository } from "../adapter/blob/r2-blob-repository";
 import { R2FileSignedUrlGenerator } from "../adapter/blob/r2-file-signed-url-generator";
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
 import { PostgresConversationRepository } from "../adapter/postgres/postgres-conversation-repository";
-import { createPostgresDatabase, type PostgresDatabase } from "../adapter/postgres/postgres-database";
+import { createPostgresDatabase } from "../adapter/postgres/postgres-database";
 import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresFileRepository } from "../adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
@@ -19,6 +20,7 @@ import { GetConversationFlow } from "../application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "../application/get-messages-on-conversation-flow";
 import { ListConversationsFlow } from "../application/list-conversations-flow";
 import { UpdateConvFlow } from "../application/update-conv-flow";
+import type { AccessIdentityVerifier } from "../domain/contracts/access-identity-verifier";
 import { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { BlobDomainService } from "../domain/services/blob-domain-service";
 import { ConversationDomainService } from "../domain/services/conversation-domain-service";
@@ -29,7 +31,7 @@ import { GenericValidationService } from "../domain/services/generic-validation-
 import { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
-import type { AccessConfig, BlobStorageConfig, LlmConfig } from "../config/config";
+import type { AccessConfig, AuthConfig, BlobStorageConfig, LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
   HYPERDRIVE: Hyperdrive;
@@ -40,8 +42,11 @@ export interface WorkerEnv {
   BLOB_STORAGE_ACCESS_KEY_ID: string;
   BLOB_STORAGE_SECRET_ACCESS_KEY: string;
   LLM_API_KEY: string;
+  AUTH_ENABLED?: boolean | string;
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
+  ALLOWED_USER_EMAILS?: string;
+  ALLOWED_SERVICE_TOKEN_CLIENT_IDS?: string;
 }
 
 interface WorkerDeps {
@@ -130,10 +135,13 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     await database.end({ timeout: 5 });
   };
 
-  const accessVerification = buildAccessVerification(env);
+  const authEnabled = requireBooleanFlag(env.AUTH_ENABLED, "AUTH_ENABLED");
+  const authConfig = authEnabled ? buildAuthConfig(env) : null;
+  const accessVerification = buildAccessVerification(env, authEnabled);
 
   const httpHandler = createConversationHttpHandler({
     accessVerification,
+    accessIdentityAuthorizer: authConfig ? new StaticAccessIdentityAuthorizer(authConfig) : null,
     createConversation: new CreateConversationFlow(conversationDomainService),
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),
@@ -169,15 +177,28 @@ function requireString(value: string | undefined, name: string): string {
   return value;
 }
 
-// Worker requires both Access vars together. Local profile omits both and runs
-// without JWT verification because Cloudflare Access never fronts local requests.
-function buildAccessVerification(env: WorkerEnv): AccessJwtVerificationService | null {
-  const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
-  const aud = env.CF_ACCESS_AUD;
+function requireBooleanFlag(value: boolean | string | undefined, name: string): boolean {
+  if (value === true || value === "true") {
+    return true;
+  }
 
-  if (!teamDomain && !aud) {
+  if (value === false || value === "false") {
+    return false;
+  }
+
+  throw new Error(`${name} must be set to true or false.`);
+}
+
+// Auth must be explicitly enabled or disabled. Deployed profiles should set it
+// to true so missing Cloudflare Access config fails closed instead of exposing
+// protected endpoints.
+function buildAccessVerification(env: WorkerEnv, authEnabled: boolean): AccessIdentityVerifier | null {
+  if (!authEnabled) {
     return null;
   }
+
+  const teamDomain = env.CF_ACCESS_TEAM_DOMAIN;
+  const aud = env.CF_ACCESS_AUD;
 
   const config: AccessConfig = {
     teamDomain: requireString(teamDomain, "CF_ACCESS_TEAM_DOMAIN"),
@@ -185,4 +206,25 @@ function buildAccessVerification(env: WorkerEnv): AccessJwtVerificationService |
   };
 
   return new AccessJwtVerificationService(config);
+}
+
+function buildAuthConfig(env: WorkerEnv): AuthConfig {
+  return {
+    allowedUserEmails: requireCsvList(env.ALLOWED_USER_EMAILS, "ALLOWED_USER_EMAILS"),
+    allowedServiceTokenClientIds: requireCsvList(env.ALLOWED_SERVICE_TOKEN_CLIENT_IDS, "ALLOWED_SERVICE_TOKEN_CLIENT_IDS"),
+  };
+}
+
+function requireCsvList(value: string | undefined, name: string): ReadonlyArray<string> {
+  const rawValue = requireString(value, name);
+  const values = rawValue
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  if (values.length === 0) {
+    throw new Error(`${name} must contain at least one value.`);
+  }
+
+  return values;
 }

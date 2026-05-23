@@ -1,16 +1,8 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
 import type { AccessConfig } from "../../../config/config";
+import type { AccessIdentity, AccessIdentityVerifier, AccessVerificationResult } from "../../../domain/contracts/access-identity-verifier";
 
-export interface AccessIdentity {
-  readonly sub: string;
-  readonly email: string;
-}
-
-export type AccessVerificationResult =
-  | { readonly ok: true; readonly identity: AccessIdentity }
-  | { readonly ok: false; readonly reason: string };
-
-export class AccessJwtVerificationService {
+export class AccessJwtVerificationService implements AccessIdentityVerifier {
   private readonly getKey: JWTVerifyGetKey;
 
   constructor(private readonly config: AccessConfig) {
@@ -33,14 +25,18 @@ export class AccessJwtVerificationService {
 
   private extractIdentity(payload: JWTPayload): AccessIdentity {
     const sub = typeof payload.sub === "string" ? payload.sub : "";
-    // User logins carry `email`; service-token logins carry `common_name`.
-    const email =
-      typeof payload.email === "string"
-        ? payload.email
-        : typeof payload.common_name === "string"
-          ? payload.common_name
-          : "";
+    const email = typeof payload.email === "string" ? payload.email : "";
 
-    return { sub, email };
+    if (email) {
+      return { type: "user", sub, email };
+    }
+
+    const commonName = typeof payload.common_name === "string" ? payload.common_name : "";
+
+    if (commonName) {
+      return { type: "service-token", sub, serviceTokenClientId: commonName };
+    }
+
+    return { type: "unknown", sub };
   }
 }

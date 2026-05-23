@@ -16,7 +16,7 @@ thoth/
 
 The conv-agent's hexagonal layout (`domain/`, `application/`, `adapter/`, `worker/`) lives inside `packages/conv-agent/src/`.
 
-Authentication for the deployed dev `conv-agent` is handled by Cloudflare Access in front of the Worker. The Worker verifies the `Cf-Access-Jwt-Assertion` header on every non-public request using the JWKS published by the team domain; see [`packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts`](./packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts). The local profile omits the Access config vars and runs without JWT enforcement.
+Authentication for the deployed dev `conv-agent` is handled by Cloudflare Access in front of the Worker. The Worker verifies the `Cf-Access-Jwt-Assertion` header on every non-public request using the JWKS published by the team domain; see [`packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts`](./packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts). Auth must be explicitly configured with `AUTH_ENABLED`: local sets it to `false`, while deployed dev sets it to `true` and requires the Access team domain and AUD.
 
 ### Append flow idempotency
 
@@ -196,6 +196,38 @@ credentials, run:
 ./deployment/dev/test-access-service-token.sh
 ```
 
+### Conv-agent authorization
+
+Cloudflare Access performs the first gate before requests reach `conv-agent`.
+The Worker still verifies and authorizes the Access identity on every
+non-public endpoint. Public endpoints are `/` and `/health`.
+
+`AUTH_ENABLED` controls whether the Worker enforces this check:
+
+- `deployment/dev/wrangler-cloud-dev.toml` sets `AUTH_ENABLED=true`.
+- `deployment/local/wrangler-local.toml` sets `AUTH_ENABLED=false`.
+
+When auth is enabled, the Worker requires `CF_ACCESS_TEAM_DOMAIN` and
+`CF_ACCESS_AUD`, verifies the `Cf-Access-Jwt-Assertion` JWT, then maps it into
+an internal Access identity:
+
+- Google browser logins carry an `email` claim and become `type: "user"`.
+- Cloudflare Access service-token requests carry `common_name`, which is the
+  service-token client id, and become `type: "service-token"`.
+- Any other token shape becomes `type: "unknown"` and is rejected.
+
+The current authorizer is intentionally simple and static. It reads two
+comma-separated allowlists from Worker secrets:
+
+```sh
+ALLOWED_USER_EMAILS=yashrahmed@gmail.com
+ALLOWED_SERVICE_TOKEN_CLIENT_IDS=<cloudflare-access-service-token-client-id>
+```
+
+User emails are normalized case-insensitively. Service-token client IDs are
+matched exactly. The service-token client ID is safe to identify in config, but
+the corresponding `CF_ACCESS_CLIENT_SECRET` must never be committed.
+
 ### Credential setup
 
 Credentials are loaded from `~/.thoth`, outside the Git checkout.
@@ -215,12 +247,14 @@ For the deployed dev Worker and dev system tests, create `~/.thoth/dev-secrets.e
 - `BLOB_STORAGE_ACCESS_KEY_ID`
 - `BLOB_STORAGE_SECRET_ACCESS_KEY`
 - `LLM_API_KEY`
+- `ALLOWED_USER_EMAILS` as a comma-separated allowlist, for example `yashrahmed@gmail.com`
+- `ALLOWED_SERVICE_TOKEN_CLIENT_IDS` as a comma-separated allowlist of Cloudflare Access service-token client IDs
 - `CF_ACCESS_CLIENT_ID`
 - `CF_ACCESS_CLIENT_SECRET`
 
 `MIGRATION_DATABASE_URL` is also required when running dev database migrations manually.
 
-The `conv-agent-dev` Cloudflare Access AUD tag and team domain are set as `[vars]` in [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml) and verified by the Worker on every non-public request.
+The `conv-agent-dev` Cloudflare Access AUD tag and team domain are set as `[vars]` in [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml) and verified by the Worker on every non-public request. `AUTH_ENABLED=true` makes the Worker require both Access verification settings and the authorization allowlists; local runs set `AUTH_ENABLED=false` and do not need those allowlists.
 
 ## Deploying Dev
 
@@ -284,7 +318,7 @@ Logs land in `/tmp/thoth-local/logs/conv-agent.log`.
    - the local Cloudflare Queue (no LocalStack/SQS needed),
    - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the local config's `localConnectionString`.
 5. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
-Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh). The `local` target requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
+   Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh). The `local` target requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
 
 ## Launching The UI
 

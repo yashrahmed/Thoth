@@ -228,6 +228,20 @@ User emails are normalized case-insensitively. Service-token client IDs are
 matched exactly. The service-token client ID is safe to identify in config, but
 the corresponding `CF_ACCESS_CLIENT_SECRET` must never be committed.
 
+#### Local UI with dev Access
+
+Running the UI on `http://localhost:5173` while pointing it at the deployed
+Access-protected Worker is a cross-site browser flow. Cloudflare Access can
+complete the top-level Google login, but later API calls from localhost to
+`https://conv-agent.yashrahmed.workers.dev` depend on the browser sending the
+Access cookie in a third-party `fetch()` context.
+
+Chrome Incognito blocks third-party cookies by default, so this setup can fail
+after login with a CORS error against the Cloudflare Access login URL. That
+means the API request was redirected back to Access because the Access session
+cookie was not sent. Use a normal browser profile, allow third-party cookies for
+this dev flow, or run the UI and API through the same site/origin.
+
 ### Credential setup
 
 Credentials are loaded from `~/.thoth`, outside the Git checkout.

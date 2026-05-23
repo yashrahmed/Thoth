@@ -1005,7 +1005,7 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
 
     return response;
   } catch (error) {
-    if (isRemoteAccessBackend() && error instanceof TypeError) {
+    if (usesAccessGateway() && error instanceof TypeError) {
       if (startAccessLoginIfNeeded()) {
         throw new Error("Not authenticated. Redirecting to sign in.");
       }
@@ -1018,13 +1018,11 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
 }
 
 function redirectToLogin(): void {
-  const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
-
-  if (!/^https?:\/\//i.test(base)) {
+  if (!usesAccessGateway()) {
     return;
   }
 
-  const url = new URL(`${base}/auth/login`);
+  const url = new URL(buildConvAgentRequestUrl("/auth/login"), window.location.origin);
   url.searchParams.set("redirect_uri", window.location.href);
   window.location.href = url.toString();
 }
@@ -1032,17 +1030,16 @@ function redirectToLogin(): void {
 function logoutFromAccess(): void {
   window.sessionStorage.removeItem(ACCESS_LOGIN_SESSION_KEY);
 
-  if (!isRemoteAccessBackend()) {
+  if (!usesAccessGateway()) {
     window.location.reload();
     return;
   }
 
-  const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
-  window.location.href = `${new URL(base).origin}/cdn-cgi/access/logout`;
+  window.location.href = `${getConvAgentOrigin()}/cdn-cgi/access/logout`;
 }
 
 function startAccessLoginIfNeeded(): boolean {
-  if (!isRemoteAccessBackend()) {
+  if (!usesAccessGateway()) {
     return false;
   }
 
@@ -1055,8 +1052,18 @@ function startAccessLoginIfNeeded(): boolean {
   return true;
 }
 
-function isRemoteAccessBackend(): boolean {
-  return /^https?:\/\//i.test(THOTH_API_URL);
+function usesAccessGateway(): boolean {
+  return getConvAgentOrigin() !== window.location.origin || !isLocalDevelopmentOrigin(window.location.origin);
+}
+
+function getConvAgentOrigin(): string {
+  const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
+  return new URL(base, window.location.origin).origin;
+}
+
+function isLocalDevelopmentOrigin(origin: string): boolean {
+  const hostname = new URL(origin).hostname;
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<string, string>>): string {

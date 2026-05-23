@@ -8,7 +8,7 @@
     "test": "bun test --pass-with-no-tests src/adapter src/application src/config src/domain src/worker",
     "test:system": "bun test --timeout 180000 src/system-tests/conv-agent-st.test.ts",
     "typecheck": "bun x tsc --noEmit",
-    "worker:dev": "wrangler dev --config ../../deployment/local/wrangler-local.toml",
+    "worker:dev": "wrangler dev --config ../../deployment/local/wrangler-server-local.toml",
     "worker:deploy": "wrangler deploy"
   },
   "dependencies": {

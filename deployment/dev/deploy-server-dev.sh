@@ -7,14 +7,14 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 CREDENTIALS_DIR="$HOME/.thoth"
 PROFILE="dev"
 CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
-WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-cloud-dev.toml"
+WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-server-dev.toml"
 WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
 COMMAND="${1:-}"
 
 CONV_AGENT_REQUIRED_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY LLM_API_KEY ALLOWED_USER_EMAILS ALLOWED_SERVICE_TOKEN_CLIENT_IDS"
 
 usage() {
-  echo "Usage: ./deployment/dev/deploy-worker-dev.sh <deploy|teardown>"
+  echo "Usage: ./deployment/dev/deploy-server-dev.sh <deploy|teardown>"
 }
 
 if [ -z "$COMMAND" ]; then

@@ -16,7 +16,7 @@ WORKER_PACKAGE_DIR="$REPO_ROOT/packages/conv-agent"
 WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
 CREDS_FILE="$CREDENTIALS_DIR/local-secrets.env"
 CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
-WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-local.toml"
+WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-server-local.toml"
 REQUIRED_WORKER_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY LLM_API_KEY"
 
 if [ -z "$COMMAND" ]; then

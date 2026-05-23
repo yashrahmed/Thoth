@@ -3,7 +3,7 @@
 set -eu
 
 CREDENTIALS_FILE="${THOTH_DEV_SECRETS_FILE:-$HOME/.thoth/dev-secrets.env}"
-CONV_AGENT_URL="${CONV_AGENT_URL:-https://conv-agent.yashrahmed.workers.dev}"
+CONV_AGENT_URL="${CONV_AGENT_URL:-https://thoth-dev.bots-ns.com/api/v1}"
 
 read_env_value() {
   key="$1"

@@ -1,0 +1,13 @@
+name = "thoth-web-dev"
+compatibility_date = "2025-04-01"
+
+account_id = "61caa9d56c5a0143bfda0f07fd01088a"
+workers_dev = false
+
+[[routes]]
+pattern = "thoth-dev.bots-ns.com/*"
+zone_name = "bots-ns.com"
+
+[assets]
+directory = "../../packages/web/dist"
+not_found_handling = "single-page-application"

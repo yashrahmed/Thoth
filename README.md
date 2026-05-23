@@ -55,15 +55,15 @@ Blob storage uses R2 through its S3-compatible API instead of native Worker R2 b
 
 ## Configuration
 
-The local backend launcher runs a fully local stack: [`deployment/local/wrangler-local.toml`](./deployment/local/wrangler-local.toml), `~/.thoth/local-secrets.env`, local Postgres, local MinIO, and `conv-agent`.
+The local backend launcher runs a fully local stack: [`deployment/local/wrangler-server-local.toml`](./deployment/local/wrangler-server-local.toml), `~/.thoth/local-secrets.env`, local Postgres, local MinIO, and `conv-agent`.
 
-The dev backend is deployed to Cloudflare Workers with [`deployment/dev/deploy-worker-dev.sh`](./deployment/dev/deploy-worker-dev.sh) and [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml).
+The dev backend is deployed to Cloudflare Workers with [`deployment/dev/deploy-server-dev.sh`](./deployment/dev/deploy-server-dev.sh) and [`deployment/dev/wrangler-server-dev.toml`](./deployment/dev/wrangler-server-dev.toml). The dev web UI is deployed separately with [`deployment/dev/deploy-web-dev.sh`](./deployment/dev/deploy-web-dev.sh) and [`deployment/dev/wrangler-web-dev.toml`](./deployment/dev/wrangler-web-dev.toml).
 
 ### Dev OAuth and Cloudflare Access setup
 
 The dev `conv-agent` Worker is protected by a Cloudflare Access self-hosted
-application named `conv-agent-dev`. The Access app gates
-`https://conv-agent.yashrahmed.workers.dev` before requests reach the Worker.
+application named `thoth-dev-cf-access-app`. The Access app gates
+`https://thoth-dev.bots-ns.com` before requests reach the Worker.
 Browser authentication is delegated to Google OAuth through Cloudflare Access;
 the Worker does not receive or store the Google OAuth client secret.
 
@@ -88,8 +88,8 @@ Create or update the app in Cloudflare Zero Trust:
 1. Go to **Zero Trust** -> **Access controls** -> **Applications**.
 2. Create an application under **Self-hosted and private**.
 3. Choose the **Workers** destination type.
-4. Set the application name to `conv-agent-dev`.
-5. Set the destination/domain to `conv-agent.yashrahmed.workers.dev`.
+4. Set the application name to `thoth-dev-cf-access-app`.
+5. Set the destination/domain to `thoth-dev.bots-ns.com`.
 6. In the application identity provider settings, select only the Google
    identity provider. The current Google IdP id is
    `86130f45-78cf-4879-8213-50ec35304992`.
@@ -102,7 +102,8 @@ Create or update the app in Cloudflare Zero Trust:
     before authentication.
 11. Configure the application's **CORS settings** so browser clients can call
     the protected origin cross-origin with credentials:
-    - **Access-Control-Allow-Origins**: allow all origins for dev convenience.
+    - **Access-Control-Allow-Origins**: `http://localhost:5173` and
+      `http://127.0.0.1:5173` for the local Vite dev flow.
     - **Access-Control-Allow-Credentials**: enabled.
     - **Access-Control-Allow-Methods**: `GET, POST, PATCH, DELETE, OPTIONS`.
     - **Access-Control-Allow-Headers**: `Content-Type`.
@@ -111,31 +112,31 @@ Create or update the app in Cloudflare Zero Trust:
 
     The Worker reflects the request `Origin` header on non-`/auth/*` responses
     instead of using `*`, because credentialed browser requests require a
-    concrete `Access-Control-Allow-Origin` value. This is intentionally broad
-    for the dev Access app; tighten it before exposing non-dev data.
+    concrete `Access-Control-Allow-Origin` value. The Access app CORS allowlist
+    is what limits which browser origins can read cross-origin responses.
 
 The app configuration should have this shape:
 
 ```json
 {
-  "name": "conv-agent-dev",
+  "name": "thoth-dev-cf-access-app",
   "type": "self_hosted",
   "allowed_idps": ["86130f45-78cf-4879-8213-50ec35304992"],
   "auto_redirect_to_identity": true,
   "session_duration": "24h",
-  "domain": "conv-agent.yashrahmed.workers.dev",
+  "domain": "thoth-dev.bots-ns.com",
   "destinations": [
     {
       "type": "public",
-      "uri": "conv-agent.yashrahmed.workers.dev",
-      "zone_name": "yashrahmed.workers.dev"
+      "uri": "thoth-dev.bots-ns.com",
+      "zone_name": "bots-ns.com"
     }
   ],
   "app_launcher_visible": true,
   "enable_binding_cookie": false,
   "http_only_cookie_attribute": true,
   "options_preflight_bypass": false,
-  "self_hosted_domains": ["conv-agent.yashrahmed.workers.dev"]
+  "self_hosted_domains": ["thoth-dev.bots-ns.com"]
 }
 ```
 
@@ -204,8 +205,8 @@ non-public endpoint. Public endpoints are `/` and `/health`.
 
 `AUTH_ENABLED` controls whether the Worker enforces this check:
 
-- `deployment/dev/wrangler-cloud-dev.toml` sets `AUTH_ENABLED=true`.
-- `deployment/local/wrangler-local.toml` sets `AUTH_ENABLED=false`.
+- `deployment/dev/wrangler-server-dev.toml` sets `AUTH_ENABLED=true`.
+- `deployment/local/wrangler-server-local.toml` sets `AUTH_ENABLED=false`.
 
 When auth is enabled, the Worker requires `CF_ACCESS_TEAM_DOMAIN` and
 `CF_ACCESS_AUD`, verifies the `Cf-Access-Jwt-Assertion` JWT, then maps it into
@@ -233,7 +234,7 @@ the corresponding `CF_ACCESS_CLIENT_SECRET` must never be committed.
 Running the UI on `http://localhost:5173` while pointing it at the deployed
 Access-protected Worker is a cross-site browser flow. Cloudflare Access can
 complete the top-level Google login, but later API calls from localhost to
-`https://conv-agent.yashrahmed.workers.dev` depend on the browser sending the
+`https://thoth-dev.bots-ns.com/api/v1` depend on the browser sending the
 Access cookie in a third-party `fetch()` context.
 
 Chrome Incognito blocks third-party cookies by default, so this setup can fail
@@ -268,20 +269,20 @@ For the deployed dev Worker and dev system tests, create `~/.thoth/dev-secrets.e
 
 `MIGRATION_DATABASE_URL` is also required when running dev database migrations manually.
 
-The `conv-agent-dev` Cloudflare Access AUD tag and team domain are set as `[vars]` in [`deployment/dev/wrangler-cloud-dev.toml`](./deployment/dev/wrangler-cloud-dev.toml) and verified by the Worker on every non-public request. `AUTH_ENABLED=true` makes the Worker require both Access verification settings and the authorization allowlists; local runs set `AUTH_ENABLED=false` and do not need those allowlists.
+The `thoth-dev-cf-access-app` Cloudflare Access AUD tag and team domain are set as `[vars]` in [`deployment/dev/wrangler-server-dev.toml`](./deployment/dev/wrangler-server-dev.toml) and verified by the Worker on every non-public request. `AUTH_ENABLED=true` makes the Worker require both Access verification settings and the authorization allowlists; local runs set `AUTH_ENABLED=false` and do not need those allowlists.
 
 ## Deploying Dev
 
-The dev Worker runs fully on Cloudflare infrastructure and is exposed at:
+The dev server Worker runs fully on Cloudflare infrastructure and is exposed at:
 
 ```text
-https://conv-agent.yashrahmed.workers.dev
+https://thoth-dev.bots-ns.com/api/v1
 ```
 
-Deploy from the repo root:
+Deploy the server from the repo root:
 
 ```sh
-./deployment/dev/deploy-worker-dev.sh deploy
+./deployment/dev/deploy-server-dev.sh deploy
 ```
 
 The deploy script:
@@ -292,10 +293,29 @@ The deploy script:
 4. Runs `wrangler deploy` for `conv-agent`.
 5. Uploads required `conv-agent` secrets with `wrangler secret put`.
 
-To delete the dev Worker while leaving Hyperdrive and R2 resources intact:
+Deploy the web UI from the repo root:
 
 ```sh
-./deployment/dev/deploy-worker-dev.sh teardown
+./deployment/dev/deploy-web-dev.sh deploy
+```
+
+The web deploy script builds `packages/web` with `VITE_THOTH_API_URL=/api/v1`
+and deploys the static assets Worker at:
+
+```text
+https://thoth-dev.bots-ns.com
+```
+
+To delete the dev server Worker while leaving Hyperdrive and R2 resources intact:
+
+```sh
+./deployment/dev/deploy-server-dev.sh teardown
+```
+
+To delete the dev web UI Worker:
+
+```sh
+./deployment/dev/deploy-web-dev.sh teardown
 ```
 
 ## Running Locally
@@ -345,16 +365,16 @@ Cloudflare-Access-protected `conv-agent` directly — there is no Vite proxy.
 
 How auth works in this configuration:
 
-1. The browser issues fetch calls to `https://conv-agent.yashrahmed.workers.dev`
+1. The browser issues fetch calls to `https://thoth-dev.bots-ns.com/api/v1`
    with `credentials: 'include'`, so the `CF_Authorization` cookie (set on
-   `*.workers.dev`) is sent cross-origin.
+   `thoth-dev.bots-ns.com`) is sent cross-origin.
 2. CF Access validates the cookie and injects `Cf-Access-Jwt-Assertion`; the
    Worker verifies the JWT and serves the response. CF Access also injects the
    CORS response headers (`Access-Control-Allow-Origin`,
    `Access-Control-Allow-Credentials`) based on the app's CORS settings, so the
    browser permits the JS to read the body.
 3. If the cookie is missing or expired the Worker returns 401, and the web app
-   navigates the page to `<conv-agent>/auth/login?redirect_uri=<current URL>`.
+   navigates the page to `<conv-agent>/api/v1/auth/login?redirect_uri=<current URL>`.
    That endpoint is protected by CF Access, so the IdP flow runs, the cookie
    gets set on the conv-agent origin, and the handler 302s the user back to the
    UI.
@@ -416,7 +436,7 @@ Disable caching for the dev Hyperdrive configuration:
 packages/conv-agent/node_modules/.bin/wrangler hyperdrive update <hyperdrive-id> --caching-disabled true
 ```
 
-The current dev Hyperdrive id is listed in `deployment/dev/wrangler-cloud-dev.toml`.
+The current dev Hyperdrive id is listed in `deployment/dev/wrangler-server-dev.toml`.
 
 ## Running System Tests
 
@@ -446,7 +466,7 @@ Run against the deployed dev profile:
 [`deployment/system-tests/run-system-tests.sh`](./deployment/system-tests/run-system-tests.sh) supports `local` and `dev` profiles:
 
 1. For the `dev` profile, loads `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` from `~/.thoth/dev-secrets.env` and exports them so the tests authenticate via the Cloudflare Access service-token policy. Local runs against an unprotected `conv-agent` and sends no auth headers.
-2. Sets `CONV_AGENT_URL` to `http://127.0.0.1:3001` for `local` or `https://conv-agent.yashrahmed.workers.dev` for `dev`.
+2. Sets `CONV_AGENT_URL` to `http://127.0.0.1:3001` for `local` or `https://thoth-dev.bots-ns.com/api/v1` for `dev`.
 3. Polls `{CONV_AGENT_URL}/health` until the worker is ready (passing the service-token headers in `dev` so Access lets the probe through).
 4. Runs `bun test --timeout 180000 src/system-tests` from `packages/conv-agent`. The suite (`src/system-tests/conv-agent-st.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
 

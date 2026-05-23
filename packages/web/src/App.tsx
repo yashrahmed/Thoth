@@ -197,10 +197,6 @@ function ConversationApp() {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (startAccessLoginIfNeeded()) {
-      return;
-    }
-
     void initializeConversationView();
   }, []);
 

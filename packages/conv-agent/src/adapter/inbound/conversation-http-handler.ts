@@ -189,7 +189,9 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
 
   // Browser-driven logout. Bounces to the Cloudflare Access team-domain logout endpoint,
   // which clears the CF_Authorization cookie and follows returnTo back to the UI's /login.
-  // Hides the team domain from the web bundle.
+  // Hides the team domain from the web bundle. The return URL is computed from the
+  // request host (no user-supplied input) so this endpoint can't be used as an open
+  // redirect.
   app.get("/auth/logout", (c) => {
     const host = c.req.header("host");
     const loginUrl = host ? `https://${host}/login` : "/login";

@@ -46,6 +46,7 @@ type ApplicationContent = ApplicationAppendMessageRequest["content"];
 interface ConversationHttpHandlerDeps {
   readonly accessVerification: AccessIdentityVerifier | null;
   readonly accessIdentityAuthorizer: AccessIdentityAuthorizer | null;
+  readonly accessTeamDomain: string | null;
   readonly createConversation: CreateConversationFlow;
   readonly getConversation: GetConversationFlow;
   readonly listConversations: ListConversationsFlow;
@@ -56,7 +57,7 @@ interface ConversationHttpHandlerDeps {
   readonly getMessagesOnConversation: GetMessagesOnConversationFlow;
 }
 
-const PUBLIC_PATHS = new Set(["/", "/health"]);
+const PUBLIC_PATHS = new Set(["/", "/health", "/auth/logout"]);
 
 function buildForbiddenRedirect(redirectUri: string | undefined): string | null {
   if (!redirectUri) {
@@ -77,7 +78,7 @@ function buildForbiddenRedirect(redirectUri: string | undefined): string | null 
 export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps): (req: Request) => Response | Promise<Response> {
   const app = new Hono<{ Variables: HandlerVariables }>();
 
-  const { accessIdentityAuthorizer, accessVerification } = deps;
+  const { accessIdentityAuthorizer, accessVerification, accessTeamDomain } = deps;
 
   if (accessVerification) {
     app.use("*", async (c, next) => {
@@ -184,6 +185,22 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     }
 
     return c.redirect(redirectUri, 302);
+  });
+
+  // Browser-driven logout. Bounces to the Cloudflare Access team-domain logout endpoint,
+  // which clears the CF_Authorization cookie and follows returnTo back to the UI's /login.
+  // Hides the team domain from the web bundle.
+  app.get("/auth/logout", (c) => {
+    const host = c.req.header("host");
+    const loginUrl = host ? `https://${host}/login` : "/login";
+
+    if (!accessTeamDomain) {
+      return c.redirect(loginUrl, 302);
+    }
+
+    const logoutUrl = new URL("/cdn-cgi/access/logout", accessTeamDomain);
+    logoutUrl.searchParams.set("returnTo", loginUrl);
+    return c.redirect(logoutUrl.toString(), 302);
   });
 
   app.post("/conversations", async (c) => {

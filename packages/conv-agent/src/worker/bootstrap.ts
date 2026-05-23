@@ -142,6 +142,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const httpHandler = createConversationHttpHandler({
     accessVerification,
     accessIdentityAuthorizer: authConfig ? new StaticAccessIdentityAuthorizer(authConfig) : null,
+    accessTeamDomain: env.CF_ACCESS_TEAM_DOMAIN ?? null,
     createConversation: new CreateConversationFlow(conversationDomainService),
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),

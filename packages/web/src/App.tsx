@@ -163,10 +163,17 @@ const ATTACHMENT_ICON_RULES: ReadonlyArray<AttachmentIconRule> = [
 ];
 
 const FORBIDDEN_PATH = "/forbidden";
+const LOGIN_PATH = "/login";
 
 export function App() {
-  if (typeof window !== "undefined" && window.location.pathname === FORBIDDEN_PATH) {
-    return <ForbiddenView />;
+  if (typeof window !== "undefined") {
+    if (window.location.pathname === FORBIDDEN_PATH) {
+      return <ForbiddenView />;
+    }
+
+    if (window.location.pathname === LOGIN_PATH) {
+      return <LoginView />;
+    }
   }
 
   return <ConversationApp />;
@@ -566,6 +573,30 @@ function ForbiddenView() {
           >
             <LogOut size={16} style={{ marginRight: 8, verticalAlign: "middle" }} />
             Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoginView() {
+  return (
+    <div style={shellStyle}>
+      <style>{globalStyles}</style>
+      <div style={forbiddenFrameStyle}>
+        <div style={forbiddenCardStyle}>
+          <p style={eyebrowStyle}>Thoth</p>
+          <h1 style={titleStyle}>Sign in</h1>
+          <p style={bodyStyle}>You have been signed out. Sign in with Google to continue.</p>
+          <button
+            type="button"
+            onClick={() => {
+              startLoginFromLandingPage();
+            }}
+            style={{ ...ghostButtonStyle, marginTop: "20px", maxWidth: "240px" }}
+          >
+            Continue with Google
           </button>
         </div>
       </div>
@@ -1037,7 +1068,8 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
         throw new Error("Not authenticated. Redirecting to sign in.");
       }
 
-      throw new Error(`Not authenticated. Access login was already attempted and the API returned ${response.status}.`);
+      navigateToLoginPage();
+      throw new Error("Not authenticated. Redirecting to sign in.");
     }
 
     return response;
@@ -1047,10 +1079,19 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
         throw new Error("Not authenticated. Redirecting to sign in.");
       }
 
-      throw new Error("Unable to reach conv-agent after Access login was attempted.");
+      navigateToLoginPage();
+      throw new Error("Not authenticated. Redirecting to sign in.");
     }
 
     throw error;
+  }
+}
+
+function navigateToLoginPage(): void {
+  window.sessionStorage.removeItem(ACCESS_LOGIN_SESSION_KEY);
+
+  if (window.location.pathname !== "/login") {
+    window.location.href = "/login";
   }
 }
 
@@ -1072,7 +1113,20 @@ function logoutFromAccess(): void {
     return;
   }
 
-  window.location.href = `${getConvAgentOrigin()}/cdn-cgi/access/logout`;
+  window.location.href = new URL(buildConvAgentRequestUrl("/auth/logout"), window.location.origin).toString();
+}
+
+function startLoginFromLandingPage(): void {
+  window.sessionStorage.removeItem(ACCESS_LOGIN_SESSION_KEY);
+
+  if (!usesAccessGateway()) {
+    window.location.href = "/";
+    return;
+  }
+
+  const url = new URL(buildConvAgentRequestUrl("/auth/login"), window.location.origin);
+  url.searchParams.set("redirect_uri", new URL("/", window.location.origin).toString());
+  window.location.href = url.toString();
 }
 
 function startAccessLoginIfNeeded(): boolean {

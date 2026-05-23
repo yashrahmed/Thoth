@@ -230,8 +230,16 @@ credentials, run:
 
 Cloudflare Access gates every request to `conv-agent` before it reaches the
 Worker. The Worker re-verifies the Access JWT and authorizes the identity on
-every endpoint — there are no Worker-level public paths, because CF Access
-already ensures the `Cf-Access-Jwt-Assertion` header is present.
+every data endpoint.
+
+`/auth/logout` is the only always-authorized Worker path. This is intentional:
+Cloudflare Access still protects the route, but the Worker skips the app-level
+allowlist for it. Cloudflare Access can authenticate a Google user that the
+app-level allowlist later rejects. That unauthorized-but-authenticated user
+still needs a way to clear the Access session, so `/auth/logout` must not
+require app authorization. The handler only redirects to Cloudflare Access
+logout and computes its return URL from the request host; it does not expose
+application data or accept an arbitrary redirect target.
 
 `AUTH_ENABLED` controls whether the Worker enforces this check:
 

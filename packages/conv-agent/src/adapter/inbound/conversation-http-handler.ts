@@ -16,6 +16,7 @@ import type { AccessIdentity, AccessIdentityVerifier } from "../../domain/contra
 import { ConversationResponse, MessageResponse, PageResponse } from "../../domain/objects/response-types";
 
 const ACCESS_JWT_HEADER = "cf-access-jwt-assertion";
+const ALWAYS_AUTHORIZED_PATHS = new Set(["/auth/logout"]);
 
 interface HandlerVariables {
   identity: AccessIdentity;
@@ -64,6 +65,10 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
 
   if (accessVerification) {
     app.use("*", async (c, next) => {
+      if (ALWAYS_AUTHORIZED_PATHS.has(c.req.path)) {
+        return next();
+      }
+
       const token = c.req.header(ACCESS_JWT_HEADER);
 
       if (!token) {

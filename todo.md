@@ -1,7 +1,4 @@
 ### Track 1 - Developing the app in a traditional way.
-
-#### Milestone 1
-1. Clean up readme.md.
    
 #### Post Milestone 1 (Maybe in a different project)
 1. Plan to split the UI and the server.****

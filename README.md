@@ -41,7 +41,7 @@ that duplicate append attempts collapse into one operation.
 | Tooling runtime | Bun                                                                  |
 | Language        | TypeScript                                                           |
 | HTTP framework  | Hono (running inside the Worker `fetch` handler)                     |
-| Queue           | Cloudflare Queues (producer + consumer bindings on the same Worker)  |
+| Background work | Worker `ctx.waitUntil` tasks for assistant completions               |
 | Database        | Postgres (+ pgvector image), via `postgres.js` fronted by Hyperdrive |
 | Blob storage    | Cloudflare R2 over the S3 protocol; MinIO locally                    |
 | Web             | React 19 + Vite                                                      |
@@ -53,80 +53,122 @@ that duplicate append attempts collapse into one operation.
 
 Blob storage uses R2 through its S3-compatible API instead of native Worker R2 bindings. Native bindings are cleaner for a fully deployed Cloudflare Worker, but `wrangler dev` defaults those bindings to local simulated R2 unless the binding is marked remote, and remote bindings require separate Wrangler authentication. The S3-compatible path keeps local, cloud-backed dev, and eventual Worker deployment on the same adapter shape: configure an endpoint, bucket, region, access key, and secret key, then the backend writes directly to the intended R2 bucket. It also preserves standard S3 presigned URL support for later file access flows.
 
-## Configuration
+## Dev Setup
 
-The local backend launcher runs a fully local stack: [`deployment/local/wrangler-server-local.toml`](./deployment/local/wrangler-server-local.toml), `~/.thoth/local-secrets.env`, local Postgres, local MinIO, and `conv-agent`.
+Dev runs on Cloudflare under `https://thoth-dev.bots-ns.com`. The web UI is
+served at the root of that host, and the API Worker is mounted below
+`/api/v1`.
 
-The dev backend is deployed to Cloudflare Workers with [`deployment/dev/deploy-server-dev.sh`](./deployment/dev/deploy-server-dev.sh) and [`deployment/dev/wrangler-server-dev.toml`](./deployment/dev/wrangler-server-dev.toml). The dev web UI is deployed separately with [`deployment/dev/deploy-web-dev.sh`](./deployment/dev/deploy-web-dev.sh) and [`deployment/dev/wrangler-web-dev.toml`](./deployment/dev/wrangler-web-dev.toml).
+### Dev infrastructure
 
-### Dev OAuth and Cloudflare Access setup
+- UI: `thoth-web-app-dev`, a Cloudflare Worker assets deployment configured by
+  [`deployment/dev/wrangler-web-dev.toml`](./deployment/dev/wrangler-web-dev.toml).
+  It serves `packages/web/dist`, uses SPA fallback, and is routed at
+  `thoth-dev.bots-ns.com/*`.
+- API Worker: `thoth-conv-agent-server-dev`, configured by
+  [`deployment/dev/wrangler-server-dev.toml`](./deployment/dev/wrangler-server-dev.toml).
+  It is routed at `thoth-dev.bots-ns.com/api/v1*`.
+- DB: Cloudflare Hyperdrive points the Worker at the dev Postgres database.
+  Hyperdrive query caching must stay disabled because the app has
+  write-then-immediate-read flows.
+- Blob storage: Cloudflare R2 stores uploaded files through the S3-compatible
+  adapter. The dev bucket name is configured in the server Wrangler file.
+- Background work: the API Worker schedules assistant completions with
+  `ctx.waitUntil`. There is no deployed queue, retry, or DLQ in the current
+  design.
+- Cloudflare Access gateway: two self-hosted Access apps protect the host. The
+  gating app covers `thoth-dev.bots-ns.com/*`; the bypass app covers only
+  `/login`, `/forbidden`, and `/assets/*` so the SPA shell can load before
+  authentication.
+- Google OAuth: Cloudflare Access owns the browser OAuth flow. The Google OAuth
+  client has JavaScript origin `https://cold-surf-f14c.cloudflareaccess.com`
+  and redirect URI
+  `https://cold-surf-f14c.cloudflareaccess.com/cdn-cgi/access/callback`.
 
-The dev `conv-agent` Worker and web UI are protected by two Cloudflare Access
-self-hosted applications working together:
+### Dev credentials
 
-- `thoth-api-acces-app-dev` gates everything under `thoth-dev.bots-ns.com/*`.
-  Every request requires a valid Google identity.
-- `thoth-public-paths-dev` bypasses `thoth-dev.bots-ns.com/login`,
-  `/forbidden`, and `/assets/*` so the login page and the SPA bundle can be
-  fetched without authentication.
+Credentials are loaded from `~/.thoth/dev-secrets.env`, outside the Git
+checkout. The dev deploy and system-test scripts expect these values:
 
-Cloudflare Access resolves the most specific destination first, so any path
-under the bypassed prefixes skips the IdP and everything else falls through to
-the gating app's login flow. Browser authentication is delegated to Google
-OAuth through Cloudflare Access; the Worker does not receive or store the
-Google OAuth client secret.
+- `BLOB_STORAGE_ACCESS_KEY_ID`
+- `BLOB_STORAGE_SECRET_ACCESS_KEY`
+- `LLM_API_KEY`
+- `ALLOWED_USER_EMAILS`, a comma-separated app authorization allowlist
+- `ALLOWED_SERVICE_TOKEN_CLIENT_IDS`, a comma-separated Access service-token
+  client-id allowlist
+- `CF_ACCESS_CLIENT_ID`
+- `CF_ACCESS_CLIENT_SECRET`
+- `MIGRATION_DATABASE_URL`, only when running dev migrations manually
 
-Create or update the Google OAuth client first:
+The service-token client id is safe to identify in config. The corresponding
+`CF_ACCESS_CLIENT_SECRET`, R2 secret, LLM key, and Google OAuth client secret
+must not be committed.
 
-1. Go to **Google Cloud Console** -> **APIs & Services** -> **Credentials**.
-2. Create or edit the OAuth 2.0 client named `thoth-oauth-client`.
-3. Set the authorized JavaScript origin to:
-   ```text
-   https://cold-surf-f14c.cloudflareaccess.com
-   ```
-4. Set the authorized redirect URI to:
-   ```text
-   https://cold-surf-f14c.cloudflareaccess.com/cdn-cgi/access/callback
-   ```
-5. Copy the OAuth client id and client secret into the Cloudflare Zero Trust
-   Google identity provider configuration. The client id is safe to identify in
-   setup notes, but the client secret must not be committed.
+### Dev Access and authorization
 
-Create the gating app in Cloudflare Zero Trust:
+Cloudflare Access requires a Google login before browser requests reach the API
+Worker. Access injects `Cf-Access-Jwt-Assertion`; the Worker verifies that JWT
+using `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` from the server Wrangler
+config, then applies a small app-level allowlist.
 
-1. Go to **Zero Trust** -> **Access controls** -> **Applications**.
-2. Create an application under **Self-hosted and private**.
-3. Set the application name to `thoth-api-acces-app-dev`.
-4. Set the destination to `thoth-dev.bots-ns.com/*` (zone `bots-ns.com`).
-5. In identity provider settings, select only the Google IdP. The current
-   Google IdP id is `86130f45-78cf-4879-8213-50ec35304992`.
-6. Enable automatic redirect to identity (single IdP) and the HTTP-only cookie
-   attribute. Leave the binding cookie and OPTIONS preflight bypass disabled.
-   CORS is not needed — the SPA is served from the same origin as the API.
+The current authorizer maps Access identities like this:
 
-Gating app shape:
+- Google browser logins carry an `email` claim and become `type: "user"`.
+- Access service-token requests carry `common_name`, which is the service-token
+  client id, and become `type: "service-token"`.
+- Unknown token shapes are rejected.
 
-```json
-{
-  "name": "thoth-api-acces-app-dev",
-  "type": "self_hosted",
-  "allowed_idps": ["86130f45-78cf-4879-8213-50ec35304992"],
-  "auto_redirect_to_identity": true,
-  "session_duration": "24h",
-  "domain": "thoth-dev.bots-ns.com/*",
-  "destinations": [
-    { "type": "public", "uri": "thoth-dev.bots-ns.com/*", "zone_name": "bots-ns.com" }
-  ],
-  "enable_binding_cookie": false,
-  "http_only_cookie_attribute": true,
-  "options_preflight_bypass": false,
-  "self_hosted_domains": ["thoth-dev.bots-ns.com/*"]
-}
+`/auth/logout` is the only always-authorized API path at the Worker layer.
+Cloudflare Access still protects it, but the Worker skips the app allowlist so
+an authenticated-but-unauthorized Google user can still clear the Access
+session. The handler only redirects to Cloudflare Access logout and computes
+its return URL from the request host.
+
+For automated dev tests, create a Cloudflare Access service token under
+**Access controls** -> **Service credentials** -> **Service Tokens**, then add
+it to the gating Access app with a **Service Auth** policy. The browser policy
+allows authenticated Google users; the Worker allowlist decides which users can
+see application data.
+
+To verify the service-token path without printing credentials, run:
+
+```sh
+./deployment/dev/test-access-service-token.sh
 ```
 
-If the browser shows `ERR_TOO_MANY_REDIRECTS` for either
-`cold-surf-f14c.cloudflareaccess.com` or `thoth-dev.bots-ns.com`, check the
-Access cookie settings first. A typical loop looks like this:
+### Dev deploy
+
+Deploy the server from the repo root:
+
+```sh
+./deployment/dev/deploy-server-dev.sh deploy
+```
+
+The server deploy script reads dev credentials, verifies Wrangler login,
+smoke-tests Hyperdrive and R2, deploys the Worker, and uploads required Worker
+secrets.
+
+Deploy the web UI from the repo root:
+
+```sh
+./deployment/dev/deploy-web-dev.sh deploy
+```
+
+The web deploy script builds `packages/web` with `VITE_THOTH_API_URL=/api/v1`
+and `VITE_THOTH_PROFILE=dev`, then deploys the assets Worker.
+
+To delete the deployed Workers while leaving external data resources intact:
+
+```sh
+./deployment/dev/deploy-server-dev.sh teardown
+./deployment/dev/deploy-web-dev.sh teardown
+```
+
+### Dev Access troubleshooting
+
+If the browser shows `ERR_TOO_MANY_REDIRECTS` for
+`cold-surf-f14c.cloudflareaccess.com` or `thoth-dev.bots-ns.com`, check Access
+cookie settings first. A typical loop looks like this:
 
 1. The browser opens `thoth-dev.bots-ns.com`.
 2. Cloudflare Access redirects to the team-domain login URL.
@@ -146,306 +188,138 @@ SameSite cookie attribute to `Strict`. If the loop is already in progress,
 clear cookies for both `thoth-dev.bots-ns.com` and
 `cold-surf-f14c.cloudflareaccess.com` before retesting.
 
-Create the bypass app the same way, with these differences:
+## Local Setup
 
-1. Name it `thoth-public-paths-dev`.
-2. Add three destinations: `thoth-dev.bots-ns.com/login`,
-   `thoth-dev.bots-ns.com/forbidden`, and `thoth-dev.bots-ns.com/assets/*`
-   (all zone `bots-ns.com`).
-3. Attach a single Bypass / Everyone policy (shown below). No IdP, no CORS,
-   no binding cookie — bypass apps never issue or consume CF_Authorization.
+Local setup is for backend development and system tests. It runs the API Worker
+locally on `http://127.0.0.1:3001`.
 
-Bypass app shape:
+### Local infrastructure
 
-```json
-{
-  "name": "thoth-public-paths-dev",
-  "type": "self_hosted",
-  "session_duration": "24h",
-  "domain": "thoth-dev.bots-ns.com/login",
-  "destinations": [
-    { "type": "public", "uri": "thoth-dev.bots-ns.com/login", "zone_name": "bots-ns.com" },
-    { "type": "public", "uri": "thoth-dev.bots-ns.com/forbidden", "zone_name": "bots-ns.com" },
-    { "type": "public", "uri": "thoth-dev.bots-ns.com/assets/*", "zone_name": "bots-ns.com" }
-  ],
-  "enable_binding_cookie": false,
-  "http_only_cookie_attribute": true,
-  "options_preflight_bypass": false,
-  "self_hosted_domains": [
-    "thoth-dev.bots-ns.com/login",
-    "thoth-dev.bots-ns.com/forbidden",
-    "thoth-dev.bots-ns.com/assets/*"
-  ]
-}
-```
+- UI: not supported locally. The local API runs without Cloudflare Access, so
+  the browser login/logout flow cannot be exercised correctly from a local Vite
+  server. Use the deployed dev UI at `https://thoth-dev.bots-ns.com`.
+- API Worker: `wrangler dev` runs `packages/conv-agent` with
+  [`deployment/local/wrangler-server-local.toml`](./deployment/local/wrangler-server-local.toml)
+  on port `3001`.
+- DB: Docker Compose starts local Postgres on port `5432`. Data lives under
+  `deployment/local/data/_data/`.
+- Blob storage: Docker Compose starts MinIO on port `9000`; a one-shot setup
+  job creates the local bucket. Data lives under `deployment/local/data/minio/`.
+- Background work: local Wrangler uses the same `ctx.waitUntil` path as dev.
+- Hyperdrive: the local binding resolves to the Wrangler
+  `localConnectionString`, which points at local Postgres.
+- Cloudflare Access gateway: not present locally. `AUTH_ENABLED=false`, so JWT
+  verification and app authorization are disabled.
 
-Bypass policy:
+### Local credentials
 
-```json
-{
-  "name": "Bypass all",
-  "decision": "bypass",
-  "include": [{ "everyone": {} }],
-  "exclude": [],
-  "require": []
-}
-```
-
-Attach two policies to the gating app.
-
-For browser access, add an allow policy for authenticated Google users. The app
-itself is already restricted to the Google IdP, so the policy can allow every
-authenticated user:
-
-```json
-{
-  "name": "Allow all logged in users (dev)",
-  "decision": "allow",
-  "include": [
-    {
-      "everyone": {}
-    }
-  ],
-  "exclude": [],
-  "require": []
-}
-```
-
-For automated dev tests, create an Access service token under **Access
-controls** -> **Service credentials** -> **Service Tokens**, then attach it with
-a Service Auth policy. The policy action must be **Service Auth**, which appears
-as `non_identity` in JSON. Using `allow` for a service token causes Cloudflare
-Access to redirect to the browser login flow instead of accepting the token.
-
-```json
-{
-  "name": "Allow dev service tokens",
-  "decision": "non_identity",
-  "include": [
-    {
-      "service_token": {
-        "token_id": "958c9e74-ec96-4d15-bf66-5e62d49c8ad7"
-      }
-    }
-  ],
-  "exclude": [],
-  "require": []
-}
-```
-
-Store the generated service-token client id and client secret in
-`~/.thoth/dev-secrets.env`:
-
-```sh
-CF_ACCESS_CLIENT_ID=...
-CF_ACCESS_CLIENT_SECRET=...
-```
-
-Do not commit those values. To verify the service-token path without printing
-credentials, run:
-
-```sh
-./deployment/dev/test-access-service-token.sh
-```
-
-### Conv-agent authorization
-
-Cloudflare Access gates every request to `conv-agent` before it reaches the
-Worker. The Worker re-verifies the Access JWT and authorizes the identity on
-every data endpoint.
-
-`/auth/logout` is the only always-authorized Worker path. This is intentional:
-Cloudflare Access still protects the route, but the Worker skips the app-level
-allowlist for it. Cloudflare Access can authenticate a Google user that the
-app-level allowlist later rejects. That unauthorized-but-authenticated user
-still needs a way to clear the Access session, so `/auth/logout` must not
-require app authorization. The handler only redirects to Cloudflare Access
-logout and computes its return URL from the request host; it does not expose
-application data or accept an arbitrary redirect target.
-
-`AUTH_ENABLED` controls whether the Worker enforces this check:
-
-- `deployment/dev/wrangler-server-dev.toml` sets `AUTH_ENABLED=true`.
-- `deployment/local/wrangler-server-local.toml` sets `AUTH_ENABLED=false`.
-
-When auth is enabled, the Worker requires `CF_ACCESS_TEAM_DOMAIN` and
-`CF_ACCESS_AUD`, verifies the `Cf-Access-Jwt-Assertion` JWT, then maps it into
-an internal Access identity:
-
-- Google browser logins carry an `email` claim and become `type: "user"`.
-- Cloudflare Access service-token requests carry `common_name`, which is the
-  service-token client id, and become `type: "service-token"`.
-- Any other token shape becomes `type: "unknown"` and is rejected.
-
-The current authorizer is intentionally simple and static. It reads two
-comma-separated allowlists from Worker secrets:
-
-```sh
-ALLOWED_USER_EMAILS=yashrahmed@gmail.com
-ALLOWED_SERVICE_TOKEN_CLIENT_IDS=<cloudflare-access-service-token-client-id>
-```
-
-User emails are normalized case-insensitively. Service-token client IDs are
-matched exactly. The service-token client ID is safe to identify in config, but
-the corresponding `CF_ACCESS_CLIENT_SECRET` must never be committed.
-
-#### Local UI with dev Access
-
-Running the UI on `http://localhost:5173` while pointing it at the deployed
-Access-protected Worker is a cross-site browser flow. Cloudflare Access can
-complete the top-level Google login, but later API calls from localhost to
-`https://thoth-dev.bots-ns.com/api/v1` depend on the browser sending the
-Access cookie in a third-party `fetch()` context.
-
-Chrome Incognito blocks third-party cookies by default, so this setup can fail
-after login with a CORS error against the Cloudflare Access login URL. That
-means the API request was redirected back to Access because the Access session
-cookie was not sent. Use a normal browser profile, allow third-party cookies for
-this dev flow, or run the UI and API through the same site/origin.
-
-### Credential setup
-
-Credentials are loaded from `~/.thoth`, outside the Git checkout.
-Secrets files follow the `~/.thoth/{profile}-secrets.env` naming convention.
-
-For local backend runs:
+Create local credentials outside the Git checkout:
 
 ```sh
 mkdir -p ~/.thoth
 cp deployment/local/local-secrets.env.example ~/.thoth/local-secrets.env
 ```
 
-Then edit `~/.thoth/local-secrets.env` if you need non-default local Postgres or MinIO values, and set `LLM_API_KEY`.
+Set `LLM_API_KEY` and keep `MIGRATION_DATABASE_URL` populated. Override local
+Postgres or MinIO values only if you are not using the default Docker Compose
+ports.
 
-For the deployed dev Worker and dev system tests, create `~/.thoth/dev-secrets.env` with:
+### Local run
 
-- `BLOB_STORAGE_ACCESS_KEY_ID`
-- `BLOB_STORAGE_SECRET_ACCESS_KEY`
-- `LLM_API_KEY`
-- `ALLOWED_USER_EMAILS` as a comma-separated allowlist, for example `yashrahmed@gmail.com`
-- `ALLOWED_SERVICE_TOKEN_CLIENT_IDS` as a comma-separated allowlist of Cloudflare Access service-token client IDs
-- `CF_ACCESS_CLIENT_ID`
-- `CF_ACCESS_CLIENT_SECRET`
-
-`MIGRATION_DATABASE_URL` is also required when running dev database migrations manually.
-
-The `thoth-dev-cf-access-app` Cloudflare Access AUD tag and team domain are set as `[vars]` in [`deployment/dev/wrangler-server-dev.toml`](./deployment/dev/wrangler-server-dev.toml) and verified by the Worker on every non-public request. `AUTH_ENABLED=true` makes the Worker require both Access verification settings and the authorization allowlists; local runs set `AUTH_ENABLED=false` and do not need those allowlists.
-
-## Deploying Dev
-
-The dev server Worker runs fully on Cloudflare infrastructure and is exposed at:
-
-```text
-https://thoth-dev.bots-ns.com/api/v1
-```
-
-Deploy the server from the repo root:
+Install dependencies once:
 
 ```sh
-./deployment/dev/deploy-server-dev.sh deploy
+bun install
 ```
 
-The deploy script:
-
-1. Reads dev credentials from `~/.thoth/dev-secrets.env`.
-2. Verifies Wrangler authentication.
-3. Smoke-tests the configured Hyperdrive and R2 bucket.
-4. Runs `wrangler deploy` for `conv-agent`.
-5. Uploads required `conv-agent` secrets with `wrangler secret put`.
-
-Deploy the web UI from the repo root:
+Run local migrations manually:
 
 ```sh
-./deployment/dev/deploy-web-dev.sh deploy
+./deployment/run-flyway-migrations.sh local
 ```
 
-The web deploy script builds `packages/web` with `VITE_THOTH_API_URL=/api/v1`
-and deploys the static assets Worker at:
-
-```text
-https://thoth-dev.bots-ns.com
-```
-
-To delete the dev server Worker while leaving Hyperdrive and R2 resources intact:
+Start the local backend stack:
 
 ```sh
-./deployment/dev/deploy-server-dev.sh teardown
+./deployment/local/launch-all.sh start
 ```
 
-To delete the dev web UI Worker:
+Stop it when finished:
 
 ```sh
-./deployment/dev/deploy-web-dev.sh teardown
+./deployment/local/launch-all.sh stop
 ```
-
-## Running Locally
-
-Pre-requisites:
-
-- Bun and Docker.
-- `~/.thoth/local-secrets.env` in place with `MIGRATION_DATABASE_URL` populated.
-
-1. Install deps: `bun install`
-2. Run local migrations manually:
-   ```sh
-   ./deployment/run-flyway-migrations.sh local
-   ```
-3. Start the backend stack (Postgres, MinIO, `conv-agent` on `:3001`):
-   ```sh
-   ./deployment/local/launch-all.sh start
-   ```
-4. When you are done and wish to stop everything:
-   ```sh
-   ./deployment/local/launch-all.sh stop
-   ```
 
 Logs land in `/tmp/thoth-local/logs/conv-agent.log`.
 
-### How the local launch works
+[`deployment/local/launch-all.sh`](./deployment/local/launch-all.sh) copies
+`~/.thoth/local-secrets.env` to `deployment/local/.dev.vars`, starts the local
+Docker services, and launches Wrangler from `packages/conv-agent`. Each HTTP
+request builds the dependency graph fresh inside the Worker, and any background
+completion work scheduled from that request shares the same graph until
+`ctx.waitUntil` closes the Postgres connection.
 
-[`deployment/local/launch-all.sh`](./deployment/local/launch-all.sh) coordinates everything:
+### Local limitations
 
-1. Stops any running worker and tears down the previous docker-compose stack so each `start` is clean.
-2. Copies `~/.thoth/local-secrets.env` to `deployment/local/.dev.vars`. Wrangler picks `.dev.vars` up automatically when it boots.
-3. Brings up [`deployment/local/docker-compose.yml`](./deployment/local/docker-compose.yml): Postgres (port `5432`), MinIO (port `9000`), and a one-shot `minio-setup` job that creates the local blob bucket. Postgres data lives under `deployment/local/data/_data/`; MinIO data under `deployment/local/data/minio/`.
-4. Launches `wrangler dev` from `packages/conv-agent` with the local config on port `3001`. Miniflare (Cloudflare's local Workers runtime, embedded in wrangler) provides:
-   - the local Cloudflare Queue (no LocalStack/SQS needed),
-   - the local Hyperdrive shim, which resolves `env.HYPERDRIVE.connectionString` to the local config's `localConnectionString`.
-5. Each HTTP request and queue batch builds the dependency graph fresh inside the worker and ends the Postgres connection via `ctx.waitUntil` after responding — Workers does not allow I/O objects (TCP sockets, streams) to be reused across requests, so the cache is request-scoped, not isolate-scoped.
-   Run Flyway separately with [`deployment/run-flyway-migrations.sh`](./deployment/run-flyway-migrations.sh). The `local` target requires `MIGRATION_DATABASE_URL` in `~/.thoth/local-secrets.env`.
+- The web UI cannot be tested locally with the current auth model.
+- Cloudflare Access browser login, logout, bypass apps, Access cookies, and
+  Access JWT injection cannot be tested locally.
+- Dev-only Cloudflare infrastructure behavior such as real Hyperdrive and real
+  R2 is approximated by local Postgres and MinIO.
+- App authorization is disabled locally because `AUTH_ENABLED=false`.
 
-## Launching The UI
+## System Tests
 
-The web UI runs locally on Vite (default port `5173`) and points at the deployed
-Cloudflare-Access-protected `conv-agent` directly — there is no Vite proxy.
+The system tests drive an already-running `conv-agent` over HTTP. They exercise
+real application flows: create a conversation, upload image attachments, append
+messages, wait for background assistant replies, paginate message history, and
+delete the conversation.
+
+### Dev system tests
+
+Dev tests target `https://thoth-dev.bots-ns.com/api/v1`. The runner loads
+`CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` from
+`~/.thoth/dev-secrets.env` and sends them as Cloudflare Access service-token
+headers. Access mints the JWT that the Worker verifies, and the Worker then
+authorizes the service-token client id through `ALLOWED_SERVICE_TOKEN_CLIENT_IDS`.
+
+Run dev migrations if needed, then run the tests:
 
 ```sh
-./deployment/local/launch-web.sh dev
+./deployment/run-flyway-migrations.sh dev
+./deployment/system-tests/run-system-tests.sh dev
 ```
 
-How auth works in this configuration:
+### Local system tests
 
-1. The browser issues fetch calls to `https://thoth-dev.bots-ns.com/api/v1`
-   with `credentials: 'include'`, so the `CF_Authorization` cookie (set on
-   `thoth-dev.bots-ns.com`) is sent cross-origin.
-2. CF Access validates the cookie and injects `Cf-Access-Jwt-Assertion`; the
-   Worker verifies the JWT and serves the response. CF Access also injects the
-   CORS response headers (`Access-Control-Allow-Origin`,
-   `Access-Control-Allow-Credentials`) based on the app's CORS settings, so the
-   browser permits the JS to read the body.
-3. If the cookie is missing or expired the Worker returns 401, and the web app
-   navigates the page to `<conv-agent>/api/v1/auth/login?redirect_uri=<current URL>`.
-   That endpoint is protected by CF Access, so the IdP flow runs, the cookie
-   gets set on the conv-agent origin, and the handler 302s the user back to the
-   UI.
+Local tests target `http://127.0.0.1:3001`. The runner sends no Access headers
+because the local Worker is not behind Cloudflare Access.
 
-Pre-requisite: the CF Access app has CORS configured for
-`http://localhost:5173` with credentials enabled — see the Access app setup
-section above.
+Start the local stack and run the tests:
 
-The `local` profile of `launch-web.sh` is intentionally rejected: the local
-`conv-agent` runs without JWT verification (no Cloudflare Access in front), so
-there is no login flow to complete and no cookie to set.
+```sh
+./deployment/run-flyway-migrations.sh local
+./deployment/local/launch-all.sh start
+./deployment/system-tests/run-system-tests.sh
+```
+
+Stop the stack when finished:
+
+```sh
+./deployment/local/launch-all.sh stop
+```
+
+### Test runner behavior
+
+[`deployment/system-tests/run-system-tests.sh`](./deployment/system-tests/run-system-tests.sh)
+supports `local` and `dev` profiles. It picks the target URL, loads profile
+credentials from `~/.thoth/{profile}-secrets.env`, polls `/health`, and runs:
+
+```sh
+bun test --timeout 180000 src/system-tests/conv-agent-st.test.ts
+```
+
+Pass extra Bun test arguments after the optional profile.
 
 ## Temporal Awareness
 
@@ -484,10 +358,10 @@ The risk is low — turns are still role-tagged and the legitimate header always
 
 Hyperdrive query caching must be disabled for the dev Hyperdrive config used by `conv-agent`.
 
-The app performs write-then-immediate-read workflows. For example, `POST /conversations/:id/chat` inserts a user message and dispatches a queue completion, then the queue consumer reads the conversation messages immediately. With Hyperdrive caching enabled, read-only `SELECT` results can be served from cache for the default cache window. That caused stale reads such as:
+The app performs write-then-immediate-read workflows. For example, `POST /conversations/:id/chat` inserts a user message and schedules background completion work, then the completion flow reads the conversation messages immediately. With Hyperdrive caching enabled, read-only `SELECT` results can be served from cache for the default cache window. That caused stale reads such as:
 
 - the UI seeing conversations that had already been deleted,
-- the queue consumer reading an empty message list immediately after the user message was inserted,
+- the completion flow reading an empty message list immediately after the user message was inserted,
 - completions being skipped because the completion flow believed the conversation had no messages.
 
 Disable caching for the dev Hyperdrive configuration:
@@ -497,40 +371,6 @@ packages/conv-agent/node_modules/.bin/wrangler hyperdrive update <hyperdrive-id>
 ```
 
 The current dev Hyperdrive id is listed in `deployment/dev/wrangler-server-dev.toml`.
-
-## Running System Tests
-
-The system test suite drives an already-running `conv-agent` Worker over HTTP against real infrastructure (Postgres, R2, the LLM provider). The test runner does not start or stop services, and it does not run Flyway migrations.
-
-Run against the local profile:
-
-```sh
-./deployment/run-flyway-migrations.sh local
-./deployment/local/launch-all.sh start
-./deployment/system-tests/run-system-tests.sh
-```
-
-When you are done with the local stack:
-
-```sh
-./deployment/local/launch-all.sh stop
-```
-
-Run against the deployed dev profile:
-
-```sh
-./deployment/run-flyway-migrations.sh dev
-./deployment/system-tests/run-system-tests.sh dev
-```
-
-[`deployment/system-tests/run-system-tests.sh`](./deployment/system-tests/run-system-tests.sh) supports `local` and `dev` profiles:
-
-1. For the `dev` profile, loads `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` from `~/.thoth/dev-secrets.env` and exports them so the tests authenticate via the Cloudflare Access service-token policy. Local runs against an unprotected `conv-agent` and sends no auth headers.
-2. Sets `CONV_AGENT_URL` to `http://127.0.0.1:3001` for `local` or `https://thoth-dev.bots-ns.com/api/v1` for `dev`.
-3. Polls `{CONV_AGENT_URL}/health` until the worker is ready (passing the service-token headers in `dev` so Access lets the probe through).
-4. Runs `bun test --timeout 180000 src/system-tests` from `packages/conv-agent`. The suite (`src/system-tests/conv-agent-st.test.ts`) creates a conversation, posts user messages with image attachments, waits for queued assistant replies, paginates the message history, and deletes the conversation.
-
-Pass extra Bun test arguments after the optional profile.
 
 ## Architecture
 

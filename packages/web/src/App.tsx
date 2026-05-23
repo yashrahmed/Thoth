@@ -162,7 +162,17 @@ const ATTACHMENT_ICON_RULES: ReadonlyArray<AttachmentIconRule> = [
   },
 ];
 
+const FORBIDDEN_PATH = "/forbidden";
+
 export function App() {
+  if (typeof window !== "undefined" && window.location.pathname === FORBIDDEN_PATH) {
+    return <ForbiddenView />;
+  }
+
+  return <ConversationApp />;
+}
+
+function ConversationApp() {
   const [conversations, setConversations] = useState<ReadonlyArray<ConversationResponse>>([]);
   const [conversationId, setConversationId] = useState<string>("");
   const [messages, setMessages] = useState<ReadonlyArray<ChatMessage>>([]);
@@ -531,6 +541,33 @@ export function App() {
           onFileSelection={handleFileSelection}
           onRemoveSelectedFile={removeSelectedFile}
         />
+      </div>
+    </div>
+  );
+}
+
+function ForbiddenView() {
+  return (
+    <div style={shellStyle}>
+      <style>{globalStyles}</style>
+      <div style={forbiddenFrameStyle}>
+        <div style={forbiddenCardStyle}>
+          <p style={eyebrowStyle}>Thoth</p>
+          <h1 style={titleStyle}>Access denied</h1>
+          <p style={bodyStyle}>
+            Your account does not have access to this app. If you signed in with the wrong Google account, sign out and try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              logoutFromAccess();
+            }}
+            style={{ ...ghostButtonStyle, marginTop: "20px", maxWidth: "240px" }}
+          >
+            <LogOut size={16} style={{ marginRight: 8, verticalAlign: "middle" }} />
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1277,6 +1314,23 @@ const frameStyle: React.CSSProperties = {
   display: "grid",
   gap: "20px",
   minHeight: "calc(100vh - 48px)",
+};
+
+const forbiddenFrameStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: "calc(100vh - 48px)",
+};
+
+const forbiddenCardStyle: React.CSSProperties = {
+  maxWidth: "480px",
+  padding: "40px",
+  borderRadius: "28px",
+  background: "linear-gradient(180deg, rgba(44, 28, 20, 0.95), rgba(26, 17, 13, 0.92))",
+  border: "1px solid rgba(255, 214, 179, 0.12)",
+  boxShadow: "0 24px 80px rgba(0, 0, 0, 0.28)",
+  textAlign: "center",
 };
 
 const sidebarStyle: React.CSSProperties = {

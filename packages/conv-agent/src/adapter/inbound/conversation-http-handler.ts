@@ -58,6 +58,22 @@ interface ConversationHttpHandlerDeps {
 
 const PUBLIC_PATHS = new Set(["/", "/health"]);
 
+function buildForbiddenRedirect(redirectUri: string | undefined): string | null {
+  if (!redirectUri) {
+    return null;
+  }
+
+  try {
+    const target = new URL(redirectUri);
+    target.pathname = "/forbidden";
+    target.search = "";
+    target.hash = "";
+    return target.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps): (req: Request) => Response | Promise<Response> {
   const app = new Hono<{ Variables: HandlerVariables }>();
 
@@ -101,6 +117,14 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
         const isAuthorized = await accessIdentityAuthorizer.isAuthorized(result.identity);
 
         if (!isAuthorized) {
+          if (c.req.path === "/auth/login") {
+            const forbiddenRedirect = buildForbiddenRedirect(c.req.query("redirect_uri"));
+
+            if (forbiddenRedirect) {
+              return c.redirect(forbiddenRedirect, 302);
+            }
+          }
+
           return c.json(
             {
               error: {

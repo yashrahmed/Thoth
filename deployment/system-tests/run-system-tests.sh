@@ -8,7 +8,7 @@ CREDENTIALS_DIR="$HOME/.thoth"
 DEFAULT_PROFILE="local"
 PROFILE="$DEFAULT_PROFILE"
 LOCAL_CONV_AGENT_URL="http://127.0.0.1:3001"
-DEV_CONV_AGENT_URL="https://conv-agent.yashrahmed.workers.dev"
+DEV_CONV_AGENT_URL="https://thoth-dev.bots-ns.com/api/v1"
 CONV_AGENT_TARGET=""
 
 if [ "${1:-}" != "" ] && [ "${1#-}" = "$1" ]; then

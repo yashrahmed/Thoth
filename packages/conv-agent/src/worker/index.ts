@@ -4,18 +4,22 @@ export type { WorkerEnv } from "./bootstrap";
 
 const ALLOWED_CORS_METHODS = "GET,POST,PATCH,DELETE,OPTIONS";
 const ALLOWED_CORS_HEADERS = "content-type";
+const API_BASE_PATH = "/api/v1";
 
 export default {
+  // The actual CF worker entry point.
   async fetch(request, env, ctx): Promise<Response> {
-    if (request.method === "OPTIONS" && shouldApplyCors(request)) {
-      return new Response(null, { status: 204, headers: buildCorsHeaders(request) });
+    const normalizedRequest = normalizeApiRequest(request);
+
+    if (normalizedRequest.method === "OPTIONS" && shouldApplyCors(normalizedRequest)) {
+      return new Response(null, { status: 204, headers: buildCorsHeaders(normalizedRequest) });
     }
 
     const deps = buildWorkerDeps(env);
 
     try {
-      const response = await deps.httpHandler(request);
-      return withCorsHeaders(request, response);
+      const response = await deps.httpHandler(normalizedRequest);
+      return withCorsHeaders(normalizedRequest, response);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unexpected conv-agent worker error.";
       console.error("[conv-agent] fetch handler failed", error);
@@ -24,12 +28,28 @@ export default {
         headers: { "content-type": "application/json" },
       });
 
-      return withCorsHeaders(request, response);
+      return withCorsHeaders(normalizedRequest, response);
     } finally {
       ctx.waitUntil(deps.shutdown());
     }
   },
 } satisfies ExportedHandler<WorkerEnv>;
+
+function normalizeApiRequest(request: Request): Request {
+  const url = new URL(request.url);
+
+  if (url.pathname === API_BASE_PATH) {
+    url.pathname = "/";
+  } else if (url.pathname.startsWith(`${API_BASE_PATH}/`)) {
+    url.pathname = url.pathname.slice(API_BASE_PATH.length);
+  }
+
+  if (url.href === request.url) {
+    return request;
+  }
+
+  return new Request(url, request);
+}
 
 function withCorsHeaders(request: Request, response: Response): Response {
   if (!shouldApplyCors(request)) {

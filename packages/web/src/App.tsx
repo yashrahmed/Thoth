@@ -57,7 +57,7 @@ type MessagePageResponse = {
   readonly pageSize: number;
 };
 
-const THOTH_API_URL = import.meta.env.VITE_THOTH_API_URL?.trim() || "/api";
+const THOTH_API_URL = import.meta.env.VITE_THOTH_API_URL?.trim() || "/api/v1";
 const THOTH_PROFILE = import.meta.env.VITE_THOTH_PROFILE?.trim() || "local";
 const ACCESS_LOGIN_SESSION_KEY = "THOTH_LOGGED_IN";
 const MESSAGE_PAGE_SIZE = 50;
@@ -1038,7 +1038,7 @@ function logoutFromAccess(): void {
   }
 
   const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
-  window.location.href = `${base}/cdn-cgi/access/logout`;
+  window.location.href = `${new URL(base).origin}/cdn-cgi/access/logout`;
 }
 
 function startAccessLoginIfNeeded(): boolean {
@@ -1062,7 +1062,7 @@ function isRemoteAccessBackend(): boolean {
 function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<string, string>>): string {
   const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
   const isAbsoluteBase = /^https?:\/\//i.test(base);
-  const url = isAbsoluteBase ? new URL(path, base) : new URL(`${base}${path}`, window.location.origin);
+  const url = new URL(`${base}${path}`, window.location.origin);
 
   for (const [key, value] of Object.entries(searchParams ?? {})) {
     url.searchParams.set(key, value);

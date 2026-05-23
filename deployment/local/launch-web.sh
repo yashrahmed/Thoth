@@ -7,7 +7,7 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 DEFAULT_PROFILE="dev"
 PROFILE="$DEFAULT_PROFILE"
 WEB_PACKAGE_DIR="$REPO_ROOT/packages/web"
-DEV_CONV_AGENT_URL="https://conv-agent.yashrahmed.workers.dev"
+DEV_CONV_AGENT_URL="https://thoth-dev.bots-ns.com/api/v1"
 CONV_AGENT_TARGET=""
 
 if [ "${1:-}" != "" ] && [ "${1#-}" = "$1" ]; then

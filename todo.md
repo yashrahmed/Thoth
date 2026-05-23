@@ -2,13 +2,11 @@
 
 #### Milestone 1
 1. Clean up readme.md.
-2. Examine async usage in the context of worker execution.
-
    
 #### Post Milestone 1 (Maybe in a different project)
 1. Plan to split the UI and the server.****
 2. Idempotency and refresh protection.
-3. Definitely a better way to build and manage logins.
+3. Definitely a better way to build and manage login and logout flow.
 4. Domain setup for local testing.
 5. Beefed up security.
 6. A proper user management system that tracks user to conversations.

@@ -371,7 +371,3 @@ packages/conv-agent/node_modules/.bin/wrangler hyperdrive update <hyperdrive-id>
 ```
 
 The current dev Hyperdrive id is listed in `deployment/dev/wrangler-server-dev.toml`.
-
-## Architecture
-
-See [docs/architecture.md](./docs/architecture.md).

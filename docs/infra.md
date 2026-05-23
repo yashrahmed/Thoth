@@ -1,10 +1,15 @@
-# Infrastructure Options
+# Infrastructure
 
-Current direction: 
+This document tracks the deployed dev infrastructure shape. The current dev
+host is `https://thoth-dev.bots-ns.com`.
 
-| Component | Preferred Option | Notes |
+## Dev components
+
+| Component | Current Setup | Notes |
 | --- | --- | --- |
-| Compute | `Cloudflare Workers` | Prefer `Workers` so compute, blob storage, and async delivery stay on the same platform. Keep compute behind ports so the application layer stays independent from runtime details. |
-| Queueing | `Cloudflare Queues` | Prefer `Cloudflare Queues` when compute runs on `Cloudflare Workers`, and when we want async delivery closer to `R2`. |
-| Object Storage | `R2` | Prefer `R2` when compute runs on `Cloudflare Workers` because of low storage pricing and no direct egress fees. |
-| Postgres | `Neon Postgres` | `Neon` is preferred because it keeps standard Postgres semantics while adding autoscaling and branching for preview environments and system testing. |
+| Web UI | Cloudflare Worker assets deployment | `thoth-web-app-dev` serves `packages/web/dist` at `thoth-dev.bots-ns.com/*` with single-page-app fallback. |
+| API | Cloudflare Worker | `thoth-conv-agent-server-dev` is routed at `thoth-dev.bots-ns.com/api/v1*`. |
+| Auth gateway | Cloudflare Access | Access protects browser and system-test traffic before it reaches the API Worker. |
+| Postgres | Postgres behind Cloudflare Hyperdrive | The Worker uses the `HYPERDRIVE` binding. Hyperdrive query caching must stay disabled for write-then-immediate-read flows. |
+| Object storage | Cloudflare R2 over the S3-compatible API | The Worker writes to the dev R2 bucket through the blob repository adapter. |
+| Background work | Worker `ctx.waitUntil` | Assistant completions are scheduled inside the API Worker. There is no deployed queue, retry, or DLQ in the current design. |

@@ -101,8 +101,8 @@ Create the gating app in Cloudflare Zero Trust:
 5. In identity provider settings, select only the Google IdP. The current
    Google IdP id is `86130f45-78cf-4879-8213-50ec35304992`.
 6. Enable automatic redirect to identity (single IdP) and the HTTP-only cookie
-   attribute. Leave OPTIONS preflight bypass disabled. CORS is not needed —
-   the SPA is served from the same origin as the API.
+   attribute. Leave the binding cookie and OPTIONS preflight bypass disabled.
+   CORS is not needed — the SPA is served from the same origin as the API.
 
 Gating app shape:
 
@@ -117,12 +117,34 @@ Gating app shape:
   "destinations": [
     { "type": "public", "uri": "thoth-dev.bots-ns.com/*", "zone_name": "bots-ns.com" }
   ],
-  "enable_binding_cookie": true,
+  "enable_binding_cookie": false,
   "http_only_cookie_attribute": true,
   "options_preflight_bypass": false,
   "self_hosted_domains": ["thoth-dev.bots-ns.com/*"]
 }
 ```
+
+If the browser shows `ERR_TOO_MANY_REDIRECTS` for either
+`cold-surf-f14c.cloudflareaccess.com` or `thoth-dev.bots-ns.com`, check the
+Access cookie settings first. A typical loop looks like this:
+
+1. The browser opens `thoth-dev.bots-ns.com`.
+2. Cloudflare Access redirects to the team-domain login URL.
+3. The user completes Google login.
+4. Cloudflare Access redirects back to `thoth-dev.bots-ns.com`.
+5. The browser does not send the Access application cookie state that Access
+   expects.
+6. Access treats the application session as invalid and redirects back to the
+   team-domain login URL.
+7. The team domain still has enough global session state to redirect back to
+   `thoth-dev.bots-ns.com`.
+8. The application cookie is still missing or invalid, so the two hosts repeat
+   until the browser stops the chain.
+
+Keep the gating app's binding cookie disabled and do not set the Access
+SameSite cookie attribute to `Strict`. If the loop is already in progress,
+clear cookies for both `thoth-dev.bots-ns.com` and
+`cold-surf-f14c.cloudflareaccess.com` before retesting.
 
 Create the bypass app the same way, with these differences:
 

@@ -59,7 +59,6 @@ type MessagePageResponse = {
 
 const THOTH_API_URL = import.meta.env.VITE_THOTH_API_URL?.trim() || "/api/v1";
 const THOTH_PROFILE = import.meta.env.VITE_THOTH_PROFILE?.trim() || "local";
-const ACCESS_LOGIN_SESSION_KEY = "THOTH_LOGGED_IN";
 const MESSAGE_PAGE_SIZE = 50;
 const CONVERSATION_PAGE_SIZE = 40;
 const IMAGE_FILE_EXTENSIONS = new Set(["avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "svg", "tif", "tiff", "webp"]);
@@ -1052,105 +1051,46 @@ function getFileExtension(filename: string): string {
   return normalizedFilename.slice(extensionStart + 1);
 }
 
-// All conv-agent calls go through this wrapper so the browser always sends the
-// CF_Authorization cookie (cross-origin requires credentials: 'include') and an
-// expired/missing session triggers the CF Access login bounce.
 async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   try {
     const response = await fetch(input, { ...init, credentials: "include" });
 
-    if (response.status === 401 || response.status === 403) {
-      if (startAccessLoginIfNeeded()) {
-        throw new Error("Not authenticated. Redirecting to sign in.");
-      }
+    if (response.status === 403) {
+      navigateTo("/forbidden");
+      throw new Error("Not authorized.");
+    }
 
-      navigateToLoginPage();
+    if (response.status === 401) {
+      navigateTo("/login");
       throw new Error("Not authenticated. Redirecting to sign in.");
     }
 
     return response;
   } catch (error) {
-    if (usesAccessGateway() && error instanceof TypeError) {
-      if (startAccessLoginIfNeeded()) {
-        throw new Error("Not authenticated. Redirecting to sign in.");
-      }
-
-      navigateToLoginPage();
-      throw new Error("Not authenticated. Redirecting to sign in.");
+    // A fetch TypeError here usually means CF Access challenged an XHR and the
+    // cross-origin redirect to the team domain was blocked by CORS. Bounce
+    // through /login so the user re-authenticates at the edge.
+    if (error instanceof TypeError) {
+      navigateTo("/login");
+      throw new Error("Session expired. Redirecting to sign in.");
     }
 
     throw error;
   }
 }
 
-function navigateToLoginPage(): void {
-  window.sessionStorage.removeItem(ACCESS_LOGIN_SESSION_KEY);
-
-  if (window.location.pathname !== "/login") {
-    window.location.href = "/login";
+function navigateTo(path: string): void {
+  if (window.location.pathname !== path) {
+    window.location.href = path;
   }
-}
-
-function redirectToLogin(): void {
-  if (!usesAccessGateway()) {
-    return;
-  }
-
-  const url = new URL(buildConvAgentRequestUrl("/auth/login"), window.location.origin);
-  url.searchParams.set("redirect_uri", window.location.href);
-  window.location.href = url.toString();
 }
 
 function logoutFromAccess(): void {
-  window.sessionStorage.removeItem(ACCESS_LOGIN_SESSION_KEY);
-
-  if (!usesAccessGateway()) {
-    window.location.reload();
-    return;
-  }
-
   window.location.href = new URL(buildConvAgentRequestUrl("/auth/logout"), window.location.origin).toString();
 }
 
 function startLoginFromLandingPage(): void {
-  window.sessionStorage.removeItem(ACCESS_LOGIN_SESSION_KEY);
-
-  if (!usesAccessGateway()) {
-    window.location.href = "/";
-    return;
-  }
-
-  const url = new URL(buildConvAgentRequestUrl("/auth/login"), window.location.origin);
-  url.searchParams.set("redirect_uri", new URL("/", window.location.origin).toString());
-  window.location.href = url.toString();
-}
-
-function startAccessLoginIfNeeded(): boolean {
-  if (!usesAccessGateway()) {
-    return false;
-  }
-
-  if (window.sessionStorage.getItem(ACCESS_LOGIN_SESSION_KEY) === "true") {
-    return false;
-  }
-
-  window.sessionStorage.setItem(ACCESS_LOGIN_SESSION_KEY, "true");
-  redirectToLogin();
-  return true;
-}
-
-function usesAccessGateway(): boolean {
-  return getConvAgentOrigin() !== window.location.origin || !isLocalDevelopmentOrigin(window.location.origin);
-}
-
-function getConvAgentOrigin(): string {
-  const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
-  return new URL(base, window.location.origin).origin;
-}
-
-function isLocalDevelopmentOrigin(origin: string): boolean {
-  const hostname = new URL(origin).hostname;
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  window.location.href = "/";
 }
 
 function buildConvAgentRequestUrl(path: string, searchParams?: Readonly<Record<string, string>>): string {

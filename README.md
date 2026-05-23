@@ -61,11 +61,20 @@ The dev backend is deployed to Cloudflare Workers with [`deployment/dev/deploy-s
 
 ### Dev OAuth and Cloudflare Access setup
 
-The dev `conv-agent` Worker is protected by a Cloudflare Access self-hosted
-application named `thoth-dev-cf-access-app`. The Access app gates
-`https://thoth-dev.bots-ns.com` before requests reach the Worker.
-Browser authentication is delegated to Google OAuth through Cloudflare Access;
-the Worker does not receive or store the Google OAuth client secret.
+The dev `conv-agent` Worker and web UI are protected by two Cloudflare Access
+self-hosted applications working together:
+
+- `thoth-api-acces-app-dev` gates everything under `thoth-dev.bots-ns.com/*`.
+  Every request requires a valid Google identity.
+- `thoth-public-paths-dev` bypasses `thoth-dev.bots-ns.com/login`,
+  `/forbidden`, and `/assets/*` so the login page and the SPA bundle can be
+  fetched without authentication.
+
+Cloudflare Access resolves the most specific destination first, so any path
+under the bypassed prefixes skips the IdP and everything else falls through to
+the gating app's login flow. Browser authentication is delegated to Google
+OAuth through Cloudflare Access; the Worker does not receive or store the
+Google OAuth client secret.
 
 Create or update the Google OAuth client first:
 
@@ -83,64 +92,84 @@ Create or update the Google OAuth client first:
    Google identity provider configuration. The client id is safe to identify in
    setup notes, but the client secret must not be committed.
 
-Create or update the app in Cloudflare Zero Trust:
+Create the gating app in Cloudflare Zero Trust:
 
 1. Go to **Zero Trust** -> **Access controls** -> **Applications**.
 2. Create an application under **Self-hosted and private**.
-3. Choose the **Workers** destination type.
-4. Set the application name to `thoth-dev-cf-access-app`.
-5. Set the destination/domain to `thoth-dev.bots-ns.com`.
-6. In the application identity provider settings, select only the Google
-   identity provider. The current Google IdP id is
-   `86130f45-78cf-4879-8213-50ec35304992`.
-7. Enable automatic redirect to the identity provider because the app has only
-   one allowed IdP.
-8. Enable the HTTP-only cookie attribute.
-9. Leave the binding cookie disabled unless a later Worker binding flow needs
-   it.
-10. Leave OPTIONS preflight bypass disabled unless browser CORS preflights fail
-    before authentication.
-11. Configure the application's **CORS settings** so browser clients can call
-    the protected origin cross-origin with credentials:
-    - **Access-Control-Allow-Origins**: `http://localhost:5173` and
-      `http://127.0.0.1:5173` for the local Vite dev flow.
-    - **Access-Control-Allow-Credentials**: enabled.
-    - **Access-Control-Allow-Methods**: `GET, POST, PATCH, DELETE, OPTIONS`.
-    - **Access-Control-Allow-Headers**: `Content-Type`.
-    - Leave wildcards off — wildcards are incompatible with credentialed
-      requests.
+3. Set the application name to `thoth-api-acces-app-dev`.
+4. Set the destination to `thoth-dev.bots-ns.com/*` (zone `bots-ns.com`).
+5. In identity provider settings, select only the Google IdP. The current
+   Google IdP id is `86130f45-78cf-4879-8213-50ec35304992`.
+6. Enable automatic redirect to identity (single IdP) and the HTTP-only cookie
+   attribute. Leave OPTIONS preflight bypass disabled. CORS is not needed —
+   the SPA is served from the same origin as the API.
 
-    The Worker reflects the request `Origin` header on non-`/auth/*` responses
-    instead of using `*`, because credentialed browser requests require a
-    concrete `Access-Control-Allow-Origin` value. The Access app CORS allowlist
-    is what limits which browser origins can read cross-origin responses.
-
-The app configuration should have this shape:
+Gating app shape:
 
 ```json
 {
-  "name": "thoth-dev-cf-access-app",
+  "name": "thoth-api-acces-app-dev",
   "type": "self_hosted",
   "allowed_idps": ["86130f45-78cf-4879-8213-50ec35304992"],
   "auto_redirect_to_identity": true,
   "session_duration": "24h",
-  "domain": "thoth-dev.bots-ns.com",
+  "domain": "thoth-dev.bots-ns.com/*",
   "destinations": [
-    {
-      "type": "public",
-      "uri": "thoth-dev.bots-ns.com",
-      "zone_name": "bots-ns.com"
-    }
+    { "type": "public", "uri": "thoth-dev.bots-ns.com/*", "zone_name": "bots-ns.com" }
   ],
-  "app_launcher_visible": true,
-  "enable_binding_cookie": false,
+  "enable_binding_cookie": true,
   "http_only_cookie_attribute": true,
   "options_preflight_bypass": false,
-  "self_hosted_domains": ["thoth-dev.bots-ns.com"]
+  "self_hosted_domains": ["thoth-dev.bots-ns.com/*"]
 }
 ```
 
-Attach two policies to the app.
+Create the bypass app the same way, with these differences:
+
+1. Name it `thoth-public-paths-dev`.
+2. Add three destinations: `thoth-dev.bots-ns.com/login`,
+   `thoth-dev.bots-ns.com/forbidden`, and `thoth-dev.bots-ns.com/assets/*`
+   (all zone `bots-ns.com`).
+3. Attach a single Bypass / Everyone policy (shown below). No IdP, no CORS,
+   no binding cookie — bypass apps never issue or consume CF_Authorization.
+
+Bypass app shape:
+
+```json
+{
+  "name": "thoth-public-paths-dev",
+  "type": "self_hosted",
+  "session_duration": "24h",
+  "domain": "thoth-dev.bots-ns.com/login",
+  "destinations": [
+    { "type": "public", "uri": "thoth-dev.bots-ns.com/login", "zone_name": "bots-ns.com" },
+    { "type": "public", "uri": "thoth-dev.bots-ns.com/forbidden", "zone_name": "bots-ns.com" },
+    { "type": "public", "uri": "thoth-dev.bots-ns.com/assets/*", "zone_name": "bots-ns.com" }
+  ],
+  "enable_binding_cookie": false,
+  "http_only_cookie_attribute": true,
+  "options_preflight_bypass": false,
+  "self_hosted_domains": [
+    "thoth-dev.bots-ns.com/login",
+    "thoth-dev.bots-ns.com/forbidden",
+    "thoth-dev.bots-ns.com/assets/*"
+  ]
+}
+```
+
+Bypass policy:
+
+```json
+{
+  "name": "Bypass all",
+  "decision": "bypass",
+  "include": [{ "everyone": {} }],
+  "exclude": [],
+  "require": []
+}
+```
+
+Attach two policies to the gating app.
 
 For browser access, add an allow policy for authenticated Google users. The app
 itself is already restricted to the Google IdP, so the policy can allow every
@@ -199,9 +228,10 @@ credentials, run:
 
 ### Conv-agent authorization
 
-Cloudflare Access performs the first gate before requests reach `conv-agent`.
-The Worker still verifies and authorizes the Access identity on every
-non-public endpoint. Public endpoints are `/` and `/health`.
+Cloudflare Access gates every request to `conv-agent` before it reaches the
+Worker. The Worker re-verifies the Access JWT and authorizes the identity on
+every endpoint — there are no Worker-level public paths, because CF Access
+already ensures the `Cf-Access-Jwt-Assertion` header is present.
 
 `AUTH_ENABLED` controls whether the Worker enforces this check:
 

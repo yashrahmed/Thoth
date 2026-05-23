@@ -57,24 +57,6 @@ interface ConversationHttpHandlerDeps {
   readonly getMessagesOnConversation: GetMessagesOnConversationFlow;
 }
 
-const PUBLIC_PATHS = new Set(["/", "/health", "/auth/logout"]);
-
-function buildForbiddenRedirect(redirectUri: string | undefined): string | null {
-  if (!redirectUri) {
-    return null;
-  }
-
-  try {
-    const target = new URL(redirectUri);
-    target.pathname = "/forbidden";
-    target.search = "";
-    target.hash = "";
-    return target.toString();
-  } catch {
-    return null;
-  }
-}
-
 export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps): (req: Request) => Response | Promise<Response> {
   const app = new Hono<{ Variables: HandlerVariables }>();
 
@@ -82,10 +64,6 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
 
   if (accessVerification) {
     app.use("*", async (c, next) => {
-      if (PUBLIC_PATHS.has(c.req.path)) {
-        return next();
-      }
-
       const token = c.req.header(ACCESS_JWT_HEADER);
 
       if (!token) {
@@ -118,14 +96,6 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
         const isAuthorized = await accessIdentityAuthorizer.isAuthorized(result.identity);
 
         if (!isAuthorized) {
-          if (c.req.path === "/auth/login") {
-            const forbiddenRedirect = buildForbiddenRedirect(c.req.query("redirect_uri"));
-
-            if (forbiddenRedirect) {
-              return c.redirect(forbiddenRedirect, 302);
-            }
-          }
-
           return c.json(
             {
               error: {
@@ -164,27 +134,6 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
 
   app.get("/", (c) => {
     return c.json({ name: "conv-agent", status: "ok" });
-  });
-
-  // Browser-driven login bounce. The web app navigates the page here when it gets a 401;
-  // CF Access intercepts unauthenticated requests, runs the IdP flow, sets the
-  // CF_Authorization cookie on this origin, and lets the request through. The handler
-  // then 302s back to the caller's UI. No allowlist on redirect_uri because CF Access's
-  // user policy already gates who can ever reach this endpoint.
-  app.get("/auth/login", (c) => {
-    const redirectUri = c.req.query("redirect_uri");
-
-    if (!redirectUri) {
-      return c.json({ error: { kind: "ValidationError", fieldName: "redirect_uri", message: "redirect_uri is required." } }, 400);
-    }
-
-    try {
-      new URL(redirectUri);
-    } catch {
-      return c.json({ error: { kind: "ValidationError", fieldName: "redirect_uri", message: "redirect_uri must be a valid absolute URL." } }, 400);
-    }
-
-    return c.redirect(redirectUri, 302);
   });
 
   // Browser-driven logout. Bounces to the Cloudflare Access team-domain logout endpoint,

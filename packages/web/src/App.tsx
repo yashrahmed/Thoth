@@ -10,6 +10,7 @@ import {
   FileText,
   FileType,
   FileVideoCamera,
+  LogOut,
   Pencil,
   Presentation,
   X,
@@ -509,6 +510,7 @@ export function App() {
               await loadMessages(conversationId);
             }
           }}
+          onLogout={logoutFromAccess}
         />
 
         <ChatPanel
@@ -548,6 +550,7 @@ function ConversationSidebar(props: {
   readonly onDeleteConversation: (conversationId: string) => Promise<void>;
   readonly onCreateConversation: () => Promise<void>;
   readonly onRefresh: () => Promise<void>;
+  readonly onLogout: () => void;
 }) {
   return (
     <aside style={sidebarStyle}>
@@ -593,6 +596,10 @@ function ConversationSidebar(props: {
           style={ghostButtonStyle}
         >
           Refresh
+        </button>
+        <button type="button" onClick={props.onLogout} style={dangerButtonStyle}>
+          <LogOut aria-hidden="true" size={16} strokeWidth={2.2} />
+          Logout
         </button>
       </div>
 
@@ -1022,6 +1029,18 @@ function redirectToLogin(): void {
   window.location.href = url.toString();
 }
 
+function logoutFromAccess(): void {
+  window.sessionStorage.removeItem(ACCESS_LOGIN_SESSION_KEY);
+
+  if (!isRemoteAccessBackend()) {
+    window.location.reload();
+    return;
+  }
+
+  const base = THOTH_API_URL.endsWith("/") ? THOTH_API_URL.slice(0, -1) : THOTH_API_URL;
+  window.location.href = `${base}/cdn-cgi/access/logout`;
+}
+
 function startAccessLoginIfNeeded(): boolean {
   if (!isRemoteAccessBackend()) {
     return false;
@@ -1431,6 +1450,17 @@ const ghostButtonStyle: React.CSSProperties = {
   background: "rgba(255, 248, 240, 0.04)",
   color: "#f7f1e8",
   cursor: "pointer",
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  ...ghostButtonStyle,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  border: "1px solid rgba(255, 120, 110, 0.34)",
+  background: "rgba(190, 74, 65, 0.16)",
+  color: "#ffd1cb",
 };
 
 const errorCardStyle: React.CSSProperties = {

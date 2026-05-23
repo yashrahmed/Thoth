@@ -147,7 +147,7 @@ write_dev_vars() {
 }
 
 start_worker() {
-  service_name="conv-agent"
+  service_name="thoth-conv-agent-server"
   pid_file="$STATE_DIR/$service_name.pid"
   log_file="$LOG_DIR/$service_name.log"
 
@@ -180,7 +180,7 @@ start_worker() {
 }
 
 stop_worker() {
-  kill_service_pids "conv-agent" "$STATE_DIR/conv-agent.pid" "$WORKER_PORT" || echo "conv-agent is not running."
+  kill_service_pids "thoth-conv-agent-server" "$STATE_DIR/thoth-conv-agent-server.pid" "$WORKER_PORT" || echo "thoth-conv-agent-server is not running."
   rm -f "$WORKER_DEV_VARS"
 }
 

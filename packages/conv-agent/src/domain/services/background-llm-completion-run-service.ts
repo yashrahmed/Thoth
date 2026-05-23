@@ -151,7 +151,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     conversationId: string,
     messages: ReadonlyArray<LlmCompletionMessage>,
   ): Promise<Result<void, ValidationError | StoreError>> {
-    const nextMessageRecordsResult = await this.messageDomainService.buildNextMessageRecords({
+    const nextMessageRecordsResult = this.messageDomainService.buildNextMessageRecords({
       conversationId,
       messages,
     });

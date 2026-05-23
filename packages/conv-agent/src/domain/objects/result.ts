@@ -10,10 +10,6 @@ export function failure<E>(error: E): Failure<E> {
   return { ok: false, error };
 }
 
-export async function andThenAsync<T, E, U, F>(result: Result<T, E>, fn: (value: T) => Promise<Result<U, F>>): Promise<Result<U, E | F>> {
-  return result.ok ? fn(result.value) : result;
-}
-
 export async function traverseAsync<T, U, E>(items: ReadonlyArray<T>, fn: (item: T) => Promise<Result<U, E>>): Promise<Result<U[], E>> {
   const results: U[] = [];
 

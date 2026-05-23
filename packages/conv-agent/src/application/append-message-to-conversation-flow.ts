@@ -45,7 +45,7 @@ export class AppendMessageToConversationFlow {
       return uploadFilesResult;
     }
 
-    const nextMessageRecordResult = await this.buildUserMessageRecord(request);
+    const nextMessageRecordResult = this.buildUserMessageRecord(request);
 
     if (!nextMessageRecordResult.ok) {
       const deleteUploadedBlobsResult = await this.fileDomainService.deleteUploadedBlobs({ files: uploadFilesResult.value });
@@ -67,8 +67,8 @@ export class AppendMessageToConversationFlow {
     return { ok: true, value: undefined };
   }
 
-  private async buildUserMessageRecord(request: AppendMessageRequest): Promise<Result<AppendMessageRecord, ValidationError>> {
-    const recordsResult = await this.messageDomainService.buildNextMessageRecords({
+  private buildUserMessageRecord(request: AppendMessageRequest): Result<AppendMessageRecord, ValidationError> {
+    const recordsResult = this.messageDomainService.buildNextMessageRecords({
       conversationId: request.conversationId,
       messages: [{ type: request.type, content: request.content }],
     });

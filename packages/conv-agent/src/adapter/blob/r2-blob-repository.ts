@@ -63,7 +63,7 @@ export class R2BlobRepository implements BlobRepository {
     }
   }
 
-  private async signedFetch(input: {
+  private signedFetch(input: {
     readonly method: BlobRequestMethod;
     readonly canonicalUri: string;
     readonly body?: ArrayBuffer;

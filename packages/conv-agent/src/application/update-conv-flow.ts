@@ -7,7 +7,7 @@ import type { ConversationDomainService } from "../domain/services/conversation-
 export class UpdateConvFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
-  async execute(request: UpdateConversationRequest): Promise<Result<Conversation, NotFoundError | StoreError | ValidationError>> {
+  execute(request: UpdateConversationRequest): Promise<Result<Conversation, NotFoundError | StoreError | ValidationError>> {
     return this.conversationDomainService.renameConversation(request.conversationId, request.title);
   }
 }

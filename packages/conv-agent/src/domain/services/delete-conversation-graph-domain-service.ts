@@ -5,7 +5,7 @@ import type { Result } from "../objects/result";
 export class DeleteConversationGraphDomainService {
   constructor(private readonly deleteConversationGraphStore: DeleteConversationGraphStore) {}
 
-  async deleteConversationGraph(conversationId: string): Promise<Result<DeletedConversationGraph, NotFoundError | StoreError>> {
+  deleteConversationGraph(conversationId: string): Promise<Result<DeletedConversationGraph, NotFoundError | StoreError>> {
     return this.deleteConversationGraphStore.deleteConversationGraph(conversationId);
   }
 }

@@ -1,7 +1,6 @@
 import type { BlobRepository } from "../contracts/blob-repository";
 import type { StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { andThenAsync } from "../objects/result";
 import { GenericValidationService } from "./generic-validation-service";
 
 export class BlobDomainService {
@@ -10,11 +9,17 @@ export class BlobDomainService {
     private readonly genericValidationService: GenericValidationService,
   ) {}
 
-  async upload(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, ValidationError | StoreError>> {
+  upload(request: { readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string }): Promise<Result<string, ValidationError | StoreError>> {
     return this.blobRepository.putBlob(request);
   }
 
   async delete(url: string): Promise<Result<void, ValidationError | StoreError>> {
-    return andThenAsync(this.genericValidationService.requireNonEmptyString(url, "canonicalUrl"), () => this.blobRepository.removeBlob(url));
+    const urlResult = this.genericValidationService.requireNonEmptyString(url, "canonicalUrl");
+
+    if (!urlResult.ok) {
+      return urlResult;
+    }
+
+    return this.blobRepository.removeBlob(urlResult.value);
   }
 }

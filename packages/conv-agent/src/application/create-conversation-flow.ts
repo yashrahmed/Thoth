@@ -6,7 +6,7 @@ import type { Result } from "../domain/objects/result";
 export class CreateConversationFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
-  async execute(): Promise<Result<Conversation, StoreError>> {
+  execute(): Promise<Result<Conversation, StoreError>> {
     return this.conversationDomainService.createConversation();
   }
 }

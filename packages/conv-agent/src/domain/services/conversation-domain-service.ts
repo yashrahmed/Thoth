@@ -2,7 +2,7 @@ import type { ConversationRepository } from "../contracts/conversation-repositor
 import type { Conversation } from "../objects/conversation";
 import { EntityType, StoreError, StoreOperation, ValidationError, type NotFoundError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { andThenAsync, failure, firstFailure, success } from "../objects/result";
+import { failure, firstFailure, success } from "../objects/result";
 import { GenericValidationService } from "./generic-validation-service";
 
 export class ConversationDomainService {
@@ -34,11 +34,15 @@ export class ConversationDomainService {
   }
 
   async findById(conversationId: string): Promise<Result<Conversation, ValidationError | NotFoundError | StoreError>> {
-    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), async (id) => {
-      const result = await this.conversationRepository.selectConversationRow(id);
+    const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
 
-      return result.ok ? this.validateConversation(result.value, StoreOperation.Read) : result;
-    });
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const result = await this.conversationRepository.selectConversationRow(conversationIdResult.value);
+
+    return result.ok ? this.validateConversation(result.value, StoreOperation.Read) : result;
   }
 
   async findPage(request: { readonly pageNum: number; readonly pageSize: number }): Promise<Result<Conversation[], StoreError>> {
@@ -93,7 +97,13 @@ export class ConversationDomainService {
   }
 
   async delete(conversationId: string): Promise<Result<void, ValidationError | StoreError>> {
-    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), (id) => this.conversationRepository.deleteConversationRow(id));
+    const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
+
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    return this.conversationRepository.deleteConversationRow(conversationIdResult.value);
   }
 
   private validateConversationRecord(record: Omit<Conversation, "id">): Result<void, ValidationError> {

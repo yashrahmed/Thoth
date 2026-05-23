@@ -7,7 +7,7 @@ import type { GetConversationRequest } from "../domain/objects/request-types";
 export class GetConversationFlow {
   constructor(private readonly conversationDomainService: ConversationDomainService) {}
 
-  async execute(request: GetConversationRequest): Promise<Result<Conversation, NotFoundError | StoreError | ValidationError>> {
+  execute(request: GetConversationRequest): Promise<Result<Conversation, NotFoundError | StoreError | ValidationError>> {
     return this.conversationDomainService.findById(request.conversationId);
   }
 }

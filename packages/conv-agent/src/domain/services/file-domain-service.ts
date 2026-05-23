@@ -2,7 +2,7 @@ import type { File as FileEntity, UploadedFileMetadata } from "../objects/messag
 import type { FileRepository } from "../contracts/file-repository";
 import { EntityType, NotFoundError, StoreError, StoreOperation, type ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
-import { andThenAsync, failure, firstFailure, success, traverseAsync } from "../objects/result";
+import { failure, firstFailure, success, traverseAsync } from "../objects/result";
 import type { BlobDomainService } from "./blob-domain-service";
 import { GenericValidationService } from "./generic-validation-service";
 type BlobUploadInput = { readonly messageId: string; readonly content: ArrayBuffer; readonly filename: string; readonly mimeType: string };
@@ -17,15 +17,25 @@ export class FileDomainService {
   ) {}
 
   async findById(fileId: string): Promise<Result<FileEntity, ValidationError | NotFoundError | StoreError>> {
-    return andThenAsync(this.genericValidationService.requireNonEmptyString(fileId, "id"), async (id) => {
-      const result = await this.fileRepository.selectFileRow(id);
+    const fileIdResult = this.genericValidationService.requireNonEmptyString(fileId, "id");
 
-      return result.ok ? this.validateFile(result.value, StoreOperation.Read) : result;
-    });
+    if (!fileIdResult.ok) {
+      return fileIdResult;
+    }
+
+    const result = await this.fileRepository.selectFileRow(fileIdResult.value);
+
+    return result.ok ? this.validateFile(result.value, StoreOperation.Read) : result;
   }
 
   async delete(fileId: string): Promise<Result<void, ValidationError | StoreError>> {
-    return andThenAsync(this.genericValidationService.requireNonEmptyString(fileId, "id"), (id) => this.fileRepository.deleteFileRow(id));
+    const fileIdResult = this.genericValidationService.requireNonEmptyString(fileId, "id");
+
+    if (!fileIdResult.ok) {
+      return fileIdResult;
+    }
+
+    return this.fileRepository.deleteFileRow(fileIdResult.value);
   }
 
   async uploadFile(request: BlobUploadInput): Promise<Result<FileEntity, ValidationError | StoreError>> {
@@ -77,36 +87,40 @@ export class FileDomainService {
     return uploadedFileValidationResult.ok ? success(uploadedFile) : uploadedFileValidationResult;
   }
 
-  async uploadFiles(request: { readonly files: ReadonlyArray<BlobUploadInput> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
+  uploadFiles(request: { readonly files: ReadonlyArray<BlobUploadInput> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
     return traverseAsync(request.files, (file) => this.uploadFile(file));
   }
 
-  async uploadBlobs(request: { readonly files: ReadonlyArray<BlobOnlyUploadInput> }): Promise<Result<ReadonlyArray<UploadedFileMetadata>, ValidationError | StoreError>> {
+  uploadBlobs(request: { readonly files: ReadonlyArray<BlobOnlyUploadInput> }): Promise<Result<ReadonlyArray<UploadedFileMetadata>, ValidationError | StoreError>> {
     return traverseAsync(request.files, (file) => this.uploadBlob(file));
   }
 
   async getFilesByConversation(conversationId: string): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
-    return andThenAsync(this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"), async (id) => {
-      const filesResult = await this.fileRepository.selectFileRowsByConversationId(id);
+    const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
 
-      if (!filesResult.ok) {
-        return filesResult;
+    if (!conversationIdResult.ok) {
+      return conversationIdResult;
+    }
+
+    const filesResult = await this.fileRepository.selectFileRowsByConversationId(conversationIdResult.value);
+
+    if (!filesResult.ok) {
+      return filesResult;
+    }
+
+    const files: FileEntity[] = [];
+
+    for (const file of filesResult.value) {
+      const fileValidationResult = this.validateFile(file, StoreOperation.Read);
+
+      if (!fileValidationResult.ok) {
+        return fileValidationResult;
       }
 
-      const files: FileEntity[] = [];
+      files.push(fileValidationResult.value);
+    }
 
-      for (const file of filesResult.value) {
-        const fileValidationResult = this.validateFile(file, StoreOperation.Read);
-
-        if (!fileValidationResult.ok) {
-          return fileValidationResult;
-        }
-
-        files.push(fileValidationResult.value);
-      }
-
-      return success(files);
-    });
+    return success(files);
   }
 
   async getFilesOnMessages(request: { readonly messageIds: ReadonlyArray<string> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | StoreError>> {
@@ -148,7 +162,13 @@ export class FileDomainService {
       return fileResult;
     }
 
-    return andThenAsync(await this.blobDomainService.delete(fileResult.value.canonicalUrl), () => this.delete(fileId));
+    const blobDeleteResult = await this.blobDomainService.delete(fileResult.value.canonicalUrl);
+
+    if (!blobDeleteResult.ok) {
+      return blobDeleteResult;
+    }
+
+    return this.delete(fileId);
   }
 
   async getFiles(request: { readonly fileIds: ReadonlyArray<string> }): Promise<Result<ReadonlyArray<FileEntity>, ValidationError | NotFoundError | StoreError>> {

@@ -2,6 +2,9 @@
 ## Next Steps.
 ### Making Thoth into an Omni assistant.
    - An RTS like Chat UI that allows conversation branching and allows building like an evidence board.
+     - Complete React tutorial.
+     - Complete React Native tutorial.
+     - Learn 3.JS.
    - User management (even though it is personal).
    - Document vault and memories.
    - Model picker
@@ -14,6 +17,7 @@
    - Simpligying setup using a one stop system (don't know what this looks like),
    - Thoth mobile prototype.
    - [Experimental] In-Context RAG for long conversations to improve completion time.
+   - [Experimental] Talking forms.
 ## Performance improvments.
    - Figure out a way around repeated signing.
    - Cloudflare-hosted inference (Workers AI / AI Gateway):

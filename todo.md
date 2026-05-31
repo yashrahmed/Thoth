@@ -14,6 +14,7 @@
    - Search and MCP integration (obviously).
    - Add support for overlay mode and video/audio inputs.
    - Completion streaming.
+   - Context compaction support.
    - Simpligying setup using a one stop system (don't know what this looks like),
    - Thoth mobile prototype.
    - [Experimental] In-Context RAG for long conversations to improve completion time.

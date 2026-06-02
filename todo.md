@@ -5,6 +5,7 @@
      - Complete React tutorial.
      - Complete React Native tutorial.
      - Learn 3.JS.
+   - Try out Gemini 3.1 Pro.
    - User management (even though it is personal).
    - Document vault and memories.
    - Model picker

@@ -324,11 +324,24 @@ async function fetchPage(conversationId: string, pageNum: number, pageSize: numb
   return (await response.json()) as MessagePage;
 }
 
+// Polling can read the conversation many times before background completion
+// lands. Validate bad HTTP responses without incrementing Bun's assertion
+// count on every retry.
+async function fetchPageForPolling(conversationId: string, pageNum: number, pageSize: number): Promise<MessagePage> {
+  const response = await fetch(`${BASE_URL}/conversations/${conversationId}/chat?pageNum=${pageNum}&pageSize=${pageSize}`, { headers: AUTH_HEADERS });
+
+  if (response.status !== 200) {
+    throw new Error(`Expected conversation page fetch to return 200 while polling, received ${response.status}.`);
+  }
+
+  return (await response.json()) as MessagePage;
+}
+
 async function waitForAssistantReply(conversationId: string): Promise<void> {
   const deadline = Date.now() + COMPLETION_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
-    const page = await fetchPage(conversationId, 1, 50);
+    const page = await fetchPageForPolling(conversationId, 1, 50);
 
     if (page.items.some((item) => item.type === "assistant")) {
       return;

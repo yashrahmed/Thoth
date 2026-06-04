@@ -92,7 +92,7 @@ checkout. The dev deploy and system-test scripts expect these values:
 
 - `BLOB_STORAGE_ACCESS_KEY_ID`
 - `BLOB_STORAGE_SECRET_ACCESS_KEY`
-- `LLM_API_KEY`
+- `OPENAI_LLM_API_KEY`
 - `ALLOWED_USER_EMAILS`, a comma-separated app authorization allowlist
 - `ALLOWED_SERVICE_TOKEN_CLIENT_IDS`, a comma-separated Access service-token
   client-id allowlist
@@ -101,7 +101,7 @@ checkout. The dev deploy and system-test scripts expect these values:
 - `MIGRATION_DATABASE_URL`, only when running dev migrations manually
 
 The service-token client id is safe to identify in config. The corresponding
-`CF_ACCESS_CLIENT_SECRET`, R2 secret, LLM key, and Google OAuth client secret
+`CF_ACCESS_CLIENT_SECRET`, R2 secret, OpenAI LLM key, and Google OAuth client secret
 must not be committed.
 
 ### Dev Access and authorization
@@ -220,7 +220,7 @@ mkdir -p ~/.thoth
 cp deployment/local/local-secrets.env.example ~/.thoth/local-secrets.env
 ```
 
-Set `LLM_API_KEY` and keep `MIGRATION_DATABASE_URL` populated. Override local
+Set `OPENAI_LLM_API_KEY` and keep `MIGRATION_DATABASE_URL` populated. Override local
 Postgres or MinIO values only if you are not using the default Docker Compose
 ports.
 

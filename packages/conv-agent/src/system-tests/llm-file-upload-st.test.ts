@@ -103,7 +103,7 @@ async function completeWithUploadedTestFile(): Promise<string> {
 }
 
 async function completeWithMessages(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<string> {
-  const completionResult = await new OpenAiLlmAdapter({ apiKey: requireEnv("LLM_API_KEY") }).llmComplete(messages);
+  const completionResult = await new OpenAiLlmAdapter({ apiKey: requireEnv("OPENAI_LLM_API_KEY") }).llmComplete(messages);
 
   if (!completionResult.ok) {
     throw new Error(`LLM completion failed: ${completionResult.error.message}`);

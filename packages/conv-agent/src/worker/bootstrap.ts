@@ -41,7 +41,7 @@ export interface WorkerEnv {
   BLOB_STORAGE_FOLDER: string;
   BLOB_STORAGE_ACCESS_KEY_ID: string;
   BLOB_STORAGE_SECRET_ACCESS_KEY: string;
-  LLM_API_KEY: string;
+  OPENAI_LLM_API_KEY: string;
   AUTH_ENABLED?: boolean | string;
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
@@ -82,7 +82,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     }),
   );
   const llmConfig: LlmConfig = {
-    apiKey: requireString(env.LLM_API_KEY, "LLM_API_KEY"),
+    apiKey: requireString(env.OPENAI_LLM_API_KEY, "OPENAI_LLM_API_KEY"),
   };
 
   const conversationRepository = new PostgresConversationRepository(database);

@@ -20,6 +20,8 @@ const FALLBACK_MESSAGE_BY_CODE: Record<LlmErrorCode, string> = {
   other: "Sorry — the assistant could not generate a reply. Please try again.",
 };
 
+const THOTH_SENT_AT_METADATA_LINE_PATTERN = /^sent at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+00:00 UTC$/gm;
+
 /**
  * Runs the LLM completion as a background task scheduled via the supplied
  * scheduler (typically `ctx.waitUntil` on Cloudflare Workers). Errors are
@@ -151,9 +153,15 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     conversationId: string,
     messages: ReadonlyArray<LlmCompletionMessage>,
   ): Promise<Result<void, ValidationError | StoreError>> {
+    const sanitizedMessages = this.sanitizeCompletionMessages(messages);
+
+    if (sanitizedMessages.length === 0) {
+      return success(undefined);
+    }
+
     const nextMessageRecordsResult = this.messageDomainService.buildNextMessageRecords({
       conversationId,
-      messages,
+      messages: sanitizedMessages,
     });
 
     if (!nextMessageRecordsResult.ok) {
@@ -169,6 +177,25 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     }
 
     return { ok: true, value: undefined };
+  }
+
+  private sanitizeCompletionMessages(messages: ReadonlyArray<LlmCompletionMessage>): LlmCompletionMessage[] {
+    return messages
+      .map((message) => {
+        if (message.type !== LLMMessageType.Assistant) {
+          return message;
+        }
+
+        // Providers can copy Thoth's synthetic timestamp metadata from prompt
+        // history into their answer. Strip exact standalone metadata lines at
+        // the completion boundary so future adapters get the same protection
+        // before assistant-authored content is persisted.
+        return {
+          ...message,
+          content: message.content.replace(THOTH_SENT_AT_METADATA_LINE_PATTERN, "").trim(),
+        };
+      })
+      .filter((message) => message.content.length > 0);
   }
 
   private validateTriggerMessage(triggerMessage: Message, allMessages: ReadonlyArray<Message>): Result<void, ValidationError> {

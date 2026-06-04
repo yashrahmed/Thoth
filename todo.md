@@ -5,7 +5,6 @@
      - Complete React tutorial.
      - Complete React Native tutorial.
      - Learn 3.JS.
-   - Try out Gemini 3.1 Pro.
    - User management (even though it is personal).
    - Document vault and memories.
    - Model picker
@@ -18,6 +17,7 @@
    - Context compaction support.
    - Simpligying setup using a one stop system (don't know what this looks like),
    - Thoth mobile prototype.
+   - Timestamps on tool messages?
    - [Experimental] In-Context RAG for long conversations to improve completion time.
    - [Experimental] Talking forms.
 ## Performance improvments.

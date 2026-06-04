@@ -44,7 +44,7 @@ describe("LLM file upload system test", () => {
     expect(response.trim().length).toBeGreaterThan(0);
   });
 
-  test("sends a text-only message to Gemini 3.1 Pro and prints the response", async () => {
+  test("sends a text-only message to Gemini 3 Flash and prints the response", async () => {
     const response = await completeWithGeminiMessages([
       {
         type: LLMMessageType.User,

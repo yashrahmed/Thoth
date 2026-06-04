@@ -4,7 +4,7 @@ import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
-export const GEMINI_31_PRO_MODEL = "gemini-3.1-pro-preview";
+export const GEMINI_3_FLASH_MODEL = "gemini-3-flash-preview";
 
 const GEMINI_GENERATE_CONTENT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_REQUEST_TIMEOUT_MS = 25_000;
@@ -66,7 +66,7 @@ export class GeminiLlmAdapter implements LlmService {
   }
 
   private async generateContent(request: GeminiGenerateContentRequest): Promise<GeminiGenerateContentResponse> {
-    const url = `${GEMINI_GENERATE_CONTENT_ENDPOINT}/${GEMINI_31_PRO_MODEL}:generateContent?key=${encodeURIComponent(this.config.apiKey)}`;
+    const url = `${GEMINI_GENERATE_CONTENT_ENDPOINT}/${GEMINI_3_FLASH_MODEL}:generateContent?key=${encodeURIComponent(this.config.apiKey)}`;
     const response = await withTimeout(
       fetch(url, {
         method: "POST",

@@ -7,11 +7,11 @@ import { LlmError } from "../../domain/objects/errors";
 import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
-export const OPENAI_LLM_MODEL = "gpt-5.4";
+const OPENAI_LLM_MODEL = "gpt-5.4";
 const MAX_TOOL_CALL_ROUNDS = 5;
 const OPENAI_REQUEST_TIMEOUT_MS = 25_000;
 
-export interface OpenAiTool {
+interface OpenAiTool {
   readonly name: string;
   execute(args: Record<string, unknown>): Promise<string>;
 }

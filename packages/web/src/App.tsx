@@ -1072,7 +1072,7 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
     // through /login so the user re-authenticates at the edge.
     if (error instanceof TypeError) {
       navigateTo("/login");
-      throw new Error("Session expired. Redirecting to sign in.");
+      throw new Error("Session expired. Redirecting to sign in.", { cause: error });
     }
 
     throw error;

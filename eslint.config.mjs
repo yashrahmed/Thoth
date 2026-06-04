@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/coverage/**", "local-launch/data/**"],
+    ignores: ["**/dist/**", "**/node_modules/**", "**/coverage/**", "**/.wrangler/**", "local-launch/data/**"],
   },
   {
     files: ["**/*.ts", "**/*.tsx"],
@@ -44,6 +44,7 @@ export default tseslint.config(
             {
               target: "./packages/conv-agent/src/application",
               from: "./packages/conv-agent/src/domain/contracts",
+              except: ["llm-completion-run-service.ts"],
               message: "Flows must not import repository or storage contracts directly; depend on domain services instead.",
             },
             {

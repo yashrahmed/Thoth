@@ -1,8 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "bun": false,
-  "ignore": ["packages/conv-agent/src/adapter/blob/r2-file-signed-url-generator.ts", "packages/conv-agent/src/domain/contracts/file-signed-url-generator.ts"],
-  "ignoreDependencies": ["@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"],
   "workspaces": {
     "packages/conv-agent": {
       "entry": ["src/worker/index.ts", "src/**/*.test.ts"],

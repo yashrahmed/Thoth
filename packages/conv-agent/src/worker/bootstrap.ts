@@ -129,7 +129,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     messageDomainService,
     fileDomainService,
     fileAccessDomainService,
-    llmAdapters.openAi,
+    llmAdapters.gemini,
     appendUserMessageDomainService,
     llmPromptDomainService,
     scheduleBackgroundTask,

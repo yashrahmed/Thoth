@@ -6,13 +6,16 @@ import { fileURLToPath } from "node:url";
 
 import { R2BlobRepository } from "../adapter/blob/r2-blob-repository";
 import { R2FileSignedUrlGenerator } from "../adapter/blob/r2-file-signed-url-generator";
+import { GeminiLlmAdapter } from "../adapter/llm/gemini-llm-adapter";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import type { BlobStorageConfig } from "../config/config";
-import { LLMMessageType, type LlmCompletionInputMessage } from "../domain/objects/llm";
+import type { LlmError } from "../domain/objects/errors";
+import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionResult } from "../domain/objects/llm";
 import { File as DomainFile } from "../domain/objects/message-types";
+import type { Result } from "../domain/objects/result";
 
 const TEST_MESSAGE = "What's in this picture?";
-const TEXT_ONLY_TEST_MESSAGE = "What is the Capital of Djibouti? And how old it the country?";
+const TEXT_ONLY_TEST_MESSAGE = "What is the capital of Djibouti? And how old is the country as of Dec 31, 2025?";
 const TEST_FILE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../test-files/plane1.png");
 const TEST_FILE_MIME_TYPE = "image/png";
 const TEST_FILE_BUCKET = "thoth-obj-store-dev";
@@ -29,7 +32,20 @@ describe("LLM file upload system test", () => {
   });
 
   test("sends a text-only message to the LLM and prints the response", async () => {
-    const response = await completeWithMessages([
+    const response = await completeWithOpenAiMessages([
+      {
+        type: LLMMessageType.User,
+        content: TEXT_ONLY_TEST_MESSAGE,
+        files: [],
+      },
+    ]);
+
+    console.log(response);
+    expect(response.trim().length).toBeGreaterThan(0);
+  });
+
+  test("sends a text-only message to Gemini 3.1 Pro and prints the response", async () => {
+    const response = await completeWithGeminiMessages([
       {
         type: LLMMessageType.User,
         content: TEXT_ONLY_TEST_MESSAGE,
@@ -99,12 +115,22 @@ async function completeWithUploadedTestFile(): Promise<string> {
       ],
     },
   ];
-  return completeWithMessages(messages);
+  return completeWithOpenAiMessages(messages);
 }
 
-async function completeWithMessages(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<string> {
+async function completeWithOpenAiMessages(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<string> {
   const completionResult = await new OpenAiLlmAdapter({ apiKey: requireEnv("OPENAI_LLM_API_KEY") }).llmComplete(messages);
 
+  return extractCompletionText(completionResult);
+}
+
+async function completeWithGeminiMessages(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<string> {
+  const completionResult = await new GeminiLlmAdapter({ apiKey: requireEnv("GOOGLE_LLM_API_KEY") }).llmComplete(messages);
+
+  return extractCompletionText(completionResult);
+}
+
+function extractCompletionText(completionResult: Result<LlmCompletionResult, LlmError>): string {
   if (!completionResult.ok) {
     throw new Error(`LLM completion failed: ${completionResult.error.message}`);
   }

@@ -10,6 +10,7 @@ import { createPostgresDatabase } from "../adapter/postgres/postgres-database";
 import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
 import { PostgresFileRepository } from "../adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
+import { GeminiLlmAdapter } from "../adapter/llm/gemini-llm-adapter";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
 import { BackgroundLLMCompletionRunService } from "../domain/services/background-llm-completion-run-service";
@@ -42,6 +43,7 @@ export interface WorkerEnv {
   BLOB_STORAGE_ACCESS_KEY_ID: string;
   BLOB_STORAGE_SECRET_ACCESS_KEY: string;
   OPENAI_LLM_API_KEY: string;
+  GOOGLE_LLM_API_KEY: string;
   AUTH_ENABLED?: boolean | string;
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
@@ -81,8 +83,11 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
       forcePathStyle: true,
     }),
   );
-  const llmConfig: LlmConfig = {
+  const openAiLlmConfig: LlmConfig = {
     apiKey: requireString(env.OPENAI_LLM_API_KEY, "OPENAI_LLM_API_KEY"),
+  };
+  const googleLlmConfig: LlmConfig = {
+    apiKey: requireString(env.GOOGLE_LLM_API_KEY, "GOOGLE_LLM_API_KEY"),
   };
 
   const conversationRepository = new PostgresConversationRepository(database);
@@ -102,7 +107,10 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
 
   const llmPromptDomainService = new LlmPromptDomainService();
   const fileAccessDomainService = new FileAccessDomainService(fileSignedUrlGenerator);
-  const openAiLlmAdapter = new OpenAiLlmAdapter(llmConfig);
+  const llmAdapters = {
+    openAi: new OpenAiLlmAdapter(openAiLlmConfig),
+    gemini: new GeminiLlmAdapter(googleLlmConfig),
+  };
 
   // Collect background tasks (e.g. LLM completion) here. The worker registers a
   // single ctx.waitUntil(shutdown()) so all background work finishes before the
@@ -121,7 +129,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     messageDomainService,
     fileDomainService,
     fileAccessDomainService,
-    openAiLlmAdapter,
+    llmAdapters.openAi,
     appendUserMessageDomainService,
     llmPromptDomainService,
     scheduleBackgroundTask,

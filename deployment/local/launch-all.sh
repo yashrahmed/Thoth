@@ -17,7 +17,7 @@ WORKER_DEV_VARS="$SCRIPT_DIR/.dev.vars"
 CREDS_FILE="$CREDENTIALS_DIR/local-secrets.env"
 CREDS_HINT="Copy deployment/local/local-secrets.env.example to ~/.thoth/local-secrets.env and fill in values."
 WRANGLER_CONFIG_FILE="$SCRIPT_DIR/wrangler-server-local.toml"
-REQUIRED_WORKER_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY OPENAI_LLM_API_KEY"
+REQUIRED_WORKER_SECRETS="BLOB_STORAGE_ACCESS_KEY_ID BLOB_STORAGE_SECRET_ACCESS_KEY OPENAI_LLM_API_KEY GOOGLE_LLM_API_KEY"
 
 if [ -z "$COMMAND" ]; then
   echo "Usage: ./deployment/local/launch-all.sh <start|stop>"
@@ -135,11 +135,18 @@ write_dev_vars() {
     printf '\nOPENAI_LLM_API_KEY=%s\n' "$OPENAI_LLM_API_KEY" >>"$WORKER_DEV_VARS"
   fi
 
+  if [ -z "$(read_secret_value "GOOGLE_LLM_API_KEY" "$WORKER_DEV_VARS")" ] && [ -n "${GOOGLE_LLM_API_KEY:-}" ]; then
+    printf '\nGOOGLE_LLM_API_KEY=%s\n' "$GOOGLE_LLM_API_KEY" >>"$WORKER_DEV_VARS"
+  fi
+
   for secret_name in $REQUIRED_WORKER_SECRETS; do
     if [ -z "$(read_secret_value "$secret_name" "$WORKER_DEV_VARS")" ]; then
       echo "Missing $secret_name in $CREDS_FILE."
       if [ "$secret_name" = "OPENAI_LLM_API_KEY" ]; then
         echo "Set OPENAI_LLM_API_KEY in $CREDS_FILE or export OPENAI_LLM_API_KEY before starting the local worker."
+      fi
+      if [ "$secret_name" = "GOOGLE_LLM_API_KEY" ]; then
+        echo "Set GOOGLE_LLM_API_KEY in $CREDS_FILE or export GOOGLE_LLM_API_KEY before starting the local worker."
       fi
       exit 1
     fi

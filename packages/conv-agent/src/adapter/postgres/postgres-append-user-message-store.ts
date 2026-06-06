@@ -7,6 +7,8 @@ import type { PostgresDatabase } from "./postgres-database";
 interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
+  readonly parent_message_id: string | null;
+  readonly path: string | null;
   readonly type: AppendMessageRecord["type"];
   readonly sequence_number: number;
   readonly content: string;
@@ -32,6 +34,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         const messageRows = await sql<MessageRow[]>`
           insert into thoth.messages (
             conversation_id,
+            parent_message_id,
+            path,
             type,
             sequence_number,
             content,
@@ -40,6 +44,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
           )
           values (
             ${input.message.conversationId},
+            ${input.message.parentMessageId ?? null},
+            ${input.message.path ?? null},
             ${input.message.type},
             ${sequenceNumber},
             ${input.message.content},
@@ -49,6 +55,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
           returning
             id,
             conversation_id,
+            parent_message_id,
+            path,
             type,
             sequence_number,
             content,
@@ -128,6 +136,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
           const rows = await sql<MessageRow[]>`
             insert into thoth.messages (
               conversation_id,
+              parent_message_id,
+              path,
               type,
               sequence_number,
               content,
@@ -136,6 +146,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             )
             values (
               ${message.conversationId},
+              ${message.parentMessageId ?? null},
+              ${message.path ?? null},
               ${message.type},
               ${sequenceNumber},
               ${message.content},
@@ -145,6 +157,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             returning
               id,
               conversation_id,
+              parent_message_id,
+              path,
               type,
               sequence_number,
               content,
@@ -228,7 +242,9 @@ function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError>
   }
 
   try {
-    return success(new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, toDate(row.created_at), toDate(row.updated_at)));
+    return success(
+      new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.path),
+    );
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, error.message));

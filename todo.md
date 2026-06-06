@@ -117,6 +117,7 @@ message tree columns are populated.
 ```
 
 - [x] Add the new nullable tree columns and supporting indexes.
+- [x] Add new fields to represent the columns to table types and ensure that the API is backward compatible.
 - Create the backfill control table for messages whose tree columns are not yet populated.
 - Deploy flow changes with dual-write behavior:
   - `add-to-conv`

@@ -5,15 +5,29 @@ export type MessageWithFiles = Message & { readonly files: ReadonlyArray<File> }
 export class Message {
   readonly id: string;
   readonly conversationId: string;
+  readonly parentMessageId: string | null;
+  readonly path: string | null;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 
-  constructor(id: string, conversationId: string, type: LLMMessageType, sequenceNumber: number, content: string, createdAt: Date, updatedAt: Date) {
+  constructor(
+    id: string,
+    conversationId: string,
+    type: LLMMessageType,
+    sequenceNumber: number,
+    content: string,
+    createdAt: Date,
+    updatedAt: Date,
+    parentMessageId: string | null = null,
+    path: string | null = null,
+  ) {
     this.id = id;
     this.conversationId = conversationId;
+    this.parentMessageId = parentMessageId;
+    this.path = path;
     this.type = type;
     this.sequenceNumber = sequenceNumber;
     this.content = content;
@@ -26,7 +40,10 @@ export type CreateMessageInput = Pick<Message, "conversationId" | "type" | "cont
 
 export type CreateMessageContentInput = Pick<Message, "type" | "content">;
 
-export type AppendMessageRecord = Omit<Message, "id" | "sequenceNumber">;
+export type AppendMessageRecord = Pick<Message, "conversationId" | "type" | "content" | "createdAt" | "updatedAt"> & {
+  readonly parentMessageId?: string | null;
+  readonly path?: string | null;
+};
 
 export class File {
   readonly id: string;

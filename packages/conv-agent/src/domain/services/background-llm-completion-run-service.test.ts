@@ -88,17 +88,18 @@ function createHarness(request: { readonly completionContent: string }): {
       createSignedFileAccess: mock(() => Promise.resolve(success([]))),
     }),
     stub<LlmService>({
-      llmComplete: mock((_messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, never>> =>
-        Promise.resolve(
-          success({
-            messages: [
-              {
-                type: LLMMessageType.Assistant,
-                content: request.completionContent,
-              },
-            ],
-          }),
-        ),
+      llmComplete: mock(
+        (_messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, never>> =>
+          Promise.resolve(
+            success({
+              messages: [
+                {
+                  type: LLMMessageType.Assistant,
+                  content: request.completionContent,
+                },
+              ],
+            }),
+          ),
       ),
     }),
     stub<AppendUserMessageDomainService>({

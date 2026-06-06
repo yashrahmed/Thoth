@@ -26,6 +26,23 @@ interface ParentMessageRow {
   readonly child_count: number;
 }
 
+interface AppendPositionRequest {
+  readonly parentMessage: ParentMessageRow | null;
+  readonly appendPosition?: number;
+}
+
+interface AppendPositionResponse {
+  readonly parentMessageId: string | null;
+  readonly path: string;
+}
+
+interface DatabaseError {
+  readonly code: string;
+  readonly constraint?: string;
+  readonly constraint_name?: string;
+  readonly detail?: string;
+}
+
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly sql: PostgresDatabase) {}
 
@@ -241,17 +258,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
   }
 }
 
-interface SingleTreePositionRequest {
-  readonly parentMessage: ParentMessageRow | null;
-  readonly appendPosition?: number;
-}
-
-interface SingleTreePositionAllocation {
-  readonly parentMessageId: string | null;
-  readonly path: string;
-}
-
-function calculateChildAttachPosition(request: SingleTreePositionRequest): SingleTreePositionAllocation {
+function calculateChildAttachPosition(request: AppendPositionRequest): AppendPositionResponse {
   const appendPosition = request.appendPosition ?? getNextChildPosition(request.parentMessage);
 
   if (appendPosition === undefined) {
@@ -412,13 +419,6 @@ function isUniquePathConstraintViolation(error: unknown): boolean {
 
 function getDatabaseErrorConstraintName(error: DatabaseError): string | undefined {
   return error.constraint ?? error.constraint_name;
-}
-
-interface DatabaseError {
-  readonly code: string;
-  readonly constraint?: string;
-  readonly constraint_name?: string;
-  readonly detail?: string;
 }
 
 function isDatabaseError(error: unknown): error is DatabaseError {

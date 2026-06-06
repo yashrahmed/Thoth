@@ -556,9 +556,7 @@ function ForbiddenView() {
         <div style={forbiddenCardStyle}>
           <p style={eyebrowStyle}>Thoth</p>
           <h1 style={titleStyle}>Access denied</h1>
-          <p style={bodyStyle}>
-            Your account does not have access to this app. If you signed in with the wrong Google account, sign out and try again.
-          </p>
+          <p style={bodyStyle}>Your account does not have access to this app. If you signed in with the wrong Google account, sign out and try again.</p>
           <button
             type="button"
             onClick={() => {

@@ -2,6 +2,10 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "bun": false,
   "workspaces": {
+    ".": {
+      "entry": ["deployment/db-migration/*.mjs"],
+      "project": ["deployment/db-migration/*.mjs"]
+    },
     "packages/conv-agent": {
       "entry": ["src/worker/index.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]

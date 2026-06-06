@@ -11,7 +11,7 @@ const COMPLETION_TIMEOUT_MS = 30_000;
 const COMPLETION_POLL_INTERVAL_MS = 200;
 
 // Dev: send the Access service-token headers so Cloudflare Access mints a JWT
-// and forwards it to conv-agent. 
+// and forwards it to conv-agent.
 // Local: no Access in front, no JWT enforcement, no headers needed.
 const AUTH_HEADERS: Record<string, string> =
   CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET
@@ -429,10 +429,7 @@ describe("conv-agent HTTP system test", () => {
   });
 });
 
-function buildUserMessageFormData(
-  content: string,
-  options: { readonly parentMessageId?: string | null; readonly appendPosition: number },
-): FormData {
+function buildUserMessageFormData(content: string, options: { readonly parentMessageId?: string | null; readonly appendPosition: number }): FormData {
   const formData = new FormData();
   formData.set("type", "user");
   formData.set("content", content);
@@ -445,11 +442,7 @@ function buildUserMessageFormData(
   return formData;
 }
 
-function buildImageMessageFormData(
-  imageBytes: ArrayBuffer,
-  content: string,
-  options: { readonly parentMessageId?: string | null; readonly appendPosition: number },
-): FormData {
+function buildImageMessageFormData(imageBytes: ArrayBuffer, content: string, options: { readonly parentMessageId?: string | null; readonly appendPosition: number }): FormData {
   const formData = new FormData();
   formData.set("type", "user");
   formData.set("content", content);

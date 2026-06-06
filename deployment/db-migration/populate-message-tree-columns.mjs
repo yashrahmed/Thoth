@@ -39,11 +39,7 @@ try {
   let lastConversationId = null;
 
   for (;;) {
-    const {
-      conversation_count: conversationCount,
-      updated_count: updatedCount,
-      max_conversation_id: maxConversationId,
-    } = await populateBatch(sql, batchSize, lastConversationId);
+    const { conversation_count: conversationCount, updated_count: updatedCount, max_conversation_id: maxConversationId } = await populateBatch(sql, batchSize, lastConversationId);
 
     if (conversationCount === 0) {
       break;
@@ -129,9 +125,7 @@ async function assertNoOversizedLinearPaths(sql) {
 
   const errorLines = ["Cannot populate ltree paths for conversations that are near the ltree length limit."];
   for (const conversation of oversizedConversations) {
-    errorLines.push(
-      `conversation_id=${conversation.conversation_id} message_count=${conversation.message_count} estimated_path_length=${conversation.estimated_path_length}`,
-    );
+    errorLines.push(`conversation_id=${conversation.conversation_id} message_count=${conversation.message_count} estimated_path_length=${conversation.estimated_path_length}`);
   }
 
   throw new Error(errorLines.join("\n"));

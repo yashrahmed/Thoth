@@ -1,12 +1,13 @@
 import type { LLMMessageType } from "./llm";
 
-export type MessageWithFiles = Message & { readonly files: ReadonlyArray<File> };
+export type MessageWithFiles = Omit<Message, "path"> & { readonly files: ReadonlyArray<File> };
 
 export class Message {
   readonly id: string;
   readonly conversationId: string;
   readonly parentMessageId: string | null;
   readonly path: string | null;
+  readonly childCount: number;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly content: string;
@@ -23,11 +24,13 @@ export class Message {
     updatedAt: Date,
     parentMessageId: string | null = null,
     path: string | null = null,
+    childCount: number = 0,
   ) {
     this.id = id;
     this.conversationId = conversationId;
     this.parentMessageId = parentMessageId;
     this.path = path;
+    this.childCount = childCount;
     this.type = type;
     this.sequenceNumber = sequenceNumber;
     this.content = content;

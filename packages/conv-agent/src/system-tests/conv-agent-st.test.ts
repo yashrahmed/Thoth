@@ -28,6 +28,7 @@ interface MessageItem {
   readonly conversationId: string;
   readonly type: MessageType;
   readonly sequenceNumber: number;
+  readonly childCount: number;
   readonly content: string;
   readonly files: ReadonlyArray<{
     readonly filename: string;
@@ -360,6 +361,8 @@ function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: s
 
     expect(item.conversationId).toBe(conversationId);
     expect(item.sequenceNumber).toBe(expectedSequence);
+    expect(item.childCount).toBe(0);
+    expect("path" in item).toBe(false);
     expect(item.type).toBe("user");
     expect(item.content).toBe(`Manual lambo image upload ${expectedSequence}`);
     expect(item.files).toHaveLength(1);

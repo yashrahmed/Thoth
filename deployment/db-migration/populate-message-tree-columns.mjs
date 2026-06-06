@@ -61,6 +61,12 @@ try {
     from thoth.messages message
     where
       message.path is null
+      or message.child_count <> (
+        select count(*)::integer
+        from thoth.messages child_message
+        where child_message.conversation_id = message.conversation_id
+          and child_message.parent_message_id = message.id
+      )
       or (
         message.parent_message_id is null
         and exists (
@@ -178,12 +184,23 @@ async function populateBatch(sql, batchSize, lastConversationId) {
         join message_chains parent_message
           on parent_message.id = child_message.parent_id
       ),
+      child_counts as (
+        select
+          parent_id as id,
+          count(*)::integer as child_count
+        from message_chains
+        where parent_id is not null
+        group by parent_id
+      ),
       updated_messages as (
         update thoth.messages message
         set
           parent_message_id = message_chains.parent_id,
-          path = message_chains.path
+          path = message_chains.path,
+          child_count = coalesce(child_counts.child_count, 0)
         from message_chains
+        left join child_counts
+          on child_counts.id = message_chains.id
         where message.id = message_chains.id
         returning message.id
       )

@@ -9,6 +9,7 @@ interface MessageRow {
   readonly conversation_id: string;
   readonly parent_message_id: string | null;
   readonly path: string | null;
+  readonly child_count: number;
   readonly type: AppendMessageRecord["type"];
   readonly sequence_number: number;
   readonly content: string;
@@ -57,6 +58,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             conversation_id,
             parent_message_id,
             path,
+            child_count,
             type,
             sequence_number,
             content,
@@ -159,6 +161,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               conversation_id,
               parent_message_id,
               path,
+              child_count,
               type,
               sequence_number,
               content,
@@ -243,7 +246,18 @@ function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError>
 
   try {
     return success(
-      new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.path),
+      new Message(
+        row.id,
+        row.conversation_id,
+        row.type,
+        row.sequence_number,
+        row.content,
+        toDate(row.created_at),
+        toDate(row.updated_at),
+        row.parent_message_id,
+        row.path,
+        row.child_count,
+      ),
     );
   } catch (error) {
     if (error instanceof Error) {

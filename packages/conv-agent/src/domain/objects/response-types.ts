@@ -49,6 +49,7 @@ export class MessageResponse {
   readonly conversationId: string;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
+  readonly childCount: number;
   readonly content: string;
   readonly files: ReadonlyArray<FileResponse>;
   readonly createdAt: string;
@@ -59,6 +60,7 @@ export class MessageResponse {
     conversationId: string,
     type: LLMMessageType,
     sequenceNumber: number,
+    childCount: number,
     content: string,
     files: ReadonlyArray<FileResponse>,
     createdAt: string,
@@ -68,6 +70,7 @@ export class MessageResponse {
     this.conversationId = conversationId;
     this.type = type;
     this.sequenceNumber = sequenceNumber;
+    this.childCount = childCount;
     this.content = content;
     this.files = files;
     this.createdAt = createdAt;
@@ -80,6 +83,7 @@ export class MessageResponse {
       message.conversationId,
       message.type,
       message.sequenceNumber,
+      message.childCount,
       message.content,
       message.files.map(FileResponse.fromFile),
       message.createdAt.toISOString(),

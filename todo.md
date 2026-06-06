@@ -120,21 +120,21 @@ message tree columns are populated.
 - Create the backfill control table for messages whose tree columns are not yet populated.
 - Deploy flow changes with dual-write behavior:
   - `add-to-conv`
-    - Temporarily query the current leaf message, pick the first leaf, and use it as the parent.
+    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent.
     - Append the new user message to that parent.
     - Populate the new tree columns on write.
     - If the parent tree data is unavailable, add the new message id to the control table.
     - Run completion from the new user message's path once tree data is available.
     - Remove sequence-number calculation.
   - `append-direct`
-    - Temporarily query the current leaf message, pick the first leaf, and use it as the parent.
+    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent.
     - Append the new message to that parent.
     - Populate the new tree columns on write.
     - If the parent tree data is unavailable, add the new message id to the control table.
     - Do not trigger completion.
     - Remove sequence-number calculation.
   - `get-messages-on-conv`
-    - Temporarily query the current leaf message, pick the first leaf, and use it as the selected message.
+    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the selected message.
     - Load the path from root to that selected message.
     - Page over the path results.
     - Ignore sequence number.

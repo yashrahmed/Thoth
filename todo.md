@@ -120,6 +120,7 @@ message tree columns are populated.
 - [x] Add new fields to represent the columns to table types and ensure that the API is backward compatible.
 - [x] Cease operations
 - [x] Write a script to backfill the values for the new columns and ensure that the API is backward compatible.
+- [x] Remove sequence-number constraints and indexes.
 - [ ] Make flow changes:
   - `add-to-conv`
     - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent. Error out if leaf cannot be found.
@@ -144,6 +145,5 @@ message tree columns are populated.
   - `add-to-conv` requires `parentMessageId`.
   - `append-direct` requires `parentMessageId`.
   - `get-messages-on-conv` requires a selected message, typically `leafMessageId`.
-- Remove sequence-number constraints and indexes.
 - Remove the `sequence_number` column.
 - Delete the scheduled backfill procedure and control table.

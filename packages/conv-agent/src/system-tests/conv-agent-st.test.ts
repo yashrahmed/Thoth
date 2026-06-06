@@ -143,7 +143,7 @@ describe("conv-agent HTTP system test", () => {
         const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
           method: "POST",
           headers: AUTH_HEADERS,
-          body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`),
+          body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`, { appendPosition: index }),
         });
 
         expect(appendResponse.status).toBe(204);
@@ -203,6 +203,137 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 
+  test("appends direct children and rejects an occupied child position", async () => {
+    let conversationId: string | undefined;
+
+    try {
+      const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+      expect(createResponse.status).toBe(201);
+      conversationId = ((await createResponse.json()) as { readonly id: string }).id;
+
+      const parentContent = "Direct append parent";
+      const parentAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData(parentContent, { appendPosition: 1 }),
+      });
+
+      expect(parentAppend.status).toBe(204);
+
+      const parentPage = await fetchPage(conversationId, 1, 10);
+      const parentMessage = parentPage.items.find((item) => item.content === parentContent);
+
+      expect(parentMessage).toBeDefined();
+
+      if (!parentMessage) {
+        throw new Error("Expected direct append parent message to exist.");
+      }
+
+      for (let appendPosition = 1; appendPosition <= 3; appendPosition += 1) {
+        const childAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+          method: "POST",
+          headers: AUTH_HEADERS,
+          body: buildUserMessageFormData(`Direct child ${appendPosition}`, {
+            parentMessageId: parentMessage.id,
+            appendPosition,
+          }),
+        });
+
+        expect(childAppend.status).toBe(204);
+      }
+
+      const duplicateAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData("Duplicate direct child", {
+          parentMessageId: parentMessage.id,
+          appendPosition: 3,
+        }),
+      });
+
+      expect(duplicateAppend.status).toBe(400);
+
+      const duplicateBody = (await duplicateAppend.json()) as { readonly error: { readonly kind: string; readonly fieldName: string } };
+
+      expect(duplicateBody.error.kind).toBe("ValidationError");
+      expect(duplicateBody.error.fieldName).toBe("appendPosition");
+
+      const page = await fetchPage(conversationId, 1, 10);
+      const updatedParentMessage = page.items.find((item) => item.id === parentMessage.id);
+
+      expect(updatedParentMessage?.childCount).toBe(3);
+      expect(page.items.filter((item) => item.content.startsWith("Direct child "))).toHaveLength(3);
+    } finally {
+      if (conversationId) {
+        await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
+    }
+  });
+
+  test("add-to-conv appends from the selected parent and completion becomes a child of the input", async () => {
+    let conversationId: string | undefined;
+
+    try {
+      const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+      expect(createResponse.status).toBe(201);
+      conversationId = ((await createResponse.json()) as { readonly id: string }).id;
+
+      const parentContent = "Branch completion parent";
+      const parentAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData(parentContent, { appendPosition: 1 }),
+      });
+
+      expect(parentAppend.status).toBe(204);
+
+      const parentPage = await fetchPage(conversationId, 1, 10);
+      const parentMessage = parentPage.items.find((item) => item.content === parentContent);
+
+      expect(parentMessage).toBeDefined();
+
+      if (!parentMessage) {
+        throw new Error("Expected branch completion parent message to exist.");
+      }
+
+      const directChildAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData("Existing direct child", {
+          parentMessageId: parentMessage.id,
+          appendPosition: 1,
+        }),
+      });
+
+      expect(directChildAppend.status).toBe(204);
+
+      const addToConvContent = "Reply with a short greeting for this branch.";
+      const addToConvAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/add-to-conv`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData(addToConvContent, {
+          parentMessageId: parentMessage.id,
+          appendPosition: 2,
+        }),
+      });
+
+      expect(addToConvAppend.status).toBe(204);
+
+      await waitForAssistantReply(conversationId);
+
+      const page = await fetchPage(conversationId, 1, 50);
+      const addToConvInput = page.items.find((item) => item.content === addToConvContent);
+
+      expect(page.items.some((item) => item.type === "assistant")).toBe(true);
+      expect(addToConvInput).toBeDefined();
+      expect(addToConvInput?.childCount).toBe(1);
+    } finally {
+      if (conversationId) {
+        await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
+    }
+  });
+
   test("appends to two conversations back-to-back and both receive completions", async () => {
     let firstConversationId: string | undefined;
     let secondConversationId: string | undefined;
@@ -215,7 +346,7 @@ describe("conv-agent HTTP system test", () => {
       const firstAppend = await fetch(`${BASE_URL}/conversations/${firstConversationId}/add-to-conv`, {
         method: "POST",
         headers: AUTH_HEADERS,
-        body: buildUserMessageFormData("Reply with a short greeting on conversation A."),
+        body: buildUserMessageFormData("Reply with a short greeting on conversation A.", { appendPosition: 1 }),
       });
 
       expect(firstAppend.status).toBe(204);
@@ -228,7 +359,7 @@ describe("conv-agent HTTP system test", () => {
       const secondAppend = await fetch(`${BASE_URL}/conversations/${secondConversationId}/add-to-conv`, {
         method: "POST",
         headers: AUTH_HEADERS,
-        body: buildUserMessageFormData("Reply with a short greeting on conversation B."),
+        body: buildUserMessageFormData("Reply with a short greeting on conversation B.", { appendPosition: 1 }),
       });
 
       expect(secondAppend.status).toBe(204);
@@ -266,9 +397,7 @@ describe("conv-agent HTTP system test", () => {
       conversationId = createdConversation.id;
 
       const userContent = "Reply with a short greeting.";
-      const formData = new FormData();
-      formData.set("type", "user");
-      formData.set("content", userContent);
+      const formData = buildUserMessageFormData(userContent, { appendPosition: 1 });
 
       const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/add-to-conv`, {
         method: "POST",
@@ -300,18 +429,36 @@ describe("conv-agent HTTP system test", () => {
   });
 });
 
-function buildUserMessageFormData(content: string): FormData {
+function buildUserMessageFormData(
+  content: string,
+  options: { readonly parentMessageId?: string | null; readonly appendPosition: number },
+): FormData {
   const formData = new FormData();
   formData.set("type", "user");
   formData.set("content", content);
+  formData.set("appendPosition", String(options.appendPosition));
+
+  if (options.parentMessageId) {
+    formData.set("parentMessageId", options.parentMessageId);
+  }
 
   return formData;
 }
 
-function buildImageMessageFormData(imageBytes: ArrayBuffer, content: string): FormData {
+function buildImageMessageFormData(
+  imageBytes: ArrayBuffer,
+  content: string,
+  options: { readonly parentMessageId?: string | null; readonly appendPosition: number },
+): FormData {
   const formData = new FormData();
   formData.set("type", "user");
   formData.set("content", content);
+  formData.set("appendPosition", String(options.appendPosition));
+
+  if (options.parentMessageId) {
+    formData.set("parentMessageId", options.parentMessageId);
+  }
+
   formData.set("file", new Blob([imageBytes], { type: "image/jpeg" }), "lambo.jpg");
 
   return formData;

@@ -63,12 +63,7 @@ export class R2BlobRepository implements BlobRepository {
     }
   }
 
-  private signedFetch(input: {
-    readonly method: BlobRequestMethod;
-    readonly canonicalUri: string;
-    readonly body?: ArrayBuffer;
-    readonly contentType?: string;
-  }): Promise<Response> {
+  private signedFetch(input: { readonly method: BlobRequestMethod; readonly canonicalUri: string; readonly body?: ArrayBuffer; readonly contentType?: string }): Promise<Response> {
     const now = new Date();
     const amzDate = toAmzDate(now);
     const dateStamp = toDateStamp(now);

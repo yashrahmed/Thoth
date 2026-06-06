@@ -27,7 +27,7 @@ describe("BackgroundLLMCompletionRunService", () => {
       ].join("\n"),
     });
 
-    harness.service.run({ conversationId: CONVERSATION_ID, messageId: USER_MESSAGE_ID });
+    harness.service.run({ conversationId: CONVERSATION_ID, messageId: USER_MESSAGE_ID, parentMessageId: USER_MESSAGE_ID });
     await harness.waitForScheduledTasks();
 
     expect(harness.persistMessages).toHaveBeenCalledTimes(1);
@@ -43,7 +43,7 @@ describe("BackgroundLLMCompletionRunService", () => {
       completionContent: "sent at 2026-06-04 01:21:51 +00:00 UTC",
     });
 
-    harness.service.run({ conversationId: CONVERSATION_ID, messageId: USER_MESSAGE_ID });
+    harness.service.run({ conversationId: CONVERSATION_ID, messageId: USER_MESSAGE_ID, parentMessageId: USER_MESSAGE_ID });
     await harness.waitForScheduledTasks();
 
     expect(harness.persistMessages).not.toHaveBeenCalled();
@@ -59,7 +59,8 @@ function createHarness(request: { readonly completionContent: string }): {
 } {
   const persistedMessages: AppendMessageRecord[] = [];
   const scheduledTasks: Promise<unknown>[] = [];
-  const persistMessages = mock((input: { readonly messages: ReadonlyArray<AppendMessageRecord> }) => {
+  const persistMessages = mock((input: { readonly messages: ReadonlyArray<AppendMessageRecord>; readonly parentMessageId: string }) => {
+    expect(input.parentMessageId).toBe(USER_MESSAGE_ID);
     persistedMessages.push(...input.messages);
     return Promise.resolve(success([]));
   });

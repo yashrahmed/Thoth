@@ -8,7 +8,6 @@ interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
   readonly parent_message_id: string | null;
-  readonly path: string | null;
   readonly child_count: number;
   readonly type: AppendMessageRecord["type"];
   readonly sequence_number: number;
@@ -21,6 +20,12 @@ interface ConversationRow {
   readonly id: string;
 }
 
+interface ParentMessageRow {
+  readonly id: string;
+  readonly path: string | null;
+  readonly child_count: number;
+}
+
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly sql: PostgresDatabase) {}
 
@@ -31,6 +36,11 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         const timestamp = new Date();
         const latestSequenceNumber = await lockConversationAndGetLatestSequenceNumber(sql, input.message.conversationId);
         const sequenceNumber = latestSequenceNumber + 1;
+        const parentMessage = input.parentMessageId === null ? null : await lockParentMessage(sql, input.message.conversationId, input.parentMessageId);
+        const allocation = calculateChildAttachPosition({
+          parentMessage,
+          appendPosition: input.appendPosition,
+        });
 
         const messageRows = await sql<MessageRow[]>`
           insert into thoth.messages (
@@ -45,8 +55,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
           )
           values (
             ${input.message.conversationId},
-            ${input.message.parentMessageId ?? null},
-            ${input.message.path ?? null},
+            ${allocation.parentMessageId},
+            ${allocation.path},
             ${input.message.type},
             ${sequenceNumber},
             ${input.message.content},
@@ -57,7 +67,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             id,
             conversation_id,
             parent_message_id,
-            path,
             child_count,
             type,
             sequence_number,
@@ -71,6 +80,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         if (!messageRow) {
           throw new Error("Message row was not returned.");
         }
+
+        await incrementParentChildCount(sql, allocation.parentMessageId);
 
         for (const file of input.files) {
           await sql`
@@ -104,6 +115,10 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         return failure(error);
       }
 
+      if (isUniquePathConstraintViolation(error)) {
+        return failure(new ValidationError("appendPosition", "append position is already occupied."));
+      }
+
       if (isUniqueSequenceConstraintViolation(error)) {
         return failure(new ValidationError("sequenceNumber", "next message sequenceNumber is no longer available."));
       }
@@ -131,6 +146,13 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         }
 
         const latestSequenceNumber = await lockConversationAndGetLatestSequenceNumber(sql, firstMessage.conversationId);
+        const parentMessage = await lockParentMessage(sql, firstMessage.conversationId, input.parentMessageId);
+        const allocation = calculateChildAttachPosition({
+          parentMessage,
+          appendPosition: input.appendPosition,
+        });
+        let parentMessageId = allocation.parentMessageId;
+        let path = allocation.path;
 
         for (const [index, message] of input.messages.entries()) {
           const sequenceNumber = latestSequenceNumber + index + 1;
@@ -148,8 +170,8 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             )
             values (
               ${message.conversationId},
-              ${message.parentMessageId ?? null},
-              ${message.path ?? null},
+              ${parentMessageId},
+              ${path},
               ${message.type},
               ${sequenceNumber},
               ${message.content},
@@ -160,7 +182,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               id,
               conversation_id,
               parent_message_id,
-              path,
               child_count,
               type,
               sequence_number,
@@ -176,6 +197,26 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
           }
 
           messageRows.push(messageRow);
+
+          if (index === 0) {
+            await incrementParentChildCount(sql, allocation.parentMessageId);
+          } else {
+            const previousRowIndex = index - 1;
+            const previousRow = messageRows[previousRowIndex];
+
+            if (!previousRow) {
+              throw new Error("Previous completion message row was not returned.");
+            }
+
+            await incrementParentChildCount(sql, previousRow.id);
+            messageRows[previousRowIndex] = {
+              ...previousRow,
+              child_count: 1,
+            };
+          }
+
+          parentMessageId = messageRow.id;
+          path = `${path}.1`;
         }
 
         return messageRows;
@@ -187,6 +228,10 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         return failure(error);
       }
 
+      if (isUniquePathConstraintViolation(error)) {
+        return failure(new ValidationError("appendPosition", "append position is already occupied."));
+      }
+
       if (isUniqueSequenceConstraintViolation(error)) {
         return failure(new ValidationError("sequenceNumber", "one or more next message sequenceNumbers are no longer available."));
       }
@@ -194,6 +239,85 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
+}
+
+interface SingleTreePositionRequest {
+  readonly parentMessage: ParentMessageRow | null;
+  readonly appendPosition?: number;
+}
+
+interface SingleTreePositionAllocation {
+  readonly parentMessageId: string | null;
+  readonly path: string;
+}
+
+function calculateChildAttachPosition(request: SingleTreePositionRequest): SingleTreePositionAllocation {
+  const appendPosition = request.appendPosition ?? getNextChildPosition(request.parentMessage);
+
+  if (appendPosition === undefined) {
+    throw new ValidationError("appendPosition", "appendPosition must be present.");
+  }
+
+  if (appendPosition <= 0) {
+    throw new ValidationError("appendPosition", "appendPosition must be a positive integer.");
+  }
+
+  if (request.parentMessage === null) {
+    return {
+      parentMessageId: null,
+      path: String(appendPosition),
+    };
+  }
+
+  if (appendPosition !== request.parentMessage.child_count + 1) {
+    throw new ValidationError("appendPosition", "appendPosition must be the next child position.");
+  }
+
+  return {
+    parentMessageId: request.parentMessage.id,
+    path: `${request.parentMessage.path}.${appendPosition}`,
+  };
+}
+
+function getNextChildPosition(parentMessage: ParentMessageRow | null): number | undefined {
+  return parentMessage === null ? undefined : parentMessage.child_count + 1;
+}
+
+async function lockParentMessage(sql: PostgresDatabase, conversationId: string, parentMessageId: string): Promise<ParentMessageRow> {
+  const parentRows = await sql<ParentMessageRow[]>`
+    select
+      id,
+      path,
+      child_count
+    from thoth.messages
+    where conversation_id = ${conversationId}
+      and id = ${parentMessageId}
+    for no key update
+  `;
+
+  const parentMessage = parentRows[0];
+
+  if (!parentMessage) {
+    throw new ValidationError("parentMessageId", "parent message must belong to the conversation.");
+  }
+
+  if (parentMessage.path === null) {
+    throw new ValidationError("parentMessageId", "parent message tree path has not been populated.");
+  }
+
+  return parentMessage;
+}
+
+async function incrementParentChildCount(sql: PostgresDatabase, parentMessageId: string | null): Promise<void> {
+  if (parentMessageId === null) {
+    return;
+  }
+
+  await sql`
+    update thoth.messages
+    set child_count = child_count + 1
+    where id = ${parentMessageId}
+  `;
 }
 
 async function lockConversationAndGetLatestSequenceNumber(sql: PostgresDatabase, conversationId: string): Promise<number> {
@@ -246,18 +370,7 @@ function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError>
 
   try {
     return success(
-      new Message(
-        row.id,
-        row.conversation_id,
-        row.type,
-        row.sequence_number,
-        row.content,
-        toDate(row.created_at),
-        toDate(row.updated_at),
-        row.parent_message_id,
-        row.path,
-        row.child_count,
-      ),
+      new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count),
     );
   } catch (error) {
     if (error instanceof Error) {
@@ -277,5 +390,37 @@ function getErrorMessage(error: unknown): string {
 }
 
 function isUniqueSequenceConstraintViolation(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+  if (!isDatabaseError(error) || error.code !== "23505") {
+    return false;
+  }
+
+  const constraintName = getDatabaseErrorConstraintName(error);
+  return constraintName === "messages_conversation_sequence_unique";
+}
+
+function isUniquePathConstraintViolation(error: unknown): boolean {
+  if (!isDatabaseError(error) || error.code !== "23505") {
+    return false;
+  }
+
+  const constraintName = getDatabaseErrorConstraintName(error);
+  const message = getErrorMessage(error);
+  const detail = typeof error.detail === "string" ? error.detail : "";
+
+  return constraintName === "messages_path_unique" || message.includes("messages_path_unique") || detail.includes("(conversation_id, path)");
+}
+
+function getDatabaseErrorConstraintName(error: DatabaseError): string | undefined {
+  return error.constraint ?? error.constraint_name;
+}
+
+interface DatabaseError {
+  readonly code: string;
+  readonly constraint?: string;
+  readonly constraint_name?: string;
+  readonly detail?: string;
+}
+
+function isDatabaseError(error: unknown): error is DatabaseError {
+  return typeof error === "object" && error !== null && "code" in error;
 }

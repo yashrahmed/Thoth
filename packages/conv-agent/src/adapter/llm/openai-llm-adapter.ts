@@ -57,10 +57,7 @@ export class OpenAiLlmAdapter implements LlmService {
   private readonly model: ChatOpenAI;
   private readonly toolsByName: ReadonlyMap<string, OpenAiTool>;
 
-  constructor(
-    config: LlmConfig,
-    tools: ReadonlyArray<OpenAiTool> = [],
-  ) {
+  constructor(config: LlmConfig, tools: ReadonlyArray<OpenAiTool> = []) {
     this.model = getOrCreateChatOpenAI(config);
     this.toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
   }

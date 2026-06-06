@@ -41,10 +41,10 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
   ) {}
 
   run(input: RunLlmCompletionInput): void {
-    this.scheduleBackgroundTask(this.executeAndLog(input.messageId, input.conversationId));
+    this.scheduleBackgroundTask(this.executeAndLog(input.messageId, input.parentMessageId, input.conversationId));
   }
 
-  private async executeAndLog(messageId: string, conversationId: string): Promise<void> {
+  private async executeAndLog(messageId: string, parentMessageId: string, conversationId: string): Promise<void> {
     try {
       const contextResult = await this.resolveCompletionContext(messageId, conversationId);
 
@@ -70,7 +70,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
           phase: "llm",
           error: this.serializeCompletionError(llmResult.error),
         });
-        await this.persistFallbackAssistantMessage(messageId, conversationId, llmResult.error.code);
+        await this.persistFallbackAssistantMessage(messageId, parentMessageId, conversationId, llmResult.error.code);
         return;
       }
 
@@ -78,7 +78,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
         return;
       }
 
-      const persistResult = await this.appendCompletionMessages(conversationId, llmResult.value.messages);
+      const persistResult = await this.appendCompletionMessages(conversationId, parentMessageId, llmResult.value.messages);
 
       if (!persistResult.ok) {
         console.error("[conv-agent] background LLM completion failed", {
@@ -132,13 +132,13 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     });
   }
 
-  private async persistFallbackAssistantMessage(messageId: string, conversationId: string, code: LlmErrorCode): Promise<void> {
+  private async persistFallbackAssistantMessage(messageId: string, parentMessageId: string, conversationId: string, code: LlmErrorCode): Promise<void> {
     const fallbackMessage: LlmCompletionMessage = {
       type: LLMMessageType.Assistant,
       content: FALLBACK_MESSAGE_BY_CODE[code],
     };
 
-    const persistResult = await this.appendCompletionMessages(conversationId, [fallbackMessage]);
+    const persistResult = await this.appendCompletionMessages(conversationId, parentMessageId, [fallbackMessage]);
 
     if (!persistResult.ok) {
       console.error("[conv-agent] failed to persist fallback assistant message", {
@@ -151,6 +151,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
 
   private async appendCompletionMessages(
     conversationId: string,
+    parentMessageId: string,
     messages: ReadonlyArray<LlmCompletionMessage>,
   ): Promise<Result<void, ValidationError | StoreError>> {
     const sanitizedMessages = this.sanitizeCompletionMessages(messages);
@@ -170,6 +171,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
 
     const appendMessageResult = await this.appendUserMessageDomainService.persistMessages({
       messages: nextMessageRecordsResult.value,
+      parentMessageId,
     });
 
     if (!appendMessageResult.ok) {

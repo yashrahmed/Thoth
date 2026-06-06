@@ -4,11 +4,15 @@ import type { Result } from "../objects/result";
 
 export interface PersistUserMessageWithFilesInput {
   readonly message: AppendMessageRecord;
+  readonly parentMessageId: string | null;
+  readonly appendPosition: number;
   readonly files: ReadonlyArray<UploadedFileMetadata>;
 }
 
 export interface PersistMessagesInput {
   readonly messages: ReadonlyArray<AppendMessageRecord>;
+  readonly parentMessageId: string;
+  readonly appendPosition?: number;
 }
 
 export interface AppendUserMessageStore {

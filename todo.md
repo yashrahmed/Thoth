@@ -121,29 +121,29 @@ message tree columns are populated.
 - [x] Cease operations
 - [x] Write a script to backfill the values for the new columns and ensure that the API is backward compatible.
 - [x] Remove sequence-number constraints and indexes.
-- [ ] Make flow changes:
-  - `add-to-conv`
-    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent. Error out if leaf cannot be found.
-    - Append the new user message to that parent.
-    - Populate the new tree columns on write.
-    - Run completion from the new user message's path once tree data is available.
-    - Remove sequence-number calculation.
-  - `append-direct`
-    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent. Error out if leaf cannot be found.
-    - Append the new message to that parent.
-    - Populate the new tree columns on write.
-    - If the parent tree data is unavailable, Error out the API.
-    - Do not trigger completion.
-    - Remove sequence-number calculation.
-  - `get-messages-on-conv`
-    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the selected message. Error out if the leaf cannot be found.
-    - Load the path from root to that selected message.
-    - Page over the path results.
-    - Ignore sequence number.
-- Add final constraints, including `path not null` and path uniqueness.
+- [x] `add-to-conv`
+  - Accept a parent message id and the append position.
+  - Append the new user message to that parent.
+  - Populate the new tree columns on write.
+  - Run completion from the new user message's path once tree data is available.
+- [x] `append-direct`
+  - Accept a parent message id and the append position.
+  - Append the new message to that parent.
+  - Populate the new tree columns on write.
+  - If the parent tree data is unavailable, Error out the API.
+  - Do not trigger completion.
+- [ ] Refactor of the adapter.
+- [ ]`get-messages-on-conv`
+  - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the selected message. Error out if the leaf cannot be found.
+  - Load the path from root to that selected message.
+  - Page over the path results.
+  - Ignore sequence number.
+- [ ] Make UI changes.
+- [ ] Deploy changes to dev
+- [ ] Remove sequence-number calculation.
+
+- [ ] Add final constraints, including `path not null` and path uniqueness.
 - Switch external APIs to the final tree-aware inputs:
-  - `add-to-conv` requires `parentMessageId`.
-  - `append-direct` requires `parentMessageId`.
   - `get-messages-on-conv` requires a selected message, typically `leafMessageId`.
 - Remove the `sequence_number` column.
 - Delete the scheduled backfill procedure and control table.

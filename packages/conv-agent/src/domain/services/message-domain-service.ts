@@ -42,6 +42,39 @@ export class MessageDomainService {
     return this.messageRepository.selectMessagePage(request);
   }
 
+  async validateAppendTarget(request: {
+    readonly conversationId: string;
+    readonly parentMessageId: string | null;
+    readonly appendPosition: number;
+  }): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
+    const validationResult = firstFailure(
+      this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
+      this.genericValidationService.requirePositiveInteger(request.appendPosition, "appendPosition"),
+    );
+
+    if (!validationResult.ok) {
+      return validationResult;
+    }
+
+    if (request.parentMessageId === null) {
+      return { ok: true, value: undefined };
+    }
+
+    const parentMessageIdResult = this.genericValidationService.requireNonEmptyString(request.parentMessageId, "parentMessageId");
+
+    if (!parentMessageIdResult.ok) {
+      return parentMessageIdResult;
+    }
+
+    const parentMessageResult = await this.findByIdInConversation(parentMessageIdResult.value, request.conversationId);
+
+    if (!parentMessageResult.ok) {
+      return parentMessageResult;
+    }
+
+    return { ok: true, value: undefined };
+  }
+
   async findAll(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
     const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
 

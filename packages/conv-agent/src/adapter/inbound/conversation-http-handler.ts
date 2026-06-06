@@ -341,6 +341,34 @@ async function parseAppendMessageRequest(req: Request, conversationId: string): 
     return contentResult;
   }
 
+  const appendPositionResult = parseAppendPositionField(formData);
+
+  if (!appendPositionResult.ok) {
+    return appendPositionResult;
+  }
+
+  const parentMessageIdResult = parseParentMessageIdField(formData);
+
+  if (!parentMessageIdResult.ok) {
+    return parentMessageIdResult;
+  }
+
+  const attachments = await parseAttachments(formData);
+
+  return {
+    ok: true,
+    value: {
+      conversationId,
+      parentMessageId: parentMessageIdResult.value,
+      appendPosition: appendPositionResult.value,
+      type: typeValue,
+      content: contentResult.value,
+      attachments,
+    },
+  };
+}
+
+async function parseAttachments(formData: FormData): Promise<Attachment[]> {
   const attachments: Attachment[] = [];
 
   for (const [, value] of formData.entries()) {
@@ -361,15 +389,7 @@ async function parseAppendMessageRequest(req: Request, conversationId: string): 
     });
   }
 
-  return {
-    ok: true,
-    value: {
-      conversationId,
-      type: typeValue,
-      content: contentResult.value,
-      attachments,
-    },
-  };
+  return attachments;
 }
 
 function parseContentField(formData: FormData): TransportResult<ApplicationContent> {
@@ -380,6 +400,38 @@ function parseContentField(formData: FormData): TransportResult<ApplicationConte
   }
 
   return { ok: true, value };
+}
+
+function parseAppendPositionField(formData: FormData): TransportResult<number> {
+  const value = formData.get("appendPosition");
+
+  if (typeof value !== "string") {
+    return transportFailure("appendPosition", "appendPosition must be present.");
+  }
+
+  const appendPosition = Number(value);
+
+  if (!Number.isInteger(appendPosition) || appendPosition <= 0) {
+    return transportFailure("appendPosition", "appendPosition must be a positive integer.");
+  }
+
+  return { ok: true, value: appendPosition };
+}
+
+function parseParentMessageIdField(formData: FormData): TransportResult<string | null> {
+  const value = formData.get("parentMessageId");
+
+  if (value === null) {
+    return { ok: true, value: null };
+  }
+
+  if (typeof value !== "string") {
+    return transportFailure("parentMessageId", "parentMessageId must be a string.");
+  }
+
+  const parentMessageId = value.trim();
+
+  return { ok: true, value: parentMessageId.length > 0 ? parentMessageId : null };
 }
 
 function transportFailure(fieldName: string, message: string): TransportResult<never> {

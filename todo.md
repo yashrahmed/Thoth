@@ -116,7 +116,7 @@ The control table is drained only after parent tree data is available and the
 message tree columns are populated.
 ```
 
-- Add the new nullable tree columns and supporting indexes.
+- [x] Add the new nullable tree columns and supporting indexes.
 - Create the backfill control table for messages whose tree columns are not yet populated.
 - Deploy flow changes with dual-write behavior:
   - `add-to-conv`

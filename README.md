@@ -236,7 +236,7 @@ bun install
 Run local migrations manually:
 
 ```sh
-./deployment/run-flyway-migrations.sh local
+./deployment/db-migration/run-flyway-migrations.sh local
 ```
 
 Start the local backend stack:
@@ -287,7 +287,7 @@ authorizes the service-token client id through `ALLOWED_SERVICE_TOKEN_CLIENT_IDS
 Run dev migrations if needed, then run the tests:
 
 ```sh
-./deployment/run-flyway-migrations.sh dev
+./deployment/db-migration/run-flyway-migrations.sh dev
 ./deployment/system-tests/run-system-tests.sh dev
 ```
 
@@ -299,7 +299,7 @@ because the local Worker is not behind Cloudflare Access.
 Start the local stack and run the tests:
 
 ```sh
-./deployment/run-flyway-migrations.sh local
+./deployment/db-migration/run-flyway-migrations.sh local
 ./deployment/local/launch-all.sh start
 ./deployment/system-tests/run-system-tests.sh
 ```

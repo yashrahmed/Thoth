@@ -118,41 +118,32 @@ message tree columns are populated.
 
 - [x] Add the new nullable tree columns and supporting indexes.
 - [x] Add new fields to represent the columns to table types and ensure that the API is backward compatible.
-- Create the backfill control table for messages whose tree columns are not yet populated.
-- Deploy flow changes with dual-write behavior:
+- [x] Cease operations
+- [x] Write a script to backfill the values for the new columns and ensure that the API is backward compatible.
+- [ ] Make flow changes:
   - `add-to-conv`
-    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent.
+    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent. Error out if leaf cannot be found.
     - Append the new user message to that parent.
     - Populate the new tree columns on write.
-    - If the parent tree data is unavailable, add the new message id to the control table.
     - Run completion from the new user message's path once tree data is available.
     - Remove sequence-number calculation.
   - `append-direct`
-    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent.
+    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the parent. Error out if leaf cannot be found.
     - Append the new message to that parent.
     - Populate the new tree columns on write.
-    - If the parent tree data is unavailable, add the new message id to the control table.
+    - If the parent tree data is unavailable, Error out the API.
     - Do not trigger completion.
     - Remove sequence-number calculation.
   - `get-messages-on-conv`
-    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the selected message.
+    - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the selected message. Error out if the leaf cannot be found.
     - Load the path from root to that selected message.
     - Page over the path results.
     - Ignore sequence number.
-- Populate the control table with existing messages that are missing tree columns.
-- Run a scheduled live backfill job from the control table.
-  - Backfill must drain faster than new incomplete messages arrive.
-  - Process a row only when its parent tree data is available.
-  - Leave blocked rows in the control table for retry.
-  - Remove successfully populated rows from the control table.
-- Monitor control table count, oldest row age, retry count, and failure reasons.
+- Add final constraints, including `path not null` and path uniqueness.
 - Switch external APIs to the final tree-aware inputs:
   - `add-to-conv` requires `parentMessageId`.
   - `append-direct` requires `parentMessageId`.
   - `get-messages-on-conv` requires a selected message, typically `leafMessageId`.
-- Remove the fallback that inserts incomplete messages into the control table.
-- Verify there are no incomplete messages and no pending control-table rows.
-- Add final constraints, including `path not null` and path uniqueness.
 - Remove sequence-number constraints and indexes.
 - Remove the `sequence_number` column.
 - Delete the scheduled backfill procedure and control table.

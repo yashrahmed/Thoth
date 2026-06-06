@@ -90,6 +90,7 @@ docker run --rm \
   -e FLYWAY_DEFAULT_SCHEMA=flyway \
   -e FLYWAY_SCHEMAS=flyway,thoth \
   -e FLYWAY_LOCATIONS=filesystem:/flyway/sql \
+  -e FLYWAY_POSTGRESQL_TRANSACTIONAL_LOCK=false \
   -e FLYWAY_URL="$flyway_jdbc_url" \
   -v "$MIGRATIONS_DIR:/flyway/sql:ro" \
   redgate/flyway:11-alpine \

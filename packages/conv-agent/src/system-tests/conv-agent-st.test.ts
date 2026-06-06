@@ -260,9 +260,17 @@ describe("conv-agent HTTP system test", () => {
 
       const page = await fetchPage(conversationId, 1, 10);
       const updatedParentMessage = page.items.find((item) => item.id === parentMessage.id);
+      const directChildren = page.items.filter((item) => item.content.startsWith("Direct child "));
 
       expect(updatedParentMessage?.childCount).toBe(3);
-      expect(page.items.filter((item) => item.content.startsWith("Direct child "))).toHaveLength(3);
+      expect(updatedParentMessage?.sequenceNumber).toBe(1);
+      expect(directChildren).toHaveLength(3);
+
+      for (let appendPosition = 1; appendPosition <= 3; appendPosition += 1) {
+        const childMessage = directChildren.find((item) => item.content === `Direct child ${appendPosition}`);
+
+        expect(childMessage?.sequenceNumber).toBe(appendPosition + 1);
+      }
     } finally {
       if (conversationId) {
         await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });

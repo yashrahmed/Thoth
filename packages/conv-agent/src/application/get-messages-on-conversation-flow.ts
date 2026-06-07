@@ -36,7 +36,25 @@ export class GetMessagesOnConversationFlow {
       return conversationResult;
     }
 
-    const messagesResult = await this.messageDomainService.findPage(query);
+    const leafMessagesResult = await this.messageDomainService.findLeafMessages(query.conversationId);
+
+    if (!leafMessagesResult.ok) {
+      return leafMessagesResult;
+    }
+
+    const selectedLeafMessage = leafMessagesResult.value[0];
+
+    if (!selectedLeafMessage) {
+      return success([]);
+    }
+
+    // Backward compatibility: the public get-conversation contract does not yet accept a selected leaf.
+    const messagesResult = await this.messageDomainService.findPageForLeaf({
+      conversationId: query.conversationId,
+      leafMessageId: selectedLeafMessage.id,
+      pageNum: query.pageNum,
+      pageSize: query.pageSize,
+    });
 
     if (!messagesResult.ok) {
       return messagesResult;

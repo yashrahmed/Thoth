@@ -132,12 +132,11 @@ message tree columns are populated.
   - Populate the new tree columns on write.
   - If the parent tree data is unavailable, Error out the API.
   - Do not trigger completion.
-- [ ] Refactor of the adapter.
-- [ ]`get-messages-on-conv`
+- [x]`get-messages-on-conv`
   - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the selected message. Error out if the leaf cannot be found.
   - Load the path from root to that selected message.
   - Page over the path results.
-  - Ignore sequence number.
+- [ ] Ignore sequence number.
 - [ ] Make UI changes.
 - [ ] Deploy changes to dev
 - [ ] Remove sequence-number calculation.

@@ -53,11 +53,25 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         const timestamp = new Date();
         const latestSequenceNumber = await lockConversationAndGetLatestSequenceNumber(sql, input.message.conversationId);
         const sequenceNumber = latestSequenceNumber + 1;
-        const parentMessage = input.parentMessageId === null ? null : await lockParentMessage(sql, input.message.conversationId, input.parentMessageId);
-        const allocation = calculateChildAttachPosition({
-          parentMessage,
-          appendPosition: input.appendPosition,
-        });
+
+        let allocation: AppendPositionResponse;
+
+        if (input.parentMessageId === null) {
+          if (latestSequenceNumber > 0) {
+            throw new ValidationError("parentMessageId", "parentMessageId must be present when the conversation already has messages.");
+          }
+
+          allocation = calculateChildAttachPosition({
+            parentMessage: null,
+            appendPosition: input.appendPosition,
+          });
+        } else {
+          const parentMessage = await lockParentMessage(sql, input.message.conversationId, input.parentMessageId);
+          allocation = calculateChildAttachPosition({
+            parentMessage,
+            appendPosition: input.appendPosition,
+          });
+        }
 
         const messageRows = await sql<MessageRow[]>`
           insert into thoth.messages (

@@ -42,6 +42,19 @@ export class MessageDomainService {
     return this.messageRepository.selectMessagePage(request);
   }
 
+  findLeafMessages(conversationId: string): Promise<Result<Message[], StoreError>> {
+    return this.messageRepository.selectLeafMessagesByConversation(conversationId);
+  }
+
+  findPageForLeaf(request: {
+    readonly conversationId: string;
+    readonly leafMessageId: string;
+    readonly pageNum: number;
+    readonly pageSize: number;
+  }): Promise<Result<Message[], StoreError>> {
+    return this.messageRepository.selectMessagePageForLeaf(request);
+  }
+
   async validateAppendTarget(request: {
     readonly conversationId: string;
     readonly parentMessageId: string | null;

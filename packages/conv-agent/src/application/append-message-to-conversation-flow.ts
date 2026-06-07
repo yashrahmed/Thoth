@@ -6,7 +6,7 @@ import { ValidationError, type NotFoundError, type StoreError } from "../domain/
 import { failure, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
 import { type AppendMessageRequest } from "../domain/objects/request-types";
-import type { AppendMessageRecord } from "../domain/objects/message-types";
+import type { AppendMessageRecord, MessageWithFiles } from "../domain/objects/message-types";
 import type { LLMCompletionRunService } from "../domain/contracts/llm-completion-run-service";
 
 export { type AppendMessageRequest } from "../domain/objects/request-types";
@@ -22,7 +22,7 @@ export class AppendMessageToConversationFlow {
     private readonly llmCompletionRunService: LLMCompletionRunService,
   ) {}
 
-  async execute(request: AppendMessageRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
+  async execute(request: AppendMessageRequest): Promise<Result<MessageWithFiles, ValidationError | NotFoundError | StoreError>> {
     const conversationResult = await this.conversationDomainService.findById(request.conversationId);
 
     if (!conversationResult.ok) {
@@ -76,7 +76,7 @@ export class AppendMessageToConversationFlow {
 
     this.llmCompletionRunService.run({ messageId: createUserMessageResult.value.id, parentMessageId: createUserMessageResult.value.id, conversationId: request.conversationId });
 
-    return { ok: true, value: undefined };
+    return createUserMessageResult;
   }
 
   private buildUserMessageRecord(request: AppendMessageRequest): Result<AppendMessageRecord, ValidationError> {

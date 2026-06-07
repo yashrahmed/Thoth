@@ -26,6 +26,7 @@ type MessageType = "user" | "assistant" | "system" | "tool";
 interface MessageItem {
   readonly id: string;
   readonly conversationId: string;
+  readonly parentMessageId: string | null;
   readonly type: MessageType;
   readonly sequenceNumber: number;
   readonly childCount: number;
@@ -139,15 +140,30 @@ describe("conv-agent HTTP system test", () => {
       expect(createdConversation.title).toBeNull();
       conversationId = createdConversation.id;
 
+      let parentMessageId: string | null = null;
+
       for (let index = 1; index <= 10; index += 1) {
         const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
           method: "POST",
           headers: AUTH_HEADERS,
-          body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`, { appendPosition: index }),
+          body: buildImageMessageFormData(imageBytes, `Manual lambo image upload ${index}`, {
+            parentMessageId,
+            appendPosition: 1,
+          }),
         });
 
-        expect(appendResponse.status).toBe(204);
-        expect(await appendResponse.text()).toBe("");
+        expect(appendResponse.status).toBe(201);
+
+        const appendedMessage = (await appendResponse.json()) as MessageItem;
+
+        expect(appendedMessage.conversationId).toBe(conversationId);
+        expect(appendedMessage.parentMessageId).toBe(parentMessageId);
+        expect(appendedMessage.sequenceNumber).toBe(index);
+        expect(appendedMessage.childCount).toBe(0);
+        expect("path" in appendedMessage).toBe(false);
+        expect(appendedMessage.files).toHaveLength(1);
+
+        parentMessageId = appendedMessage.id;
       }
 
       const firstPage = await fetchPage(conversationId, 1, 4);
@@ -155,21 +171,21 @@ describe("conv-agent HTTP system test", () => {
       expect(firstPage.items).toHaveLength(4);
       expect(firstPage.pageNum).toBe(1);
       expect(firstPage.pageSize).toBe(4);
-      assertUserMessages(firstPage.items, conversationId, 1, imageBytes.byteLength);
+      assertUserMessages(firstPage.items, conversationId, 1, imageBytes.byteLength, 10);
 
       const secondPage = await fetchPage(conversationId, 2, 4);
 
       expect(secondPage.items).toHaveLength(4);
       expect(secondPage.pageNum).toBe(2);
       expect(secondPage.pageSize).toBe(4);
-      assertUserMessages(secondPage.items, conversationId, 5, imageBytes.byteLength);
+      assertUserMessages(secondPage.items, conversationId, 5, imageBytes.byteLength, 10);
 
       const thirdPage = await fetchPage(conversationId, 3, 4);
 
       expect(thirdPage.items).toHaveLength(2);
       expect(thirdPage.pageNum).toBe(3);
       expect(thirdPage.pageSize).toBe(4);
-      assertUserMessages(thirdPage.items, conversationId, 9, imageBytes.byteLength);
+      assertUserMessages(thirdPage.items, conversationId, 9, imageBytes.byteLength, 10);
 
       const conversationResponse = await fetch(`${BASE_URL}/conversations/${conversationId}`, { headers: AUTH_HEADERS });
 
@@ -218,16 +234,15 @@ describe("conv-agent HTTP system test", () => {
         body: buildUserMessageFormData(parentContent, { appendPosition: 1 }),
       });
 
-      expect(parentAppend.status).toBe(204);
+      expect(parentAppend.status).toBe(201);
 
-      const parentPage = await fetchPage(conversationId, 1, 10);
-      const parentMessage = parentPage.items.find((item) => item.content === parentContent);
+      const parentMessage = (await parentAppend.json()) as MessageItem;
 
-      expect(parentMessage).toBeDefined();
+      expect(parentMessage.content).toBe(parentContent);
+      expect(parentMessage.parentMessageId).toBeNull();
+      expect(parentMessage.sequenceNumber).toBe(1);
 
-      if (!parentMessage) {
-        throw new Error("Expected direct append parent message to exist.");
-      }
+      const appendedChildren: MessageItem[] = [];
 
       for (let appendPosition = 1; appendPosition <= 3; appendPosition += 1) {
         const childAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
@@ -239,7 +254,17 @@ describe("conv-agent HTTP system test", () => {
           }),
         });
 
-        expect(childAppend.status).toBe(204);
+        expect(childAppend.status).toBe(201);
+
+        const childMessage = (await childAppend.json()) as MessageItem;
+
+        expect(childMessage.content).toBe(`Direct child ${appendPosition}`);
+        expect(childMessage.parentMessageId).toBe(parentMessage.id);
+        expect(childMessage.sequenceNumber).toBe(appendPosition + 1);
+        expect(childMessage.childCount).toBe(0);
+        expect("path" in childMessage).toBe(false);
+
+        appendedChildren.push(childMessage);
       }
 
       const duplicateAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
@@ -260,17 +285,10 @@ describe("conv-agent HTTP system test", () => {
 
       const page = await fetchPage(conversationId, 1, 10);
       const updatedParentMessage = page.items.find((item) => item.id === parentMessage.id);
-      const directChildren = page.items.filter((item) => item.content.startsWith("Direct child "));
 
       expect(updatedParentMessage?.childCount).toBe(3);
       expect(updatedParentMessage?.sequenceNumber).toBe(1);
-      expect(directChildren).toHaveLength(3);
-
-      for (let appendPosition = 1; appendPosition <= 3; appendPosition += 1) {
-        const childMessage = directChildren.find((item) => item.content === `Direct child ${appendPosition}`);
-
-        expect(childMessage?.sequenceNumber).toBe(appendPosition + 1);
-      }
+      expect(appendedChildren).toHaveLength(3);
     } finally {
       if (conversationId) {
         await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
@@ -293,16 +311,11 @@ describe("conv-agent HTTP system test", () => {
         body: buildUserMessageFormData(parentContent, { appendPosition: 1 }),
       });
 
-      expect(parentAppend.status).toBe(204);
+      expect(parentAppend.status).toBe(201);
 
-      const parentPage = await fetchPage(conversationId, 1, 10);
-      const parentMessage = parentPage.items.find((item) => item.content === parentContent);
+      const parentMessage = (await parentAppend.json()) as MessageItem;
 
-      expect(parentMessage).toBeDefined();
-
-      if (!parentMessage) {
-        throw new Error("Expected branch completion parent message to exist.");
-      }
+      expect(parentMessage.content).toBe(parentContent);
 
       const directChildAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
         method: "POST",
@@ -313,7 +326,7 @@ describe("conv-agent HTTP system test", () => {
         }),
       });
 
-      expect(directChildAppend.status).toBe(204);
+      expect(directChildAppend.status).toBe(201);
 
       const addToConvContent = "Reply with a short greeting for this branch.";
       const addToConvAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/add-to-conv`, {
@@ -325,7 +338,14 @@ describe("conv-agent HTTP system test", () => {
         }),
       });
 
-      expect(addToConvAppend.status).toBe(204);
+      expect(addToConvAppend.status).toBe(201);
+
+      const appendedInput = (await addToConvAppend.json()) as MessageItem;
+
+      expect(appendedInput.content).toBe(addToConvContent);
+      expect(appendedInput.parentMessageId).toBe(parentMessage.id);
+      expect(appendedInput.childCount).toBe(0);
+      expect("path" in appendedInput).toBe(false);
 
       await waitForAssistantReply(conversationId);
 
@@ -357,7 +377,7 @@ describe("conv-agent HTTP system test", () => {
         body: buildUserMessageFormData("Reply with a short greeting on conversation A.", { appendPosition: 1 }),
       });
 
-      expect(firstAppend.status).toBe(204);
+      expect(firstAppend.status).toBe(201);
 
       // Immediately switch to a second conversation and append before A's completion lands.
       const secondCreate = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
@@ -370,7 +390,7 @@ describe("conv-agent HTTP system test", () => {
         body: buildUserMessageFormData("Reply with a short greeting on conversation B.", { appendPosition: 1 }),
       });
 
-      expect(secondAppend.status).toBe(204);
+      expect(secondAppend.status).toBe(201);
 
       // Both conversations must end up with an assistant reply.
       await waitForAssistantReply(secondConversationId);
@@ -413,8 +433,14 @@ describe("conv-agent HTTP system test", () => {
         body: formData,
       });
 
-      expect(appendResponse.status).toBe(204);
-      expect(await appendResponse.text()).toBe("");
+      expect(appendResponse.status).toBe(201);
+
+      const appendedUserMessage = (await appendResponse.json()) as MessageItem;
+
+      expect(appendedUserMessage.content).toBe(userContent);
+      expect(appendedUserMessage.parentMessageId).toBeNull();
+      expect(appendedUserMessage.childCount).toBe(0);
+      expect("path" in appendedUserMessage).toBe(false);
 
       await waitForAssistantReply(conversationId);
 
@@ -502,14 +528,14 @@ async function waitForAssistantReply(conversationId: string): Promise<void> {
   throw new Error(`Timed out waiting for assistant reply on conversation ${conversationId}.`);
 }
 
-function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: string, startSequence: number, imageSize: number): void {
+function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: string, startSequence: number, imageSize: number, totalMessages: number): void {
   for (let index = 0; index < items.length; index += 1) {
     const expectedSequence = startSequence + index;
     const item = items[index];
 
     expect(item.conversationId).toBe(conversationId);
     expect(item.sequenceNumber).toBe(expectedSequence);
-    expect(item.childCount).toBe(0);
+    expect(item.childCount).toBe(expectedSequence < totalMessages ? 1 : 0);
     expect("path" in item).toBe(false);
     expect(item.type).toBe("user");
     expect(item.content).toBe(`Manual lambo image upload ${expectedSequence}`);

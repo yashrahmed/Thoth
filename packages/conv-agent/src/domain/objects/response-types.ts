@@ -47,6 +47,7 @@ class FileResponse {
 export class MessageResponse {
   readonly id: string;
   readonly conversationId: string;
+  readonly parentMessageId: string | null;
   readonly type: LLMMessageType;
   readonly sequenceNumber: number;
   readonly childCount: number;
@@ -58,6 +59,7 @@ export class MessageResponse {
   constructor(
     id: string,
     conversationId: string,
+    parentMessageId: string | null,
     type: LLMMessageType,
     sequenceNumber: number,
     childCount: number,
@@ -68,6 +70,7 @@ export class MessageResponse {
   ) {
     this.id = id;
     this.conversationId = conversationId;
+    this.parentMessageId = parentMessageId;
     this.type = type;
     this.sequenceNumber = sequenceNumber;
     this.childCount = childCount;
@@ -81,6 +84,7 @@ export class MessageResponse {
     return new MessageResponse(
       message.id,
       message.conversationId,
+      message.parentMessageId,
       message.type,
       message.sequenceNumber,
       message.childCount,

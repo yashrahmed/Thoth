@@ -1,6 +1,6 @@
 import type { AppendUserMessageStore, PersistMessagesInput, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
 import { EntityType, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
-import { type AppendMessageRecord, Message } from "../../domain/objects/message-types";
+import { type AppendMessageRecord, File, Message, type MessageWithFiles } from "../../domain/objects/message-types";
 import { failure, success, type Result } from "../../domain/objects/result";
 import type { PostgresDatabase } from "./postgres-database";
 
@@ -14,6 +14,22 @@ interface MessageRow {
   readonly content: string;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
+}
+
+interface FileRow {
+  readonly id: string;
+  readonly message_id: string;
+  readonly canonical_url: string;
+  readonly filename: string;
+  readonly mime_type: string;
+  readonly size_in_bytes: number;
+  readonly created_at: string | Date;
+  readonly updated_at: string | Date;
+}
+
+interface MessageWithFilesRow {
+  readonly message: MessageRow;
+  readonly files: FileRow[];
 }
 
 interface ConversationRow {
@@ -46,7 +62,7 @@ interface DatabaseError {
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>> {
+  async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<MessageWithFiles, ValidationError | StoreError>> {
     try {
       const row = await this.sql.begin(async (tx) => {
         const sql = tx as unknown as PostgresDatabase;
@@ -114,8 +130,10 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
 
         await incrementParentChildCount(sql, allocation.parentMessageId);
 
+        const fileRows: FileRow[] = [];
+
         for (const file of input.files) {
-          await sql`
+          const insertedFileRows = await sql<FileRow[]>`
             insert into thoth.files (
               message_id,
               canonical_url,
@@ -134,13 +152,30 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               ${timestamp.toISOString()},
               ${timestamp.toISOString()}
             )
+            returning
+              id,
+              message_id,
+              canonical_url,
+              filename,
+              mime_type,
+              size_in_bytes,
+              created_at,
+              updated_at
           `;
+
+          const insertedFileRow = insertedFileRows[0];
+
+          if (!insertedFileRow) {
+            throw new Error("File row was not returned.");
+          }
+
+          fileRows.push(insertedFileRow);
         }
 
-        return messageRow;
+        return { message: messageRow, files: fileRows };
       });
 
-      return mapMessageRow(row);
+      return mapMessageWithFilesRow(row);
     } catch (error) {
       if (error instanceof ValidationError) {
         return failure(error);
@@ -384,6 +419,25 @@ function mapMessageRows(rows: MessageRow[]): Result<Message[], StoreError> {
   return success(messages);
 }
 
+function mapMessageWithFilesRow(row: MessageWithFilesRow): Result<MessageWithFiles, StoreError> {
+  const messageResult = mapMessageRow(row.message);
+
+  if (!messageResult.ok) {
+    return messageResult;
+  }
+
+  const filesResult = mapFileRows(row.files);
+
+  if (!filesResult.ok) {
+    return filesResult;
+  }
+
+  return success({
+    ...messageResult.value,
+    files: filesResult.value,
+  });
+}
+
 function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError> {
   if (!row) {
     return failure(new StoreError(EntityType.Message, StoreOperation.Persist, "Message row was not returned."));
@@ -399,6 +453,38 @@ function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError>
     }
 
     return failure(new StoreError(EntityType.Message, StoreOperation.Persist, "Unexpected message mapping error."));
+  }
+}
+
+function mapFileRows(rows: FileRow[]): Result<File[], StoreError> {
+  const files: File[] = [];
+
+  for (const row of rows) {
+    const fileResult = mapFileRow(row);
+
+    if (!fileResult.ok) {
+      return fileResult;
+    }
+
+    files.push(fileResult.value);
+  }
+
+  return success(files);
+}
+
+function mapFileRow(row: FileRow | undefined): Result<File, StoreError> {
+  if (!row) {
+    return failure(new StoreError(EntityType.File, StoreOperation.Persist, "File row was not returned."));
+  }
+
+  try {
+    return success(new File(row.id, row.message_id, row.canonical_url, row.filename, row.mime_type, row.size_in_bytes, toDate(row.created_at), toDate(row.updated_at)));
+  } catch (error) {
+    if (error instanceof Error) {
+      return failure(new StoreError(EntityType.File, StoreOperation.Persist, error.message));
+    }
+
+    return failure(new StoreError(EntityType.File, StoreOperation.Persist, "Unexpected file mapping error."));
   }
 }
 

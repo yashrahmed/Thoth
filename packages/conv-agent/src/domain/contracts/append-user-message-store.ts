@@ -1,4 +1,4 @@
-import type { AppendMessageRecord, Message, UploadedFileMetadata } from "../objects/message-types";
+import type { AppendMessageRecord, Message, MessageWithFiles, UploadedFileMetadata } from "../objects/message-types";
 import type { StoreError, ValidationError } from "../objects/errors";
 import type { Result } from "../objects/result";
 
@@ -16,6 +16,6 @@ export interface PersistMessagesInput {
 }
 
 export interface AppendUserMessageStore {
-  persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<Message, ValidationError | StoreError>>;
+  persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<MessageWithFiles, ValidationError | StoreError>>;
   persistMessages(input: PersistMessagesInput): Promise<Result<Message[], ValidationError | StoreError>>;
 }

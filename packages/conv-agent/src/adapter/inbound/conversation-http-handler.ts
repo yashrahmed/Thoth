@@ -195,7 +195,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, result.error);
     }
 
-    return c.body(null, 204);
+    return c.json(MessageResponse.fromMessageWithFiles(result.value), 201);
   });
 
   app.post("/conversations/:id/append-direct", async (c) => {
@@ -212,7 +212,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, result.error);
     }
 
-    return c.body(null, 204);
+    return c.json(MessageResponse.fromMessageWithFiles(result.value), 201);
   });
 
   app.get("/conversations/:id/chat", async (c) => {

@@ -137,11 +137,9 @@ message tree columns are populated.
   - Load the path from root to that selected message.
   - Page over the path results.
 - [x] Ignore sequence number.
+- [x] Add final constraints, including `path not null` and path uniqueness.
 - [ ] Make UI changes.
 - [ ] Deploy changes to dev
-- [ ] Remove sequence-number calculation.
-
-- [ ] Add final constraints, including `path not null` and path uniqueness.
 - Switch external APIs to the final tree-aware inputs:
   - `get-messages-on-conv` requires a selected message, typically `leafMessageId`.
 - Remove the `sequence_number` column.

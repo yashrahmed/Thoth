@@ -11,7 +11,6 @@ interface MessageRow {
   readonly parent_message_id: string | null;
   readonly child_count: number;
   readonly type: LLMMessageType;
-  readonly sequence_number: number;
   readonly content: string;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
@@ -34,7 +33,6 @@ export class PostgresMessageRepository implements MessageRepository {
           parent_message_id,
           child_count,
           type,
-          sequence_number,
           content,
           created_at,
           updated_at
@@ -63,7 +61,6 @@ export class PostgresMessageRepository implements MessageRepository {
           parent_message_id,
           child_count,
           type,
-          sequence_number,
           content,
           created_at,
           updated_at
@@ -93,7 +90,6 @@ export class PostgresMessageRepository implements MessageRepository {
           parent_message_id,
           child_count,
           type,
-          sequence_number,
           content,
           created_at,
           updated_at
@@ -141,7 +137,6 @@ export class PostgresMessageRepository implements MessageRepository {
           parent_message_id,
           child_count,
           type,
-          sequence_number,
           content,
           created_at,
           updated_at
@@ -168,7 +163,6 @@ export class PostgresMessageRepository implements MessageRepository {
           parent_message_id,
           child_count,
           type,
-          sequence_number,
           content,
           created_at,
           updated_at
@@ -238,9 +232,7 @@ function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<
   }
 
   try {
-    return success(
-      new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count),
-    );
+    return success(new Message(row.id, row.conversation_id, row.type, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, operation, error.message));

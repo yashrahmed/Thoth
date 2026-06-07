@@ -8,7 +8,6 @@ export class Message {
   readonly parentMessageId: string | null;
   readonly childCount: number;
   readonly type: LLMMessageType;
-  readonly sequenceNumber: number;
   readonly content: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -17,7 +16,6 @@ export class Message {
     id: string,
     conversationId: string,
     type: LLMMessageType,
-    sequenceNumber: number,
     content: string,
     createdAt: Date,
     updatedAt: Date,
@@ -29,7 +27,6 @@ export class Message {
     this.parentMessageId = parentMessageId;
     this.childCount = childCount;
     this.type = type;
-    this.sequenceNumber = sequenceNumber;
     this.content = content;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;

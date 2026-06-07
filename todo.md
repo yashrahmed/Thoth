@@ -136,7 +136,7 @@ message tree columns are populated.
   - Temporarily query the current leaf message and its children, pick the first leaf, and use it as the selected message. Error out if the leaf cannot be found.
   - Load the path from root to that selected message.
   - Page over the path results.
-- [ ] Ignore sequence number.
+- [x] Ignore sequence number.
 - [ ] Make UI changes.
 - [ ] Deploy changes to dev
 - [ ] Remove sequence-number calculation.

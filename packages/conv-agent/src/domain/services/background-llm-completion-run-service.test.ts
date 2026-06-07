@@ -14,7 +14,7 @@ import type { MessageDomainService } from "./message-domain-service";
 const CONVERSATION_ID = "conversation-1";
 const USER_MESSAGE_ID = "message-1";
 const NOW = new Date("2026-06-04T01:30:00.000Z");
-const USER_MESSAGE = new Message(USER_MESSAGE_ID, CONVERSATION_ID, LLMMessageType.User, 1, "When was this report released?", NOW, NOW);
+const USER_MESSAGE = new Message(USER_MESSAGE_ID, CONVERSATION_ID, LLMMessageType.User, "When was this report released?", NOW, NOW);
 
 describe("BackgroundLLMCompletionRunService", () => {
   test("strips copied Thoth timestamp metadata before persisting assistant completions", async () => {

@@ -12,22 +12,14 @@ export class MessageContentDomainService {
   }
 
   validateMessageRecord(record: Omit<Message, "id">): Result<void, ValidationError> {
-    return this.validateMessageInputLike(record.conversationId, record.type, record.content, record.sequenceNumber);
+    return this.validateMessageInputLike(record.conversationId, record.type, record.content);
   }
 
-  private validateMessageInputLike(conversationId: string, type: LLMMessageType, content: string, sequenceNumber?: number): Result<void, ValidationError> {
+  private validateMessageInputLike(conversationId: string, type: LLMMessageType, content: string): Result<void, ValidationError> {
     const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
 
     if (!conversationIdResult.ok) {
       return conversationIdResult;
-    }
-
-    if (sequenceNumber !== undefined) {
-      const sequenceNumberResult = this.genericValidationService.requirePositiveInteger(sequenceNumber, "sequenceNumber");
-
-      if (!sequenceNumberResult.ok) {
-        return sequenceNumberResult;
-      }
     }
 
     if (!LLM_MESSAGE_TYPES.includes(type)) {

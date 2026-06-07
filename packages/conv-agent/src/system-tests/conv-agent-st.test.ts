@@ -28,7 +28,6 @@ interface MessageItem {
   readonly conversationId: string;
   readonly parentMessageId: string | null;
   readonly type: MessageType;
-  readonly sequenceNumber: number;
   readonly childCount: number;
   readonly content: string;
   readonly files: ReadonlyArray<{
@@ -159,7 +158,7 @@ describe("conv-agent HTTP system test", () => {
         expect(appendedMessage.conversationId).toBe(conversationId);
         expect(appendedMessage.parentMessageId).toBe(parentMessageId);
         expect(appendedMessage.childCount).toBe(0);
-        expect("path" in appendedMessage).toBe(false);
+        assertInternalMessageFieldsHidden(appendedMessage);
         expect(appendedMessage.files).toHaveLength(1);
 
         parentMessageId = appendedMessage.id;
@@ -259,7 +258,7 @@ describe("conv-agent HTTP system test", () => {
         expect(childMessage.content).toBe(`Direct child ${appendPosition}`);
         expect(childMessage.parentMessageId).toBe(parentMessage.id);
         expect(childMessage.childCount).toBe(0);
-        expect("path" in childMessage).toBe(false);
+        assertInternalMessageFieldsHidden(childMessage);
 
         appendedChildren.push(childMessage);
       }
@@ -341,7 +340,7 @@ describe("conv-agent HTTP system test", () => {
       expect(appendedInput.content).toBe(addToConvContent);
       expect(appendedInput.parentMessageId).toBe(parentMessage.id);
       expect(appendedInput.childCount).toBe(0);
-      expect("path" in appendedInput).toBe(false);
+      assertInternalMessageFieldsHidden(appendedInput);
 
       await waitForAssistantReply(conversationId);
 
@@ -436,7 +435,7 @@ describe("conv-agent HTTP system test", () => {
       expect(appendedUserMessage.content).toBe(userContent);
       expect(appendedUserMessage.parentMessageId).toBeNull();
       expect(appendedUserMessage.childCount).toBe(0);
-      expect("path" in appendedUserMessage).toBe(false);
+      assertInternalMessageFieldsHidden(appendedUserMessage);
 
       await waitForAssistantReply(conversationId);
 
@@ -529,7 +528,7 @@ function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: s
 
     expect(item.conversationId).toBe(conversationId);
     expect(item.childCount).toBe(expectedMessageIndex < totalMessages ? 1 : 0);
-    expect("path" in item).toBe(false);
+    assertInternalMessageFieldsHidden(item);
     expect(item.type).toBe("user");
     expect(item.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
     expect(item.files).toHaveLength(1);
@@ -539,4 +538,9 @@ function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: s
       sizeInBytes: imageSize,
     });
   }
+}
+
+function assertInternalMessageFieldsHidden(item: MessageItem): void {
+  expect("path" in item).toBe(false);
+  expect("sequenceNumber" in item).toBe(false);
 }

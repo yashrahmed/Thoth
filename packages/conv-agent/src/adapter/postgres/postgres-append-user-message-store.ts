@@ -10,7 +10,6 @@ interface MessageRow {
   readonly parent_message_id: string | null;
   readonly child_count: number;
   readonly type: AppendMessageRecord["type"];
-  readonly sequence_number: number;
   readonly content: string;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
@@ -59,8 +58,6 @@ interface DatabaseError {
   readonly detail?: string;
 }
 
-const LEGACY_SEQUENCE_NUMBER = 0;
-
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly sql: PostgresDatabase) {}
 
@@ -98,7 +95,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             parent_message_id,
             path,
             type,
-            sequence_number,
             content,
             created_at,
             updated_at
@@ -108,7 +104,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             ${allocation.parentMessageId},
             ${allocation.path},
             ${input.message.type},
-            ${LEGACY_SEQUENCE_NUMBER},
             ${input.message.content},
             ${input.message.createdAt.toISOString()},
             ${input.message.updatedAt.toISOString()}
@@ -119,7 +114,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             parent_message_id,
             child_count,
             type,
-            sequence_number,
             content,
             created_at,
             updated_at
@@ -226,7 +220,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               parent_message_id,
               path,
               type,
-              sequence_number,
               content,
               created_at,
               updated_at
@@ -236,7 +229,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               ${parentMessageId},
               ${path},
               ${message.type},
-              ${LEGACY_SEQUENCE_NUMBER},
               ${message.content},
               ${message.createdAt.toISOString()},
               ${message.updatedAt.toISOString()}
@@ -247,7 +239,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               parent_message_id,
               child_count,
               type,
-              sequence_number,
               content,
               created_at,
               updated_at
@@ -441,9 +432,7 @@ function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError>
   }
 
   try {
-    return success(
-      new Message(row.id, row.conversation_id, row.type, row.sequence_number, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count),
-    );
+    return success(new Message(row.id, row.conversation_id, row.type, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, error.message));

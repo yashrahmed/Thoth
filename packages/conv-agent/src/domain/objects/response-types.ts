@@ -49,7 +49,6 @@ export class MessageResponse {
   readonly conversationId: string;
   readonly parentMessageId: string | null;
   readonly type: LLMMessageType;
-  readonly sequenceNumber: number;
   readonly childCount: number;
   readonly content: string;
   readonly files: ReadonlyArray<FileResponse>;
@@ -61,7 +60,6 @@ export class MessageResponse {
     conversationId: string,
     parentMessageId: string | null,
     type: LLMMessageType,
-    sequenceNumber: number,
     childCount: number,
     content: string,
     files: ReadonlyArray<FileResponse>,
@@ -72,7 +70,6 @@ export class MessageResponse {
     this.conversationId = conversationId;
     this.parentMessageId = parentMessageId;
     this.type = type;
-    this.sequenceNumber = sequenceNumber;
     this.childCount = childCount;
     this.content = content;
     this.files = files;
@@ -86,7 +83,6 @@ export class MessageResponse {
       message.conversationId,
       message.parentMessageId,
       message.type,
-      message.sequenceNumber,
       message.childCount,
       message.content,
       message.files.map(FileResponse.fromFile),

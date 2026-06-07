@@ -158,7 +158,6 @@ describe("conv-agent HTTP system test", () => {
 
         expect(appendedMessage.conversationId).toBe(conversationId);
         expect(appendedMessage.parentMessageId).toBe(parentMessageId);
-        expect(appendedMessage.sequenceNumber).toBe(index);
         expect(appendedMessage.childCount).toBe(0);
         expect("path" in appendedMessage).toBe(false);
         expect(appendedMessage.files).toHaveLength(1);
@@ -240,7 +239,6 @@ describe("conv-agent HTTP system test", () => {
 
       expect(parentMessage.content).toBe(parentContent);
       expect(parentMessage.parentMessageId).toBeNull();
-      expect(parentMessage.sequenceNumber).toBe(1);
 
       const appendedChildren: MessageItem[] = [];
 
@@ -260,7 +258,6 @@ describe("conv-agent HTTP system test", () => {
 
         expect(childMessage.content).toBe(`Direct child ${appendPosition}`);
         expect(childMessage.parentMessageId).toBe(parentMessage.id);
-        expect(childMessage.sequenceNumber).toBe(appendPosition + 1);
         expect(childMessage.childCount).toBe(0);
         expect("path" in childMessage).toBe(false);
 
@@ -287,7 +284,6 @@ describe("conv-agent HTTP system test", () => {
       const updatedParentMessage = page.items.find((item) => item.id === parentMessage.id);
 
       expect(updatedParentMessage?.childCount).toBe(3);
-      expect(updatedParentMessage?.sequenceNumber).toBe(1);
       expect(appendedChildren).toHaveLength(3);
     } finally {
       if (conversationId) {
@@ -450,11 +446,9 @@ describe("conv-agent HTTP system test", () => {
 
       expect(userMessage).toBeDefined();
       expect(userMessage?.content).toBe(userContent);
-      expect(userMessage?.sequenceNumber).toBe(1);
 
       expect(assistantMessage).toBeDefined();
       expect(assistantMessage?.content.length).toBeGreaterThan(0);
-      expect(assistantMessage?.sequenceNumber ?? 0).toBeGreaterThan(1);
     } finally {
       if (conversationId) {
         await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
@@ -530,15 +524,14 @@ async function waitForAssistantReply(conversationId: string): Promise<void> {
 
 function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: string, startSequence: number, imageSize: number, totalMessages: number): void {
   for (let index = 0; index < items.length; index += 1) {
-    const expectedSequence = startSequence + index;
+    const expectedMessageIndex = startSequence + index;
     const item = items[index];
 
     expect(item.conversationId).toBe(conversationId);
-    expect(item.sequenceNumber).toBe(expectedSequence);
-    expect(item.childCount).toBe(expectedSequence < totalMessages ? 1 : 0);
+    expect(item.childCount).toBe(expectedMessageIndex < totalMessages ? 1 : 0);
     expect("path" in item).toBe(false);
     expect(item.type).toBe("user");
-    expect(item.content).toBe(`Manual lambo image upload ${expectedSequence}`);
+    expect(item.content).toBe(`Manual lambo image upload ${expectedMessageIndex}`);
     expect(item.files).toHaveLength(1);
     expect(item.files[0]).toMatchObject({
       filename: "lambo.jpg",

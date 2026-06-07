@@ -38,10 +38,6 @@ export class MessageDomainService {
     return this.messageRepository.selectMessageRowByIdAndConversationId(messageId, conversationId);
   }
 
-  findPage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<Message[], StoreError>> {
-    return this.messageRepository.selectMessagePage(request);
-  }
-
   findLeafMessages(conversationId: string): Promise<Result<Message[], StoreError>> {
     return this.messageRepository.selectLeafMessagesByConversation(conversationId);
   }

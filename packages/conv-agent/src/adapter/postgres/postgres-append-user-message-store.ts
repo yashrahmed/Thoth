@@ -59,6 +59,8 @@ interface DatabaseError {
   readonly detail?: string;
 }
 
+const LEGACY_SEQUENCE_NUMBER = 0;
+
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
   constructor(private readonly sql: PostgresDatabase) {}
 
@@ -67,13 +69,14 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
       const row = await this.sql.begin(async (tx) => {
         const sql = tx as unknown as PostgresDatabase;
         const timestamp = new Date();
-        const latestSequenceNumber = await lockConversationAndGetLatestSequenceNumber(sql, input.message.conversationId);
-        const sequenceNumber = latestSequenceNumber + 1;
+        await lockConversation(sql, input.message.conversationId);
 
         let allocation: AppendPositionResponse;
 
         if (input.parentMessageId === null) {
-          if (latestSequenceNumber > 0) {
+          const hasMessages = await conversationHasMessages(sql, input.message.conversationId);
+
+          if (hasMessages) {
             throw new ValidationError("parentMessageId", "parentMessageId must be present when the conversation already has messages.");
           }
 
@@ -105,7 +108,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             ${allocation.parentMessageId},
             ${allocation.path},
             ${input.message.type},
-            ${sequenceNumber},
+            ${LEGACY_SEQUENCE_NUMBER},
             ${input.message.content},
             ${input.message.createdAt.toISOString()},
             ${input.message.updatedAt.toISOString()}
@@ -185,10 +188,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         return failure(new ValidationError("appendPosition", "append position is already occupied."));
       }
 
-      if (isUniqueSequenceConstraintViolation(error)) {
-        return failure(new ValidationError("sequenceNumber", "next message sequenceNumber is no longer available."));
-      }
-
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
     }
   }
@@ -211,7 +210,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
           }
         }
 
-        const latestSequenceNumber = await lockConversationAndGetLatestSequenceNumber(sql, firstMessage.conversationId);
+        await lockConversation(sql, firstMessage.conversationId);
         const parentMessage = await lockParentMessage(sql, firstMessage.conversationId, input.parentMessageId);
         const allocation = calculateChildAttachPosition({
           parentMessage,
@@ -221,8 +220,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         let path = allocation.path;
 
         for (const [index, message] of input.messages.entries()) {
-          const sequenceNumber = latestSequenceNumber + index + 1;
-
           const rows = await sql<MessageRow[]>`
             insert into thoth.messages (
               conversation_id,
@@ -239,7 +236,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               ${parentMessageId},
               ${path},
               ${message.type},
-              ${sequenceNumber},
+              ${LEGACY_SEQUENCE_NUMBER},
               ${message.content},
               ${message.createdAt.toISOString()},
               ${message.updatedAt.toISOString()}
@@ -296,10 +293,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
 
       if (isUniquePathConstraintViolation(error)) {
         return failure(new ValidationError("appendPosition", "append position is already occupied."));
-      }
-
-      if (isUniqueSequenceConstraintViolation(error)) {
-        return failure(new ValidationError("sequenceNumber", "one or more next message sequenceNumbers are no longer available."));
       }
 
       return failure(new StoreError(EntityType.Message, StoreOperation.Persist, getErrorMessage(error)));
@@ -376,7 +369,7 @@ async function incrementParentChildCount(sql: PostgresDatabase, parentMessageId:
   `;
 }
 
-async function lockConversationAndGetLatestSequenceNumber(sql: PostgresDatabase, conversationId: string): Promise<number> {
+async function lockConversation(sql: PostgresDatabase, conversationId: string): Promise<void> {
   const conversationRows = await sql<ConversationRow[]>`
     select id
     from thoth.conversations
@@ -385,22 +378,26 @@ async function lockConversationAndGetLatestSequenceNumber(sql: PostgresDatabase,
   `;
 
   if (!conversationRows[0]) {
-    throw new Error(`Conversation ${conversationId} was not found while allocating message sequence.`);
+    throw new Error(`Conversation ${conversationId} was not found while appending a message.`);
   }
+}
 
-  const latestSequenceRows = await sql<{ latest_sequence_number: number | string | bigint }[]>`
-    select coalesce(max(sequence_number), 0)::int as latest_sequence_number
-    from thoth.messages
-    where conversation_id = ${conversationId}
+async function conversationHasMessages(sql: PostgresDatabase, conversationId: string): Promise<boolean> {
+  const rows = await sql<{ has_messages: boolean }[]>`
+    select exists (
+      select 1
+      from thoth.messages
+      where conversation_id = ${conversationId}
+    ) as has_messages
   `;
 
-  const latestSequenceRow = latestSequenceRows[0];
+  const row = rows[0];
 
-  if (!latestSequenceRow) {
-    throw new Error("Latest message sequence row was not returned.");
+  if (!row) {
+    throw new Error("Conversation message existence row was not returned.");
   }
 
-  return Number(latestSequenceRow.latest_sequence_number);
+  return row.has_messages;
 }
 
 function mapMessageRows(rows: MessageRow[]): Result<Message[], StoreError> {
@@ -494,15 +491,6 @@ function toDate(value: string | Date): Date {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unexpected database error.";
-}
-
-function isUniqueSequenceConstraintViolation(error: unknown): boolean {
-  if (!isDatabaseError(error) || error.code !== "23505") {
-    return false;
-  }
-
-  const constraintName = getDatabaseErrorConstraintName(error);
-  return constraintName === "messages_conversation_sequence_unique";
 }
 
 function isUniquePathConstraintViolation(error: unknown): boolean {

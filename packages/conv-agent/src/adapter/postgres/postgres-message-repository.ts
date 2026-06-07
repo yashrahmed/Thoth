@@ -84,34 +84,6 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async selectMessagePage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }) {
-    try {
-      const fromSequence = (request.pageNum - 1) * request.pageSize + 1;
-      const rows = await this.sql<MessageRow[]>`
-        select
-          id,
-          conversation_id,
-          parent_message_id,
-          child_count,
-          type,
-          sequence_number,
-          content,
-          created_at,
-          updated_at
-        from thoth.messages
-        where
-          conversation_id = ${request.conversationId}
-          and sequence_number >= ${fromSequence}
-        order by sequence_number asc
-        limit ${request.pageSize}
-      `;
-
-      return mapRows(rows, StoreOperation.ReadPage);
-    } catch (error) {
-      return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
-    }
-  }
-
   async selectLeafMessagesByConversation(conversationId: string) {
     try {
       const rows = await this.sql<MessageRow[]>`
@@ -202,7 +174,7 @@ export class PostgresMessageRepository implements MessageRepository {
           updated_at
         from thoth.messages
         where conversation_id = ${conversationId}
-        order by sequence_number asc
+        order by created_at asc, id asc
       `;
 
       return mapRows(rows, StoreOperation.ReadPage);

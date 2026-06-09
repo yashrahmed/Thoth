@@ -6,6 +6,7 @@
   - Complete React tutorial.
   - Complete React Native tutorial.
   - Learn Three.js.
+  - Design an RTS like UI showing conversation trees.
 - User management, even though it is personal.
 - Document vault and memories.
 - Improve logging (Add structured logs).
@@ -144,3 +145,43 @@ message tree columns are populated.
   - `get-messages-on-conv` requires a selected message, typically `leafMessageId`.
 - Remove the `sequence_number` column.
 - Delete the scheduled backfill procedure and control table.
+
+## Reviews by Fable
+
+Findings from a code review on 2026-06-09.
+
+### Correctness
+
+- [ ] LLM completion context ignores the message tree. `BackgroundLLMCompletionRunService.resolveCompletionContext` builds the prompt from `findAll(conversationId)` (all messages ordered by `created_at`), so once a conversation branches the prompt interleaves sibling branches. `validateTriggerMessage` also requires the trigger to be the globally latest message, which rejects legitimate appends to older branches. Fix by reusing the ancestor-path query (as in `selectMessagePageForLeaf`) rooted at the trigger message. Note: the `add-to-conv` migration checklist item "Run completion from the new user message's path" is marked done but is not implemented — fix before the branching UI ships.
+- [ ] The web client computes `getAppendTarget` from the currently loaded message page; a partial page would produce a wrong parent. Derive the append target from the server's leaf response instead.
+
+### Security
+
+- [ ] No data ownership model: `thoth.conversations` has no owner column, so any allowed user or service token can read/modify/delete every conversation. Add `owner_identity` and scope queries by it (already on the roadmap as "User management"; cheaper to do before document vault / memories land).
+- [ ] CORS reflects any `Origin` with `access-control-allow-credentials: true` (worker `index.ts`). With cookie-based Access auth this lets arbitrary sites make authenticated browser requests. Lock to an origin allowlist, or drop CORS since UI and API share an origin.
+- [ ] Internal error messages leak to clients: 500 paths (worker fetch handler, Hono `onError`, `mapError`) return raw `error.message`, including DB errors. Log details, return generic messages for non-validation errors.
+- [ ] Gemini API key is sent in the URL query string (`gemini-llm-adapter.ts`); URLs end up in logs/proxies. Use the `x-goog-api-key` header.
+
+### Scalability / cost
+
+- [ ] Every completion re-fetches all conversation files, base64-inlines them, and resends them with the full history — risks the Workers 128 MB memory limit and inflates token costs. Send only the active branch's files; consider the Gemini Files API for provider-side caching. (Related to the "repeated signing" perf item — defaulting to base64 inlining would make this worse, not better.)
+
+### Testing
+
+- [ ] Coverage is thin: one unit test file plus HTTP system tests. The trickiest logic (append-store path allocation, depth-window pagination, completion-context building) has no fast tests. AGENTS.md calls for repository tests against local Postgres; none exist.
+
+### Docs drift
+
+- [ ] README "Append flow idempotency" section still describes `sequence_number` locking (dropped in V19); the `messages_path_unique` constraint now does provide duplicate-append protection.
+- [ ] AGENTS.md links to `styleguide.md`, which does not exist.
+- [ ] Migration plan above lists "Remove the `sequence_number` column" as remaining, but V19 already did it.
+
+### Code health
+
+- [ ] `packages/web/src/App.tsx` is ~1,900 lines (API client, hooks, components, styles, formatters). Split into `api.ts`, hooks, and a `components/` directory before building the branching UI.
+- [ ] Postgres adapters duplicate `mapRow`/`mapRows`/`toDate`/`getErrorMessage` helpers (~150 lines); extract shared row mappers.
+- [ ] In `persistMessages`, the back-patch of `child_count` on the previous row is a smell — chain inserts know intermediate nodes have exactly one child, so set `child_count` at insert time.
+
+### Strategic
+
+- [ ] Move completion execution from `ctx.waitUntil` to Cloudflare Queues or Workflows to get retry/DLQ semantics; the `LLMCompletionRunService` port makes this a new adapter rather than a redesign. Prioritize right after the branch-aware completion fix.

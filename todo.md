@@ -6,9 +6,9 @@
   - Complete React tutorial.
   - Complete React Native tutorial.
   - Learn Three.js.
-- Add support for branched conversations.
 - User management, even though it is personal.
 - Document vault and memories.
+- Improve logging (Add structured logs).
 - Model picker.
 - Automatic research and knowledge synthesis plus continual learning.
 - Deeplink content support.

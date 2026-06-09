@@ -99,7 +99,7 @@ export class PostgresMessageRepository implements MessageRepository {
           and path is not null
           and child_count = 0
         order by
-          nlevel(path) desc,
+          thoth.nlevel(path) desc,
           string_to_array(path::text, '.')::integer[] asc
       `;
 
@@ -114,7 +114,7 @@ export class PostgresMessageRepository implements MessageRepository {
       const leafPathRows = await this.sql<MessagePathRow[]>`
         select
           path::text as path,
-          nlevel(path) as depth
+          thoth.nlevel(path) as depth
         from thoth.messages
         where
           conversation_id = ${request.conversationId}
@@ -143,9 +143,9 @@ export class PostgresMessageRepository implements MessageRepository {
         from thoth.messages
         where
           conversation_id = ${request.conversationId}
-          and path @> ${leafPathRow.path}::ltree
-          and nlevel(path) between ${startDepth} and ${endDepth}
-        order by nlevel(path) asc
+          and path OPERATOR(thoth.@>) ${leafPathRow.path}::thoth.ltree
+          and thoth.nlevel(path) between ${startDepth} and ${endDepth}
+        order by thoth.nlevel(path) asc
       `;
 
       return mapRows(rows, StoreOperation.ReadPage);

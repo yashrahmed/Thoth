@@ -69,7 +69,13 @@ try {
           select 1
           from thoth.messages previous_message
           where previous_message.conversation_id = message.conversation_id
-            and previous_message.sequence_number < message.sequence_number
+            and (
+              previous_message.created_at < message.created_at
+              or (
+                previous_message.created_at = message.created_at
+                and previous_message.id < message.id
+              )
+            )
         )
       )
   `;
@@ -147,10 +153,9 @@ async function populateBatch(sql, batchSize, lastConversationId) {
         select
           message.id,
           message.conversation_id,
-          message.sequence_number,
           lag(message.id) over (
             partition by message.conversation_id
-            order by message.sequence_number asc
+            order by message.created_at asc, message.id asc
           ) as parent_id
         from thoth.messages message
         join selected_conversations selected_conversation
@@ -160,9 +165,8 @@ async function populateBatch(sql, batchSize, lastConversationId) {
         select
           ordered_message.id,
           ordered_message.conversation_id,
-          ordered_message.sequence_number,
           ordered_message.parent_id,
-          '1'::ltree as path
+          '1'::thoth.ltree as path
         from ordered_messages ordered_message
         where ordered_message.parent_id is null
 
@@ -171,9 +175,8 @@ async function populateBatch(sql, batchSize, lastConversationId) {
         select
           child_message.id,
           child_message.conversation_id,
-          child_message.sequence_number,
           child_message.parent_id,
-          parent_message.path || '1'::ltree as path
+          parent_message.path || '1'::thoth.ltree as path
         from ordered_messages child_message
         join message_chains parent_message
           on parent_message.id = child_message.parent_id

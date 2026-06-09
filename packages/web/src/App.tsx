@@ -43,8 +43,9 @@ type ChatFile = {
 type ChatMessage = {
   readonly id: string;
   readonly conversationId: string;
+  readonly parentMessageId: string | null;
   readonly type: "user" | "assistant" | "system" | "tool";
-  readonly sequenceNumber: number;
+  readonly childCount: number;
   readonly content: string;
   readonly files: ReadonlyArray<ChatFile>;
   readonly createdAt: string;
@@ -453,9 +454,15 @@ function ConversationApp() {
 
     try {
       const formData = new FormData();
+      const appendTarget = getAppendTarget(messages);
 
       formData.set("type", "user");
       formData.set("content", trimmedDraft);
+      formData.set("appendPosition", String(appendTarget.appendPosition));
+
+      if (appendTarget.parentMessageId !== null) {
+        formData.set("parentMessageId", appendTarget.parentMessageId);
+      }
 
       for (const file of selectedFiles) {
         formData.append("attachment", file);
@@ -874,7 +881,7 @@ function MessageBubble(props: { readonly message: ChatMessage }) {
             <span>{isUserMessage ? "You" : "Assistant"}</span>
             <span style={bubbleTimestampStyle}>{formatMessageTimestamp(props.message.createdAt)}</span>
           </div>
-          <span>#{props.message.sequenceNumber}</span>
+          <span>{props.message.childCount} children</span>
         </div>
         {props.message.content ? <p style={messageTextStyle}>{props.message.content}</p> : null}
         {props.message.files.length > 0 ? (
@@ -975,6 +982,19 @@ function StatusRow(props: { readonly label: string; readonly value: string; read
       <span style={props.mono ? statusValueMonoStyle : statusValueStyle}>{props.value}</span>
     </div>
   );
+}
+
+function getAppendTarget(messages: ReadonlyArray<ChatMessage>): { readonly parentMessageId: string | null; readonly appendPosition: number } {
+  const leafMessage = messages.at(-1);
+
+  if (!leafMessage) {
+    return { parentMessageId: null, appendPosition: 1 };
+  }
+
+  return {
+    parentMessageId: leafMessage.id,
+    appendPosition: leafMessage.childCount + 1,
+  };
 }
 
 function EmptyState(props: { readonly title: string; readonly body: string }) {

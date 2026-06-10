@@ -66,12 +66,13 @@ export class GeminiLlmAdapter implements LlmService {
   }
 
   private async generateContent(request: GeminiGenerateContentRequest): Promise<GeminiGenerateContentResponse> {
-    const url = `${GEMINI_GENERATE_CONTENT_ENDPOINT}/${GEMINI_3_FLASH_MODEL}:generateContent?key=${encodeURIComponent(this.config.apiKey)}`;
+    const url = `${GEMINI_GENERATE_CONTENT_ENDPOINT}/${GEMINI_3_FLASH_MODEL}:generateContent`;
     const response = await withTimeout(
       fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-goog-api-key": this.config.apiKey,
         },
         body: JSON.stringify(request),
       }),

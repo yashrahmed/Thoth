@@ -18,6 +18,7 @@ import { ConversationResponse, MessageResponse, PageResponse } from "../../domai
 
 const ACCESS_JWT_HEADER = "cf-access-jwt-assertion";
 const ALWAYS_AUTHORIZED_PATHS = new Set(["/auth/logout"]);
+const GENERIC_INTERNAL_ERROR_MESSAGE = "An unexpected error occurred.";
 
 interface HandlerVariables {
   identity: AccessIdentity;
@@ -120,14 +121,13 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
   }
 
   app.onError((error, c) => {
-    const message = error instanceof Error ? error.message : "Unexpected conv-agent error.";
     console.error("[conv-agent] HTTP handler error", { path: c.req.path, error });
 
     return c.json(
       {
         error: {
           kind: "UnexpectedError",
-          message,
+          message: GENERIC_INTERNAL_ERROR_MESSAGE,
         },
       },
       500,
@@ -354,7 +354,17 @@ function mapError(c: { json: (data: unknown, status: number) => Response }, erro
     return c.json({ error }, 404);
   }
 
-  return c.json({ error }, 500);
+  console.error("[conv-agent] request failed", error);
+
+  return c.json(
+    {
+      error: {
+        kind: "UnexpectedError",
+        message: GENERIC_INTERNAL_ERROR_MESSAGE,
+      },
+    },
+    500,
+  );
 }
 
 async function parseAppendMessageRequest(req: Request, conversationId: string): Promise<TransportResult<ApplicationAppendMessageRequest>> {

@@ -5,6 +5,7 @@ export type { WorkerEnv } from "./bootstrap";
 const ALLOWED_CORS_METHODS = "GET,POST,PATCH,DELETE,OPTIONS";
 const ALLOWED_CORS_HEADERS = "content-type";
 const API_BASE_PATH = "/api/v1";
+const GENERIC_WORKER_ERROR_MESSAGE = "An unexpected worker error occurred.";
 
 export default {
   // The actual CF worker entry point.
@@ -15,22 +16,24 @@ export default {
       return new Response(null, { status: 204, headers: buildCorsHeaders(normalizedRequest) });
     }
 
-    const deps = buildWorkerDeps(env);
+    let deps: ReturnType<typeof buildWorkerDeps> | undefined;
 
     try {
+      deps = buildWorkerDeps(env);
       const response = await deps.httpHandler(normalizedRequest);
       return withCorsHeaders(normalizedRequest, response);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unexpected conv-agent worker error.";
       console.error("[conv-agent] fetch handler failed", error);
-      const response = new Response(JSON.stringify({ error: { kind: "WorkerBootstrapError", message } }), {
+      const response = new Response(JSON.stringify({ error: { kind: "WorkerBootstrapError", message: GENERIC_WORKER_ERROR_MESSAGE } }), {
         status: 500,
         headers: { "content-type": "application/json" },
       });
 
       return withCorsHeaders(normalizedRequest, response);
     } finally {
-      ctx.waitUntil(deps.shutdown());
+      if (deps) {
+        ctx.waitUntil(deps.shutdown());
+      }
     }
   },
 } satisfies ExportedHandler<WorkerEnv>;

@@ -71,7 +71,6 @@ Use ideas from Domain-Driven Design during development.
   shapes.
 - Add new capabilities by extending the domain and ports first, then wiring
   adapters around them.
-- Follow the style and preference guidance in [styleguide.md](./styleguide.md).
 
 ## Action Placement
 

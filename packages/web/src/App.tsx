@@ -468,7 +468,7 @@ function ConversationApp() {
         formData.append("attachment", file);
       }
 
-      const response = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/add-to-conv`), {
+      const response = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/append-direct`), {
         method: "POST",
         body: formData,
       });
@@ -477,8 +477,23 @@ function ConversationApp() {
         throw new Error(`Message send failed with ${response.status}.`);
       }
 
+      const appendedMessage = (await response.json()) as { readonly id: string };
+
       setDraft("");
       setSelectedFiles([]);
+
+      // The reply slot is declared explicitly: first child of the message that
+      // was just appended. Retrying this request is safe — a duplicate run is
+      // dropped server-side when the position is already occupied.
+      const completionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/request-completion`), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parentMessageId: appendedMessage.id, appendPosition: 1 }),
+      });
+
+      if (!completionResponse.ok) {
+        throw new Error(`Message was saved, but the completion request failed with ${completionResponse.status}.`);
+      }
       await loadConversations({ quiet: true });
       await loadMessages(conversationId, { quiet: true });
     } catch (caughtError) {

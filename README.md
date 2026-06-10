@@ -18,20 +18,28 @@ The conv-agent's hexagonal layout (`domain/`, `application/`, `adapter/`, `worke
 
 Authentication for the deployed dev `conv-agent` is handled by Cloudflare Access in front of the Worker. The Worker verifies the `Cf-Access-Jwt-Assertion` header on every non-public request using the JWKS published by the team domain; see [`packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts`](./packages/conv-agent/src/adapter/inbound/services/access-jwt-verification-service.ts). Auth must be explicitly configured with `AUTH_ENABLED`: local sets it to `false`, while deployed dev sets it to `true` and requires the Access team domain and AUD.
 
-### Append flow idempotency
+### Append and completion idempotency
 
-The current append-message persistence path locks the conversation row while it
-allocates the next `sequence_number`, so concurrent appends to the same
-conversation are ordered consistently. That lock does not make append requests
-idempotent: a double click or retried request still creates a second valid
-message with the next sequence number.
+Messages form a tree (`parent_message_id` plus an ltree `path`), and every
+write declares its target slot explicitly: the client supplies
+`parentMessageId` and `appendPosition` on `append-direct`, and
+the append store rejects any position other than the parent's next free child
+slot, with the `messages_path_unique` constraint on `(conversation_id, path)`
+as the transactional backstop. A double click or retried request targets the
+same occupied position and fails validation instead of creating a second
+message.
 
-Do not treat the existing sequence lock as duplicate prevention. Reliable
-append-flow idempotency requires a data-model change that records message
-lineage or client intent separately, such as tracking the previous message on
-each message and enforcing the expected relationship when appending. Until that
-model exists, the backend can preserve sequence integrity but cannot guarantee
-that duplicate append attempts collapse into one operation.
+LLM completions follow the same contract. Appending a message never triggers a
+completion; clients request one explicitly via
+`POST /conversations/:id/request-completion` with the parent message id and
+the append position the reply must occupy. The endpoint validates the parent
+(it must be a user message in the conversation), schedules the background run,
+and returns `202`. The run builds its prompt from the ancestor chain of the
+parent message — sibling branches are excluded — and persists the reply at the
+declared position. If the position is occupied by the time the run finishes
+(a duplicate request, or a concurrent append that claimed the slot), the run
+is dropped without side effects, so retrying a completion request is always
+safe.
 
 ## Tech Stack
 

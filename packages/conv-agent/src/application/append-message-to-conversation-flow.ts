@@ -7,7 +7,6 @@ import { failure, type Result } from "../domain/objects/result";
 import { LLM_MESSAGE_TYPES } from "../domain/objects/llm";
 import { type AppendMessageRequest } from "../domain/objects/request-types";
 import type { AppendMessageRecord, MessageWithFiles } from "../domain/objects/message-types";
-import type { LLMCompletionRunService } from "../domain/contracts/llm-completion-run-service";
 
 export { type AppendMessageRequest } from "../domain/objects/request-types";
 export { type Attachment } from "../domain/objects/request-types";
@@ -19,7 +18,6 @@ export class AppendMessageToConversationFlow {
     private readonly appendUserMessageDomainService: AppendUserMessageDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
-    private readonly llmCompletionRunService: LLMCompletionRunService,
   ) {}
 
   async execute(request: AppendMessageRequest): Promise<Result<MessageWithFiles, ValidationError | NotFoundError | StoreError>> {
@@ -73,8 +71,6 @@ export class AppendMessageToConversationFlow {
       const deleteUploadedBlobsResult = await this.fileDomainService.deleteUploadedBlobs({ files: uploadFilesResult.value });
       return deleteUploadedBlobsResult.ok ? createUserMessageResult : deleteUploadedBlobsResult;
     }
-
-    this.llmCompletionRunService.run({ messageId: createUserMessageResult.value.id, parentMessageId: createUserMessageResult.value.id, conversationId: request.conversationId });
 
     return createUserMessageResult;
   }

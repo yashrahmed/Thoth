@@ -9,6 +9,7 @@ import type { CreateConversationFlow } from "../../application/create-conversati
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
 import { type GetMessagesOnConversationFlow } from "../../application/get-messages-on-conversation-flow";
+import type { RequestCompletionFlow } from "../../application/request-completion-flow";
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
 import type { UpdateConvFlow } from "../../application/update-conv-flow";
 import type { AccessIdentityAuthorizer } from "../../domain/contracts/access-identity-authorizer";
@@ -53,8 +54,8 @@ interface ConversationHttpHandlerDeps {
   readonly listConversations: ListConversationsFlow;
   readonly updateConv: UpdateConvFlow;
   readonly deleteConversation: DeleteConversationFlow;
-  readonly appendMessageToConversation: AppendMessageToConversationFlow;
-  readonly appendMessageDirect: AppendMessageToConversationFlow;
+  readonly appendMessage: AppendMessageToConversationFlow;
+  readonly requestCompletion: RequestCompletionFlow;
   readonly getMessagesOnConversation: GetMessagesOnConversationFlow;
 }
 
@@ -181,23 +182,8 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     return c.json(new PageResponse(result.value.map(ConversationResponse.fromConversation), pageNum, pageSize));
   });
 
-  app.post("/conversations/:id/add-to-conv", async (c) => {
-    const conversationId = c.req.param("id");
-    const appendRequestResult = await parseAppendMessageRequest(c.req.raw, conversationId);
-
-    if (!appendRequestResult.ok) {
-      return mapError(c, appendRequestResult.error);
-    }
-
-    const result = await deps.appendMessageToConversation.execute(appendRequestResult.value);
-
-    if (!result.ok) {
-      return mapError(c, result.error);
-    }
-
-    return c.json(MessageResponse.fromMessageWithFiles(result.value), 201);
-  });
-
+  // Appending never triggers a completion; clients request one explicitly via
+  // /request-completion.
   app.post("/conversations/:id/append-direct", async (c) => {
     const conversationId = c.req.param("id");
     const appendRequestResult = await parseAppendMessageRequest(c.req.raw, conversationId);
@@ -206,13 +192,30 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, appendRequestResult.error);
     }
 
-    const result = await deps.appendMessageDirect.execute(appendRequestResult.value);
+    const result = await deps.appendMessage.execute(appendRequestResult.value);
 
     if (!result.ok) {
       return mapError(c, result.error);
     }
 
     return c.json(MessageResponse.fromMessageWithFiles(result.value), 201);
+  });
+
+  app.post("/conversations/:id/request-completion", async (c) => {
+    const conversationId = c.req.param("id");
+    const completionRequestResult = await parseRequestCompletionRequest(c.req.raw, conversationId);
+
+    if (!completionRequestResult.ok) {
+      return mapError(c, completionRequestResult.error);
+    }
+
+    const result = await deps.requestCompletion.execute(completionRequestResult.value);
+
+    if (!result.ok) {
+      return mapError(c, result.error);
+    }
+
+    return c.json({ status: "accepted" }, 202);
   });
 
   app.get("/conversations/:id/chat", async (c) => {
@@ -298,6 +301,46 @@ async function parseUpdateConversationRequest(req: Request, conversationId: stri
     value: {
       conversationId,
       title: body.title,
+    },
+  };
+}
+
+async function parseRequestCompletionRequest(
+  req: Request,
+  conversationId: string,
+): Promise<TransportResult<{ readonly conversationId: string; readonly parentMessageId: string; readonly appendPosition: number }>> {
+  const contentType = req.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    return transportFailure("content-type", "content-type must be application/json.");
+  }
+
+  let body: unknown;
+
+  try {
+    body = await req.json();
+  } catch {
+    return transportFailure("body", "body must be valid JSON.");
+  }
+
+  if (!isRecord(body)) {
+    return transportFailure("body", "body must be a JSON object.");
+  }
+
+  if (typeof body.parentMessageId !== "string" || body.parentMessageId.trim().length === 0) {
+    return transportFailure("parentMessageId", "parentMessageId must be a non-empty string.");
+  }
+
+  if (typeof body.appendPosition !== "number" || !Number.isInteger(body.appendPosition) || body.appendPosition <= 0) {
+    return transportFailure("appendPosition", "appendPosition must be a positive integer.");
+  }
+
+  return {
+    ok: true,
+    value: {
+      conversationId,
+      parentMessageId: body.parentMessageId.trim(),
+      appendPosition: body.appendPosition,
     },
   };
 }

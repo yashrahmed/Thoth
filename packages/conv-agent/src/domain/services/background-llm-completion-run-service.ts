@@ -24,9 +24,13 @@ const THOTH_SENT_AT_METADATA_LINE_PATTERN = /^sent at \d{4}-\d{2}-\d{2} \d{2}:\d
 
 /**
  * Runs the LLM completion as a background task scheduled via the supplied
- * scheduler (typically `ctx.waitUntil` on Cloudflare Workers). Errors are
+ * scheduler (typically `ctx.waitUntil` on Cloudflare Workers). The prompt is
+ * built from the ancestor chain of the parent message, so sibling branches
+ * never leak into the context. The first completion message is attached at the
+ * caller-declared append position; a duplicate or stale run loses the slot to
+ * the store's next-child check and is dropped without side effects. Errors are
  * logged. On `LlmError` (e.g. timeout, provider error) a generic assistant
- * message is appended to the conversation so the failure is visible to the
+ * message is appended at the same position so the failure is visible to the
  * user instead of silently dropped. There is no retry path.
  */
 export class BackgroundLLMCompletionRunService implements LLMCompletionRunService {
@@ -41,20 +45,19 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
   ) {}
 
   run(input: RunLlmCompletionInput): void {
-    this.scheduleBackgroundTask(this.executeAndLog(input.messageId, input.parentMessageId, input.conversationId));
+    this.scheduleBackgroundTask(this.executeAndLog(input));
   }
 
-  private async executeAndLog(messageId: string, parentMessageId: string, conversationId: string): Promise<void> {
+  private async executeAndLog(input: RunLlmCompletionInput): Promise<void> {
+    const { conversationId, parentMessageId, appendPosition } = input;
+
     try {
-      const contextResult = await this.resolveCompletionContext(messageId, conversationId);
+      const contextResult = await this.resolveCompletionContext(conversationId, parentMessageId);
 
       if (!contextResult.ok) {
-        // Validation/NotFound/StoreError happen before we reach the LLM. The
-        // most common case is the supersede ValidationError, which is intentional
-        // (a newer user message will trigger its own completion). Don't write a
-        // fallback assistant message — just log.
         console.error("[conv-agent] background LLM completion failed", {
-          messageId,
+          conversationId,
+          parentMessageId,
           phase: "context",
           error: this.serializeCompletionError(contextResult.error),
         });
@@ -66,11 +69,12 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
 
       if (!llmResult.ok) {
         console.error("[conv-agent] background LLM completion failed", {
-          messageId,
+          conversationId,
+          parentMessageId,
           phase: "llm",
           error: this.serializeCompletionError(llmResult.error),
         });
-        await this.persistFallbackAssistantMessage(messageId, parentMessageId, conversationId, llmResult.error.code);
+        await this.persistFallbackAssistantMessage(input, llmResult.error.code);
         return;
       }
 
@@ -78,46 +82,50 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
         return;
       }
 
-      const persistResult = await this.appendCompletionMessages(conversationId, parentMessageId, llmResult.value.messages);
+      const persistResult = await this.appendCompletionMessages(input, llmResult.value.messages);
 
       if (!persistResult.ok) {
+        if (isOccupiedAppendPositionError(persistResult.error)) {
+          // The declared slot was taken before this run persisted — a duplicate
+          // run already landed, or a concurrent append claimed the position.
+          // Either way this run's intent is stale; drop it without a fallback.
+          console.info("[conv-agent] background LLM completion dropped; append position is occupied", {
+            conversationId,
+            parentMessageId,
+            appendPosition,
+          });
+          return;
+        }
+
         console.error("[conv-agent] background LLM completion failed", {
-          messageId,
+          conversationId,
+          parentMessageId,
           phase: "persist",
           error: this.serializeCompletionError(persistResult.error),
         });
       }
     } catch (error) {
       console.error("[conv-agent] background LLM completion threw", {
-        messageId,
+        conversationId,
+        parentMessageId,
         error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
       });
     }
   }
 
-  private async resolveCompletionContext(messageId: string, conversationId: string): Promise<Result<CompletionContext, ValidationError | NotFoundError | StoreError>> {
-    const [triggerMessageResult, allMessagesResult, filesResult] = await Promise.all([
-      this.messageDomainService.findByIdInConversation(messageId, conversationId),
-      this.messageDomainService.findAll(conversationId),
-      this.fileDomainService.getFilesByConversation(conversationId),
-    ]);
+  private async resolveCompletionContext(conversationId: string, parentMessageId: string): Promise<Result<CompletionContext, ValidationError | NotFoundError | StoreError>> {
+    const ancestorChainResult = await this.messageDomainService.findAncestorChain({ conversationId, messageId: parentMessageId });
 
-    if (!triggerMessageResult.ok) {
-      return triggerMessageResult;
+    if (!ancestorChainResult.ok) {
+      return ancestorChainResult;
     }
 
-    if (!allMessagesResult.ok) {
-      return allMessagesResult;
-    }
+    const filesResult = await this.fileDomainService.getFilesOnMessages({
+      messageIds: ancestorChainResult.value.map((message) => message.id),
+    });
 
     if (!filesResult.ok) {
       return filesResult;
-    }
-
-    const triggerValidationResult = this.validateTriggerMessage(triggerMessageResult.value, allMessagesResult.value);
-
-    if (!triggerValidationResult.ok) {
-      return triggerValidationResult;
     }
 
     const signedFilesResult = await this.fileAccessDomainService.createSignedFileAccess(filesResult.value);
@@ -128,32 +136,37 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
 
     return success({
       conversationId,
-      llmInput: this.buildLlmInputMessages(allMessagesResult.value, signedFilesResult.value),
+      llmInput: this.buildLlmInputMessages(ancestorChainResult.value, signedFilesResult.value),
     });
   }
 
-  private async persistFallbackAssistantMessage(messageId: string, parentMessageId: string, conversationId: string, code: LlmErrorCode): Promise<void> {
+  private async persistFallbackAssistantMessage(input: RunLlmCompletionInput, code: LlmErrorCode): Promise<void> {
     const fallbackMessage: LlmCompletionMessage = {
       type: LLMMessageType.Assistant,
       content: FALLBACK_MESSAGE_BY_CODE[code],
     };
 
-    const persistResult = await this.appendCompletionMessages(conversationId, parentMessageId, [fallbackMessage]);
+    const persistResult = await this.appendCompletionMessages(input, [fallbackMessage]);
 
     if (!persistResult.ok) {
+      if (isOccupiedAppendPositionError(persistResult.error)) {
+        console.info("[conv-agent] fallback assistant message dropped; append position is occupied", {
+          conversationId: input.conversationId,
+          parentMessageId: input.parentMessageId,
+          appendPosition: input.appendPosition,
+        });
+        return;
+      }
+
       console.error("[conv-agent] failed to persist fallback assistant message", {
-        messageId,
-        conversationId,
+        conversationId: input.conversationId,
+        parentMessageId: input.parentMessageId,
         error: this.serializeCompletionError(persistResult.error),
       });
     }
   }
 
-  private async appendCompletionMessages(
-    conversationId: string,
-    parentMessageId: string,
-    messages: ReadonlyArray<LlmCompletionMessage>,
-  ): Promise<Result<void, ValidationError | StoreError>> {
+  private async appendCompletionMessages(input: RunLlmCompletionInput, messages: ReadonlyArray<LlmCompletionMessage>): Promise<Result<void, ValidationError | StoreError>> {
     const sanitizedMessages = this.sanitizeCompletionMessages(messages);
 
     if (sanitizedMessages.length === 0) {
@@ -161,7 +174,7 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
     }
 
     const nextMessageRecordsResult = this.messageDomainService.buildNextMessageRecords({
-      conversationId,
+      conversationId: input.conversationId,
       messages: sanitizedMessages,
     });
 
@@ -171,7 +184,8 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
 
     const appendMessageResult = await this.appendUserMessageDomainService.persistMessages({
       messages: nextMessageRecordsResult.value,
-      parentMessageId,
+      parentMessageId: input.parentMessageId,
+      appendPosition: input.appendPosition,
     });
 
     if (!appendMessageResult.ok) {
@@ -198,33 +212,6 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
         };
       })
       .filter((message) => message.content.length > 0);
-  }
-
-  private validateTriggerMessage(triggerMessage: Message, allMessages: ReadonlyArray<Message>): Result<void, ValidationError> {
-    const latestMessage = allMessages.at(-1);
-
-    if (!latestMessage) {
-      return {
-        ok: false,
-        error: new ValidationError("messageId", "conversation must contain at least one message before requesting completion."),
-      };
-    }
-
-    if (latestMessage.id !== triggerMessage.id) {
-      return {
-        ok: false,
-        error: new ValidationError("messageId", `messageId must reference the latest message; received ${triggerMessage.id} but latest is ${latestMessage.id}.`),
-      };
-    }
-
-    if (triggerMessage.type !== LLMMessageType.User) {
-      return {
-        ok: false,
-        error: new ValidationError("messageId", `messageId must reference a user message; received ${triggerMessage.type}.`),
-      };
-    }
-
-    return success(undefined);
   }
 
   private buildLlmInputMessages(messages: ReadonlyArray<Message>, files: ReadonlyArray<SignedFileAccess>): LlmCompletionInputMessage[] {
@@ -263,4 +250,8 @@ export class BackgroundLLMCompletionRunService implements LLMCompletionRunServic
 
     return base;
   }
+}
+
+function isOccupiedAppendPositionError(error: ValidationError | StoreError): boolean {
+  return error instanceof ValidationError && error.fieldName === "appendPosition";
 }

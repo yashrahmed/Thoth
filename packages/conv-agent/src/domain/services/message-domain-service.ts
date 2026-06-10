@@ -84,14 +84,17 @@ export class MessageDomainService {
     return { ok: true, value: undefined };
   }
 
-  async findAll(conversationId: string): Promise<Result<Message[], ValidationError | StoreError>> {
-    const conversationIdResult = this.genericValidationService.requireNonEmptyString(conversationId, "conversationId");
+  async findAncestorChain(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], ValidationError | NotFoundError | StoreError>> {
+    const validationResult = firstFailure(
+      this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
+      this.genericValidationService.requireNonEmptyString(request.messageId, "messageId"),
+    );
 
-    if (!conversationIdResult.ok) {
-      return conversationIdResult;
+    if (!validationResult.ok) {
+      return validationResult;
     }
 
-    return this.messageRepository.selectAllMessagesByConversation(conversationIdResult.value);
+    return this.messageRepository.selectAncestorMessages(request);
   }
 
   async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {

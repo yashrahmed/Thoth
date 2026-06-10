@@ -14,8 +14,8 @@ import { GeminiLlmAdapter } from "../adapter/llm/gemini-llm-adapter";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
 import { BackgroundLLMCompletionRunService } from "../domain/services/background-llm-completion-run-service";
-import { NoOpLLMCompletionRunService } from "../domain/services/noop-llm-completion-run-service";
 import { CreateConversationFlow } from "../application/create-conversation-flow";
+import { RequestCompletionFlow } from "../application/request-completion-flow";
 import { DeleteConversationFlow } from "../application/delete-conversation-flow";
 import { GetConversationFlow } from "../application/get-conversation-flow";
 import { GetMessagesOnConversationFlow } from "../application/get-messages-on-conversation-flow";
@@ -134,8 +134,6 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     llmPromptDomainService,
     scheduleBackgroundTask,
   );
-  const noopCompletionRunService = new NoOpLLMCompletionRunService();
-
   const shutdown = async (): Promise<void> => {
     if (pendingBackgroundTasks.length > 0) {
       await Promise.allSettled(pendingBackgroundTasks);
@@ -156,22 +154,8 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),
     updateConv: new UpdateConvFlow(conversationDomainService),
     deleteConversation: new DeleteConversationFlow(deleteConversationGraphDomainService, blobDomainService),
-    appendMessageToConversation: new AppendMessageToConversationFlow(
-      conversationDomainService,
-      appendUserMessageDomainService,
-      messageDomainService,
-      fileDomainService,
-      backgroundCompletionRunService,
-    ),
-    // The /append-direct route persists user messages without triggering an LLM completion,
-    // so it shares the append flow but uses a no-op runner.
-    appendMessageDirect: new AppendMessageToConversationFlow(
-      conversationDomainService,
-      appendUserMessageDomainService,
-      messageDomainService,
-      fileDomainService,
-      noopCompletionRunService,
-    ),
+    appendMessage: new AppendMessageToConversationFlow(conversationDomainService, appendUserMessageDomainService, messageDomainService, fileDomainService),
+    requestCompletion: new RequestCompletionFlow(conversationDomainService, messageDomainService, genericValidationService, backgroundCompletionRunService),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });
 

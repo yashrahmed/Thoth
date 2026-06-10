@@ -12,7 +12,7 @@ export interface MessageRepository {
     readonly pageNum: number;
     readonly pageSize: number;
   }): Promise<Result<Message[], StoreError>>;
-  selectAllMessagesByConversation(conversationId: string): Promise<Result<Message[], StoreError>>;
+  selectAncestorMessages(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], NotFoundError | StoreError>>;
   deleteMessageRow(messageId: string): Promise<Result<void, StoreError>>;
   deleteMessagesByConversation(conversationId: string): Promise<Result<void, StoreError>>;
 }

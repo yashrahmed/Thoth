@@ -37,12 +37,12 @@
 
 ### Flow Changes
 
-- `add-to-conv` needs `parentMessageId`.
-  - Adds the user message as a child of that parent.
-  - Completion then runs from the new user message's path.
 - `append-direct` needs `parentMessageId`.
   - Adds the message as a child of that parent.
-  - Does not trigger completion.
+  - Does not trigger completion. (`add-to-conv` has been removed.)
+- `request-completion` accepts `parentMessageId` and `appendPosition`.
+  - Schedules a completion whose reply attaches at that exact slot; duplicates are dropped.
+  - Prompt context is the ancestor chain of the parent message.
 - `get-messages-on-conv` needs a selected message, typically `leafMessageId`.
   - Loads the path from root to that selected or leaf message.
   - If an internal node is passed instead, it can render the partial path to that node.
@@ -126,7 +126,7 @@ message tree columns are populated.
   - Accept a parent message id and the append position.
   - Append the new user message to that parent.
   - Populate the new tree columns on write.
-  - Run completion from the new user message's path once tree data is available.
+  - Completion moved to the dedicated `request-completion` endpoint (branch-aware, position-idempotent); `add-to-conv` has been removed in favor of `append-direct`.
 - [x] `append-direct`
   - Accept a parent message id and the append position.
   - Append the new message to that parent.
@@ -152,7 +152,7 @@ Findings from a code review on 2026-06-09.
 
 ### Correctness
 
-- [ ] LLM completion context ignores the message tree. `BackgroundLLMCompletionRunService.resolveCompletionContext` builds the prompt from `findAll(conversationId)` (all messages ordered by `created_at`), so once a conversation branches the prompt interleaves sibling branches. `validateTriggerMessage` also requires the trigger to be the globally latest message, which rejects legitimate appends to older branches. Fix by reusing the ancestor-path query (as in `selectMessagePageForLeaf`) rooted at the trigger message. Note: the `add-to-conv` migration checklist item "Run completion from the new user message's path" is marked done but is not implemented — fix before the branching UI ships.
+- [x] LLM completion context ignores the message tree. Fixed: completion is now requested explicitly via `POST /conversations/:id/request-completion` with `parentMessageId` + `appendPosition`; the prompt is built from the ancestor chain of the parent message (files scoped to that chain too), and duplicate/stale runs are dropped when the declared position is occupied. `validateTriggerMessage` is gone; the parent must be a user message.
 - [ ] The web client computes `getAppendTarget` from the currently loaded message page; a partial page would produce a wrong parent. Derive the append target from the server's leaf response instead.
 
 ### Security
@@ -172,7 +172,7 @@ Findings from a code review on 2026-06-09.
 
 ### Docs drift
 
-- [ ] README "Append flow idempotency" section still describes `sequence_number` locking (dropped in V19); the `messages_path_unique` constraint now does provide duplicate-append protection.
+- [x] README "Append flow idempotency" section still describes `sequence_number` locking (dropped in V19); the `messages_path_unique` constraint now does provide duplicate-append protection. (Rewritten to describe explicit append positions and the request-completion contract.)
 - [ ] AGENTS.md links to `styleguide.md`, which does not exist.
 - [ ] Migration plan above lists "Remove the `sequence_number` column" as remaining, but V19 already did it.
 

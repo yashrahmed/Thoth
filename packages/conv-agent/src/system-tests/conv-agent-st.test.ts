@@ -291,7 +291,7 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 
-  test("add-to-conv appends from the selected parent and completion becomes a child of the input", async () => {
+  test("requested completion lands as a child of the selected branch input", async () => {
     let conversationId: string | undefined;
 
     try {
@@ -323,33 +323,37 @@ describe("conv-agent HTTP system test", () => {
 
       expect(directChildAppend.status).toBe(201);
 
-      const addToConvContent = "Reply with a short greeting for this branch.";
-      const addToConvAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/add-to-conv`, {
+      const branchInputContent = "Reply with a short greeting for this branch.";
+      const branchAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
         method: "POST",
         headers: AUTH_HEADERS,
-        body: buildUserMessageFormData(addToConvContent, {
+        body: buildUserMessageFormData(branchInputContent, {
           parentMessageId: parentMessage.id,
           appendPosition: 2,
         }),
       });
 
-      expect(addToConvAppend.status).toBe(201);
+      expect(branchAppend.status).toBe(201);
 
-      const appendedInput = (await addToConvAppend.json()) as MessageItem;
+      const appendedInput = (await branchAppend.json()) as MessageItem;
 
-      expect(appendedInput.content).toBe(addToConvContent);
+      expect(appendedInput.content).toBe(branchInputContent);
       expect(appendedInput.parentMessageId).toBe(parentMessage.id);
       expect(appendedInput.childCount).toBe(0);
       assertInternalMessageFieldsHidden(appendedInput);
 
+      const completionResponse = await requestCompletion(conversationId, appendedInput.id, 1);
+
+      expect(completionResponse.status).toBe(202);
+
       await waitForAssistantReply(conversationId);
 
       const page = await fetchPage(conversationId, 1, 50);
-      const addToConvInput = page.items.find((item) => item.content === addToConvContent);
+      const branchInput = page.items.find((item) => item.content === branchInputContent);
 
       expect(page.items.some((item) => item.type === "assistant")).toBe(true);
-      expect(addToConvInput).toBeDefined();
-      expect(addToConvInput?.childCount).toBe(1);
+      expect(branchInput).toBeDefined();
+      expect(branchInput?.childCount).toBe(1);
     } finally {
       if (conversationId) {
         await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
@@ -366,7 +370,7 @@ describe("conv-agent HTTP system test", () => {
       expect(firstCreate.status).toBe(201);
       firstConversationId = ((await firstCreate.json()) as { readonly id: string }).id;
 
-      const firstAppend = await fetch(`${BASE_URL}/conversations/${firstConversationId}/add-to-conv`, {
+      const firstAppend = await fetch(`${BASE_URL}/conversations/${firstConversationId}/append-direct`, {
         method: "POST",
         headers: AUTH_HEADERS,
         body: buildUserMessageFormData("Reply with a short greeting on conversation A.", { appendPosition: 1 }),
@@ -374,18 +378,28 @@ describe("conv-agent HTTP system test", () => {
 
       expect(firstAppend.status).toBe(201);
 
+      const firstMessage = (await firstAppend.json()) as MessageItem;
+      const firstCompletion = await requestCompletion(firstConversationId, firstMessage.id, 1);
+
+      expect(firstCompletion.status).toBe(202);
+
       // Immediately switch to a second conversation and append before A's completion lands.
       const secondCreate = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
       expect(secondCreate.status).toBe(201);
       secondConversationId = ((await secondCreate.json()) as { readonly id: string }).id;
 
-      const secondAppend = await fetch(`${BASE_URL}/conversations/${secondConversationId}/add-to-conv`, {
+      const secondAppend = await fetch(`${BASE_URL}/conversations/${secondConversationId}/append-direct`, {
         method: "POST",
         headers: AUTH_HEADERS,
         body: buildUserMessageFormData("Reply with a short greeting on conversation B.", { appendPosition: 1 }),
       });
 
       expect(secondAppend.status).toBe(201);
+
+      const secondMessage = (await secondAppend.json()) as MessageItem;
+      const secondCompletion = await requestCompletion(secondConversationId, secondMessage.id, 1);
+
+      expect(secondCompletion.status).toBe(202);
 
       // Both conversations must end up with an assistant reply.
       await waitForAssistantReply(secondConversationId);
@@ -406,6 +420,93 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 
+  test("duplicate completion requests for the same position collapse onto one reply", async () => {
+    let conversationId: string | undefined;
+
+    try {
+      const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+      expect(createResponse.status).toBe(201);
+      conversationId = ((await createResponse.json()) as { readonly id: string }).id;
+
+      const userContent = "Reply with a short greeting, please.";
+      const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData(userContent, { appendPosition: 1 }),
+      });
+
+      expect(appendResponse.status).toBe(201);
+
+      const userMessage = (await appendResponse.json()) as MessageItem;
+
+      const [firstCompletion, secondCompletion] = await Promise.all([requestCompletion(conversationId, userMessage.id, 1), requestCompletion(conversationId, userMessage.id, 1)]);
+
+      expect(firstCompletion.status).toBe(202);
+      expect(secondCompletion.status).toBe(202);
+
+      await waitForAssistantReply(conversationId);
+
+      // Both runs target position 1 under the user message; the loser is
+      // dropped by the append store, so exactly one child may exist.
+      const page = await fetchPage(conversationId, 1, 50);
+      const updatedUserMessage = page.items.find((item) => item.id === userMessage.id);
+
+      expect(updatedUserMessage?.childCount).toBe(1);
+    } finally {
+      if (conversationId) {
+        await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
+    }
+  });
+
+  test("rejects a completion request whose parent is not a user message", async () => {
+    let conversationId: string | undefined;
+
+    try {
+      const createResponse = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
+      expect(createResponse.status).toBe(201);
+      conversationId = ((await createResponse.json()) as { readonly id: string }).id;
+
+      const rootAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: buildUserMessageFormData("Root user message", { appendPosition: 1 }),
+      });
+
+      expect(rootAppend.status).toBe(201);
+
+      const rootMessage = (await rootAppend.json()) as MessageItem;
+
+      const assistantFormData = new FormData();
+      assistantFormData.set("type", "assistant");
+      assistantFormData.set("content", "Manually appended assistant message");
+      assistantFormData.set("appendPosition", "1");
+      assistantFormData.set("parentMessageId", rootMessage.id);
+
+      const assistantAppend = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+        body: assistantFormData,
+      });
+
+      expect(assistantAppend.status).toBe(201);
+
+      const assistantMessage = (await assistantAppend.json()) as MessageItem;
+      const completionResponse = await requestCompletion(conversationId, assistantMessage.id, 1);
+
+      expect(completionResponse.status).toBe(400);
+
+      const completionBody = (await completionResponse.json()) as { readonly error: { readonly kind: string; readonly fieldName: string } };
+
+      expect(completionBody.error.kind).toBe("ValidationError");
+      expect(completionBody.error.fieldName).toBe("parentMessageId");
+    } finally {
+      if (conversationId) {
+        await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
+      }
+    }
+  });
+
   test("posts a single user message and receives an assistant completion reply", async () => {
     let conversationId: string | undefined;
 
@@ -422,7 +523,7 @@ describe("conv-agent HTTP system test", () => {
       const userContent = "Reply with a short greeting.";
       const formData = buildUserMessageFormData(userContent, { appendPosition: 1 });
 
-      const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/add-to-conv`, {
+      const appendResponse = await fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
         method: "POST",
         headers: AUTH_HEADERS,
         body: formData,
@@ -436,6 +537,10 @@ describe("conv-agent HTTP system test", () => {
       expect(appendedUserMessage.parentMessageId).toBeNull();
       expect(appendedUserMessage.childCount).toBe(0);
       assertInternalMessageFieldsHidden(appendedUserMessage);
+
+      const completionResponse = await requestCompletion(conversationId, appendedUserMessage.id, 1);
+
+      expect(completionResponse.status).toBe(202);
 
       await waitForAssistantReply(conversationId);
 
@@ -455,6 +560,17 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 });
+
+function requestCompletion(conversationId: string, parentMessageId: string, appendPosition: number): Promise<Response> {
+  return fetch(`${BASE_URL}/conversations/${conversationId}/request-completion`, {
+    method: "POST",
+    headers: {
+      ...AUTH_HEADERS,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ parentMessageId, appendPosition }),
+  });
+}
 
 function buildUserMessageFormData(content: string, options: { readonly parentMessageId?: string | null; readonly appendPosition: number }): FormData {
   const formData = new FormData();

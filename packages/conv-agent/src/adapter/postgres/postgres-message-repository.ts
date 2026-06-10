@@ -154,8 +154,26 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async selectAllMessagesByConversation(conversationId: string) {
+  async selectAncestorMessages(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], NotFoundError | StoreError>> {
     try {
+      const leafPathRows = await this.sql<MessagePathRow[]>`
+        select
+          path::text as path,
+          thoth.nlevel(path) as depth
+        from thoth.messages
+        where
+          conversation_id = ${request.conversationId}
+          and id = ${request.messageId}
+          and path is not null
+        limit 1
+      `;
+
+      const leafPathRow = leafPathRows[0];
+
+      if (!leafPathRow) {
+        return failure(new NotFoundError(EntityType.Message, request.messageId));
+      }
+
       const rows = await this.sql<MessageRow[]>`
         select
           id,
@@ -167,8 +185,10 @@ export class PostgresMessageRepository implements MessageRepository {
           created_at,
           updated_at
         from thoth.messages
-        where conversation_id = ${conversationId}
-        order by created_at asc, id asc
+        where
+          conversation_id = ${request.conversationId}
+          and path OPERATOR(thoth.@>) ${leafPathRow.path}::thoth.ltree
+        order by thoth.nlevel(path) asc
       `;
 
       return mapRows(rows, StoreOperation.ReadPage);

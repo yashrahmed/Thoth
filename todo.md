@@ -1,15 +1,17 @@
 ## Next Steps
 
-### Making Thoth into an Omni Assistant
-
-- An RTS-like chat UI that allows conversation branching and building like an evidence board.
-  - Complete React tutorial.
-  - Complete React Native tutorial.
-  - Learn Three.js.
-  - Design an RTS like UI showing conversation trees.
+### Thoth 2
+---- TBD lock in scope.
+- Start building a better UI.
+    - Figure out how to render graphs.
+      - Learn Three.js.
+    - Complete React Tutorial.
+    - Complete React Native tutorial.
+    - Try implementing PKCE + local UI launch.
+- Tech Debt
+  - Improve logging (Add structured logs).
 - User management, even though it is personal.
 - Document vault and memories.
-- Improve logging (Add structured logs).
 - Model picker.
 - Automatic research and knowledge synthesis plus continual learning.
 - Deeplink content support.

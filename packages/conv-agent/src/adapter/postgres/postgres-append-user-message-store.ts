@@ -214,11 +214,13 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         let path = allocation.path;
 
         for (const [index, message] of input.messages.entries()) {
+          const childCount = index < input.messages.length - 1 ? 1 : 0;
           const rows = await sql<MessageRow[]>`
             insert into thoth.messages (
               conversation_id,
               parent_message_id,
               path,
+              child_count,
               type,
               content,
               created_at,
@@ -228,6 +230,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               ${message.conversationId},
               ${parentMessageId},
               ${path},
+              ${childCount},
               ${message.type},
               ${message.content},
               ${message.createdAt.toISOString()},
@@ -254,19 +257,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
 
           if (index === 0) {
             await incrementParentChildCount(sql, allocation.parentMessageId);
-          } else {
-            const previousRowIndex = index - 1;
-            const previousRow = messageRows[previousRowIndex];
-
-            if (!previousRow) {
-              throw new Error("Previous completion message row was not returned.");
-            }
-
-            await incrementParentChildCount(sql, previousRow.id);
-            messageRows[previousRowIndex] = {
-              ...previousRow,
-              child_count: 1,
-            };
           }
 
           parentMessageId = messageRow.id;

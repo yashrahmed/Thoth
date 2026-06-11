@@ -1,27 +1,30 @@
 ## Next Steps
 
 ### Thoth 2
----- TBD lock in scope.
-- Start building a better UI.
+---- TBD lock in scope (Get it to a point where you can daily drive it).
+- Build the Graph UI.
     - Figure out how to render graphs.
       - Learn Three.js.
     - Complete React Tutorial.
     - Complete React Native tutorial.
-    - Try implementing PKCE + local UI launch.
+    - Learn some basic graphic design.
 - Tech Debt
   - Improve logging (Add structured logs).
-- User management, even though it is personal.
+  - Try implementing PKCE + local UI launch.
+  - Timestamps on tool messages?
+- User management.
 - Document vault and memories.
 - Model picker.
 - Automatic research and knowledge synthesis plus continual learning.
 - Deeplink content support.
-- Utility API integration, for example with Groot API reverse engineering.
 - Search and MCP integration.
+  - Utility API integration, for example with Groot API reverse engineering.
+  - Search support.
+
 - Add support for overlay mode and video/audio inputs.
 - Completion streaming.
 - Context compaction support.
 - Thoth mobile prototype.
-- Timestamps on tool messages?
 - [Experimental] In-context RAG for long conversations to improve completion time.
 - [Experimental] Talking forms.
 

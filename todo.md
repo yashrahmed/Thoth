@@ -1,26 +1,28 @@
 ## Next Steps
 
 ### Thoth 2
----- TBD lock in scope (Get it to a point where you can daily drive it).
 - Build the Graph UI.
     - Figure out how to render graphs.
-      - Learn Three.js.
+    - Learn Three.js.
     - Complete React Tutorial.
     - Complete React Native tutorial.
     - Learn some basic graphic design.
+    - Resdesign the UI to make it appealing.
 - Tech Debt
   - Improve logging (Add structured logs).
   - Try implementing PKCE + local UI launch.
   - Timestamps on tool messages?
+  - Figure out a way around repeated signing, defaulting to base64?
+- Search and MCP integration.
+  - Utility API integration, for example with Groot API reverse engineering.
+  - Search support.
+
+### Future versions.
 - User management.
 - Document vault and memories.
 - Model picker.
 - Automatic research and knowledge synthesis plus continual learning.
 - Deeplink content support.
-- Search and MCP integration.
-  - Utility API integration, for example with Groot API reverse engineering.
-  - Search support.
-
 - Add support for overlay mode and video/audio inputs.
 - Completion streaming.
 - Context compaction support.
@@ -29,8 +31,6 @@
 - [Experimental] Talking forms.
 
 ## Performance Improvements
-
-- Figure out a way around repeated signing, defaulting to base64?
 - Cloudflare-hosted inference, Workers AI / AI Gateway:
   - Explore CF agents as an inference option to reduce completion time.
 

@@ -2,8 +2,6 @@
 
 ### Thoth 2
 - Build the Graph UI.
-    - Figure out how to render graphs.
-    - Learn Three.js.
     - Complete React Tutorial.
     - Complete React Native tutorial.
     - Learn some basic graphic design.
@@ -49,8 +47,7 @@ Findings from a code review on 2026-06-09.
 
 ### Security
 
-- [ ] No data ownership model: `thoth.conversations` has no owner column, so any allowed user or service token can read/modify/delete every conversation. Add `owner_identity` and scope queries by it (already on the roadmap as "User management"; cheaper to do before document vault / memories land).
-- [ ] CORS reflects any `Origin` with `access-control-allow-credentials: true` (worker `index.ts`). With cookie-based Access auth this lets arbitrary sites make authenticated browser requests. Lock to an origin allowlist, or drop CORS since UI and API share an origin.
+- [x] CORS reflects any `Origin` with `access-control-allow-credentials: true` (worker `index.ts`). With cookie-based Access auth this lets arbitrary sites make authenticated browser requests. Lock to an origin allowlist, or drop CORS since UI and API share an origin.
 - [x] Internal error messages leak to clients: 500 paths (worker fetch handler, Hono `onError`, `mapError`) return raw `error.message`, including DB errors. Log details, return generic messages for non-validation errors.
 - [x] Gemini API key is sent in the URL query string (`gemini-llm-adapter.ts`); URLs end up in logs/proxies. Use the `x-goog-api-key` header.
 
@@ -72,7 +69,3 @@ Findings from a code review on 2026-06-09.
 - [ ] `packages/web/src/App.tsx` is ~1,900 lines (API client, hooks, components, styles, formatters). Split into `api.ts`, hooks, and a `components/` directory before building the branching UI.
 - [ ] Postgres adapters duplicate `mapRow`/`mapRows`/`toDate`/`getErrorMessage` helpers (~150 lines); extract shared row mappers.
 - [x] In `persistMessages`, the back-patch of `child_count` on the previous row is a smell — chain inserts know intermediate nodes have exactly one child, so set `child_count` at insert time.
-
-### Strategic
-
-- [ ] Move completion execution from `ctx.waitUntil` to Cloudflare Queues or Workflows to get retry/DLQ semantics; the `LLMCompletionRunService` port makes this a new adapter rather than a redesign. Prioritize right after the branch-aware completion fix.

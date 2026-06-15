@@ -42,8 +42,7 @@ kill_service_pids() {
     pid="$(cat "$pid_file")"
 
     if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid"
-      wait "$pid" 2>/dev/null || true
+      kill_process_tree "$pid"
       echo "Stopped $service_name."
       stopped=0
     else
@@ -51,15 +50,86 @@ kill_service_pids() {
     fi
   fi
 
+  wrangler_pids="$(find_wrangler_pids)"
+  if [ -n "$wrangler_pids" ]; then
+    for wrangler_pid in $wrangler_pids; do
+      kill_process_tree "$wrangler_pid"
+    done
+    echo "Stopped $service_name Wrangler process tree."
+    stopped=0
+  fi
+
   fallback_pids="$(lsof -ti tcp:"$service_port" || true)"
   if [ -n "$fallback_pids" ]; then
-    kill $fallback_pids 2>/dev/null || true
+    for fallback_pid in $fallback_pids; do
+      kill_process_tree "$fallback_pid"
+    done
     echo "Stopped $service_name via port $service_port."
     stopped=0
   fi
 
   rm -f "$pid_file"
   return "$stopped"
+}
+
+find_child_pids() {
+  parent_pid="$1"
+
+  ps -axo pid=,ppid= | while read -r child_pid child_parent_pid; do
+    if [ "$child_parent_pid" = "$parent_pid" ]; then
+      printf '%s\n' "$child_pid"
+    fi
+  done
+}
+
+find_wrangler_pids() {
+  ps -axo pid=,command= | while read -r process_pid process_command; do
+    case "$process_command" in
+      *"wrangler dev --config $WRANGLER_CONFIG_FILE"*)
+        printf '%s\n' "$process_pid"
+        ;;
+    esac
+  done
+}
+
+collect_descendant_pids() {
+  parent_pid="$1"
+
+  for child_pid in $(find_child_pids "$parent_pid"); do
+    printf '%s\n' "$child_pid"
+    collect_descendant_pids "$child_pid"
+  done
+}
+
+kill_process_tree() {
+  root_pid="$1"
+  candidate_pids="$(printf '%s\n%s\n' "$root_pid" "$(collect_descendant_pids "$root_pid")" | sed '/^$/d' | sort -u)"
+
+  if [ -z "$candidate_pids" ]; then
+    return 0
+  fi
+
+  kill $candidate_pids 2>/dev/null || true
+
+  attempts=0
+  while [ "$attempts" -lt 5 ]; do
+    live_pids=""
+
+    for candidate_pid in $candidate_pids; do
+      if kill -0 "$candidate_pid" 2>/dev/null; then
+        live_pids="$live_pids $candidate_pid"
+      fi
+    done
+
+    if [ -z "$live_pids" ]; then
+      return 0
+    fi
+
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  kill -9 $candidate_pids 2>/dev/null || true
 }
 
 wait_for_service_listener() {
@@ -74,7 +144,6 @@ wait_for_service_listener() {
     listener_pid="$(lsof -ti tcp:"$service_port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
 
     if [ -n "$listener_pid" ] && curl -sS -o /dev/null -f "http://127.0.0.1:$service_port/health" 2>/dev/null; then
-      echo "$listener_pid" >"$pid_file"
       echo "Started $service_name. Logs: $log_file"
       return 0
     fi
@@ -175,9 +244,9 @@ start_worker() {
 
   (
     cd "$WORKER_PACKAGE_DIR"
-    # Run Wrangler through Bun with --env-file so local secret values are
-    # available to both Wrangler and the Worker runtime at startup.
-    nohup bun exec --env-file "$WORKER_DEV_VARS" "bun x wrangler dev --config \"$WRANGLER_CONFIG_FILE\" --port \"$WORKER_PORT\" --inspector-port 0" >"$log_file" 2>&1 &
+    # Run Wrangler through Bun and pass the generated env file to Wrangler so
+    # local secret values are available to the Worker runtime at startup.
+    nohup bun x wrangler dev --config "$WRANGLER_CONFIG_FILE" --env-file "$WORKER_DEV_VARS" --port "$WORKER_PORT" --inspector-port 0 --show-interactive-dev-session=false >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
 
@@ -194,7 +263,7 @@ stop_worker() {
 wait_for_dependencies() {
   attempts=0
 
-  while ! curl -sS -o /dev/null -f "$MINIO_ENDPOINT/minio/health/live"; do
+  while ! curl -sS -o /dev/null -f "$MINIO_ENDPOINT/minio/health/live" 2>/dev/null; do
     attempts=$((attempts + 1))
 
     if [ "$attempts" -ge 60 ]; then
@@ -205,7 +274,33 @@ wait_for_dependencies() {
     sleep 1
   done
 
-  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" wait minio-setup >/dev/null
+  wait_for_minio_setup
+}
+
+wait_for_minio_setup() {
+  attempts=0
+
+  while [ "$attempts" -lt 60 ]; do
+    setup_state="$(docker inspect thoth-minio-setup --format '{{.State.Status}} {{.State.ExitCode}}' 2>/dev/null || true)"
+
+    case "$setup_state" in
+      "exited 0")
+        return 0
+        ;;
+      exited\ *)
+        echo "MinIO setup failed with state: $setup_state" >&2
+        docker logs thoth-minio-setup >&2 || true
+        exit 1
+        ;;
+    esac
+
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  echo "MinIO setup did not complete in time." >&2
+  docker logs thoth-minio-setup >&2 || true
+  exit 1
 }
 
 start_database() {

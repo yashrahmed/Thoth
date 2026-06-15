@@ -1,20 +1,10 @@
 import type { MessageRepository } from "../../domain/contracts/message-repository";
-import { type LLMMessageType } from "../../domain/objects/llm";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
+import { getErrorMessage } from "../common/errors";
+import { mapMessageRow, mapMessageRows, type MessageRow } from "../common/row-mapper";
 import type { PostgresDatabase } from "./postgres-database";
-import { Message } from "../../domain/objects/message-types";
-
-interface MessageRow {
-  readonly id: string;
-  readonly conversation_id: string;
-  readonly parent_message_id: string | null;
-  readonly child_count: number;
-  readonly type: LLMMessageType;
-  readonly content: string;
-  readonly created_at: string | Date;
-  readonly updated_at: string | Date;
-}
+import type { Message } from "../../domain/objects/message-types";
 
 interface MessagePathRow {
   readonly path: string;
@@ -46,7 +36,7 @@ export class PostgresMessageRepository implements MessageRepository {
         return failure(new NotFoundError(EntityType.Message, messageId));
       }
 
-      return mapRow(row, StoreOperation.Read);
+      return mapMessageRow(row, StoreOperation.Read);
     } catch (error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.Read, getErrorMessage(error)));
     }
@@ -75,7 +65,7 @@ export class PostgresMessageRepository implements MessageRepository {
         return failure(new NotFoundError(EntityType.Message, messageId));
       }
 
-      return mapRow(row, StoreOperation.Read);
+      return mapMessageRow(row, StoreOperation.Read);
     } catch (error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.Read, getErrorMessage(error)));
     }
@@ -103,7 +93,7 @@ export class PostgresMessageRepository implements MessageRepository {
           string_to_array(path::text, '.')::integer[] asc
       `;
 
-      return mapRows(rows, StoreOperation.ReadPage);
+      return mapMessageRows(rows, StoreOperation.ReadPage);
     } catch (error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }
@@ -148,7 +138,7 @@ export class PostgresMessageRepository implements MessageRepository {
         order by thoth.nlevel(path) asc
       `;
 
-      return mapRows(rows, StoreOperation.ReadPage);
+      return mapMessageRows(rows, StoreOperation.ReadPage);
     } catch (error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }
@@ -191,7 +181,7 @@ export class PostgresMessageRepository implements MessageRepository {
         order by thoth.nlevel(path) asc
       `;
 
-      return mapRows(rows, StoreOperation.ReadPage);
+      return mapMessageRows(rows, StoreOperation.ReadPage);
     } catch (error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }
@@ -228,44 +218,4 @@ function calculateDepthPageWindow(pageNum: number, pageSize: number): { readonly
   const endDepth = pageNum * pageSize;
 
   return { startDepth, endDepth };
-}
-
-function mapRows(rows: MessageRow[], operation: StoreOperation): Result<Message[], StoreError> {
-  const messages: Message[] = [];
-
-  for (const row of rows) {
-    const messageResult = mapRow(row, operation);
-
-    if (!messageResult.ok) {
-      return messageResult;
-    }
-
-    messages.push(messageResult.value);
-  }
-
-  return success(messages);
-}
-
-function mapRow(row: MessageRow | undefined, operation: StoreOperation): Result<Message, StoreError> {
-  if (!row) {
-    return failure(new StoreError(EntityType.Message, operation, "Message row was not returned."));
-  }
-
-  try {
-    return success(new Message(row.id, row.conversation_id, row.type, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count));
-  } catch (error) {
-    if (error instanceof Error) {
-      return failure(new StoreError(EntityType.Message, operation, error.message));
-    }
-
-    return failure(new StoreError(EntityType.Message, operation, "Unexpected message mapping error."));
-  }
-}
-
-function toDate(value: string | Date): Date {
-  return value instanceof Date ? value : new Date(value);
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unexpected database error.";
 }

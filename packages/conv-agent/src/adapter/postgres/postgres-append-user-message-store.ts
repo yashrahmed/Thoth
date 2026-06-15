@@ -1,30 +1,10 @@
 import type { AppendUserMessageStore, PersistMessagesInput, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
 import { EntityType, StoreError, StoreOperation, ValidationError } from "../../domain/objects/errors";
-import { type AppendMessageRecord, File, Message, type MessageWithFiles } from "../../domain/objects/message-types";
+import type { Message, MessageWithFiles } from "../../domain/objects/message-types";
 import { failure, success, type Result } from "../../domain/objects/result";
+import { getErrorMessage } from "../common/errors";
+import { mapFileRows, mapMessageRow, mapMessageRows, type FileRow, type MessageRow } from "../common/row-mapper";
 import type { PostgresDatabase } from "./postgres-database";
-
-interface MessageRow {
-  readonly id: string;
-  readonly conversation_id: string;
-  readonly parent_message_id: string | null;
-  readonly child_count: number;
-  readonly type: AppendMessageRecord["type"];
-  readonly content: string;
-  readonly created_at: string | Date;
-  readonly updated_at: string | Date;
-}
-
-interface FileRow {
-  readonly id: string;
-  readonly message_id: string;
-  readonly canonical_url: string;
-  readonly filename: string;
-  readonly mime_type: string;
-  readonly size_in_bytes: number;
-  readonly created_at: string | Date;
-  readonly updated_at: string | Date;
-}
 
 interface MessageWithFilesRow {
   readonly message: MessageRow;
@@ -266,7 +246,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         return messageRows;
       });
 
-      return mapMessageRows(rows);
+      return mapMessageRows(rows, StoreOperation.Persist);
     } catch (error) {
       if (error instanceof ValidationError) {
         return failure(error);
@@ -381,30 +361,14 @@ async function conversationHasMessages(sql: PostgresDatabase, conversationId: st
   return row.has_messages;
 }
 
-function mapMessageRows(rows: MessageRow[]): Result<Message[], StoreError> {
-  const messages: Message[] = [];
-
-  for (const row of rows) {
-    const messageResult = mapMessageRow(row);
-
-    if (!messageResult.ok) {
-      return messageResult;
-    }
-
-    messages.push(messageResult.value);
-  }
-
-  return success(messages);
-}
-
 function mapMessageWithFilesRow(row: MessageWithFilesRow): Result<MessageWithFiles, StoreError> {
-  const messageResult = mapMessageRow(row.message);
+  const messageResult = mapMessageRow(row.message, StoreOperation.Persist);
 
   if (!messageResult.ok) {
     return messageResult;
   }
 
-  const filesResult = mapFileRows(row.files);
+  const filesResult = mapFileRows(row.files, StoreOperation.Persist);
 
   if (!filesResult.ok) {
     return filesResult;
@@ -414,62 +378,6 @@ function mapMessageWithFilesRow(row: MessageWithFilesRow): Result<MessageWithFil
     ...messageResult.value,
     files: filesResult.value,
   });
-}
-
-function mapMessageRow(row: MessageRow | undefined): Result<Message, StoreError> {
-  if (!row) {
-    return failure(new StoreError(EntityType.Message, StoreOperation.Persist, "Message row was not returned."));
-  }
-
-  try {
-    return success(new Message(row.id, row.conversation_id, row.type, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count));
-  } catch (error) {
-    if (error instanceof Error) {
-      return failure(new StoreError(EntityType.Message, StoreOperation.Persist, error.message));
-    }
-
-    return failure(new StoreError(EntityType.Message, StoreOperation.Persist, "Unexpected message mapping error."));
-  }
-}
-
-function mapFileRows(rows: FileRow[]): Result<File[], StoreError> {
-  const files: File[] = [];
-
-  for (const row of rows) {
-    const fileResult = mapFileRow(row);
-
-    if (!fileResult.ok) {
-      return fileResult;
-    }
-
-    files.push(fileResult.value);
-  }
-
-  return success(files);
-}
-
-function mapFileRow(row: FileRow | undefined): Result<File, StoreError> {
-  if (!row) {
-    return failure(new StoreError(EntityType.File, StoreOperation.Persist, "File row was not returned."));
-  }
-
-  try {
-    return success(new File(row.id, row.message_id, row.canonical_url, row.filename, row.mime_type, row.size_in_bytes, toDate(row.created_at), toDate(row.updated_at)));
-  } catch (error) {
-    if (error instanceof Error) {
-      return failure(new StoreError(EntityType.File, StoreOperation.Persist, error.message));
-    }
-
-    return failure(new StoreError(EntityType.File, StoreOperation.Persist, "Unexpected file mapping error."));
-  }
-}
-
-function toDate(value: string | Date): Date {
-  return value instanceof Date ? value : new Date(value);
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unexpected database error.";
 }
 
 function isUniquePathConstraintViolation(error: unknown): boolean {

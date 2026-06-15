@@ -67,5 +67,5 @@ Findings from a code review on 2026-06-09.
 ### Code health
 
 - [ ] `packages/web/src/App.tsx` is ~1,900 lines (API client, hooks, components, styles, formatters). Split into `api.ts`, hooks, and a `components/` directory before building the branching UI.
-- [ ] Postgres adapters duplicate `mapRow`/`mapRows`/`toDate`/`getErrorMessage` helpers (~150 lines); extract shared row mappers.
+- [x] Postgres adapters duplicate `mapRow`/`mapRows`/`toDate`/`getErrorMessage` helpers (~150 lines); extract shared row mappers.
 - [x] In `persistMessages`, the back-patch of `child_count` on the previous row is a smell — chain inserts know intermediate nodes have exactly one child, so set `child_count` at insert time.

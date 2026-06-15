@@ -1,15 +1,10 @@
 import type { ConversationRepository } from "../../domain/contracts/conversation-repository";
-import { Conversation } from "../../domain/objects/conversation";
+import type { Conversation } from "../../domain/objects/conversation";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, type Result, success } from "../../domain/objects/result";
+import { getErrorMessage } from "../common/errors";
+import { mapConversationRow, mapConversationRows, type ConversationRow } from "../common/row-mapper";
 import type { PostgresDatabase } from "./postgres-database";
-
-interface ConversationRow {
-  readonly id: string;
-  readonly title: string | null;
-  readonly created_at: string | Date;
-  readonly updated_at: string | Date;
-}
 
 export class PostgresConversationRepository implements ConversationRepository {
   constructor(private readonly sql: PostgresDatabase) {}
@@ -22,7 +17,7 @@ export class PostgresConversationRepository implements ConversationRepository {
         returning id, title, created_at, updated_at
       `;
 
-      return mapRow(rows[0], StoreOperation.Persist);
+      return mapConversationRow(rows[0], StoreOperation.Persist);
     } catch (error) {
       return failure(new StoreError(EntityType.Conversation, StoreOperation.Persist, getErrorMessage(error)));
     }
@@ -42,7 +37,7 @@ export class PostgresConversationRepository implements ConversationRepository {
         return failure(new NotFoundError(EntityType.Conversation, conversationId));
       }
 
-      return mapRow(row, StoreOperation.Read);
+      return mapConversationRow(row, StoreOperation.Read);
     } catch (error) {
       return failure(new StoreError(EntityType.Conversation, StoreOperation.Read, getErrorMessage(error)));
     }
@@ -59,19 +54,7 @@ export class PostgresConversationRepository implements ConversationRepository {
         offset ${offset}
       `;
 
-      const conversations: Conversation[] = [];
-
-      for (const row of rows) {
-        const conversationResult = mapRow(row, StoreOperation.ReadPage);
-
-        if (!conversationResult.ok) {
-          return conversationResult;
-        }
-
-        conversations.push(conversationResult.value);
-      }
-
-      return success(conversations);
+      return mapConversationRows(rows, StoreOperation.ReadPage);
     } catch (error) {
       return failure(new StoreError(EntityType.Conversation, StoreOperation.ReadPage, getErrorMessage(error)));
     }
@@ -97,7 +80,7 @@ export class PostgresConversationRepository implements ConversationRepository {
         return failure(new NotFoundError(EntityType.Conversation, request.conversationId));
       }
 
-      return mapRow(row, StoreOperation.Update);
+      return mapConversationRow(row, StoreOperation.Update);
     } catch (error) {
       return failure(new StoreError(EntityType.Conversation, StoreOperation.Update, getErrorMessage(error)));
     }
@@ -115,28 +98,4 @@ export class PostgresConversationRepository implements ConversationRepository {
       return failure(new StoreError(EntityType.Conversation, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
-}
-
-function mapRow(row: ConversationRow | undefined, operation: StoreOperation): Result<Conversation, StoreError> {
-  if (!row) {
-    return failure(new StoreError(EntityType.Conversation, operation, "Conversation row was not returned."));
-  }
-
-  try {
-    return success(new Conversation(row.id, row.title, toDate(row.created_at), toDate(row.updated_at)));
-  } catch (error) {
-    if (error instanceof Error) {
-      return failure(new StoreError(EntityType.Conversation, operation, error.message));
-    }
-
-    return failure(new StoreError(EntityType.Conversation, operation, "Unexpected conversation mapping error."));
-  }
-}
-
-function toDate(value: string | Date): Date {
-  return value instanceof Date ? value : new Date(value);
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unexpected database error.";
 }

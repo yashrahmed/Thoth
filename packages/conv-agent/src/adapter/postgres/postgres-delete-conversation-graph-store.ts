@@ -1,6 +1,7 @@
 import type { DeleteConversationGraphStore, DeletedConversationGraph } from "../../domain/contracts/delete-conversation-graph-store";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
+import { getErrorMessage } from "../common/errors";
 import type { PostgresDatabase } from "./postgres-database";
 
 interface CanonicalUrlRow {
@@ -48,8 +49,4 @@ export class PostgresDeleteConversationGraphStore implements DeleteConversationG
       return failure(new StoreError(EntityType.Conversation, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unexpected database error.";
 }

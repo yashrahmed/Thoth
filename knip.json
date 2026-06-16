@@ -18,6 +18,9 @@
     },
     "packages/web": {
       "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/web-expr": {
+      "project": ["src/**/*.{ts,tsx}"]
     }
   }
 }

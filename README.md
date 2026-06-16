@@ -8,7 +8,8 @@ A fake ChatGPT which will do great things one day...but not today.
 thoth/
 ├── packages/
 │   ├── conv-agent/      # Conversation backend, deployed as a Cloudflare Worker
-│   └── web/             # React + Vite web app
+│   ├── web/             # React + Vite web app
+│   └── web-expr/        # React + Vite UI experiment workspace
 ├── deployment/          # local + dev deploy scripts, wrangler configs, docker-compose, system-test runner
 └── docs/                # Architecture and design docs
 ```

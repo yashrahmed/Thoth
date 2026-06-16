@@ -38,10 +38,6 @@
         "wrangler": "^4.0.0",
       },
     },
-    "packages/mobile": {
-      "name": "@thoth/mobile",
-      "version": "0.0.1",
-    },
     "packages/web": {
       "name": "@thoth/web",
       "version": "0.0.1",
@@ -562,8 +558,6 @@
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
     "@thoth/conv-agent": ["@thoth/conv-agent@workspace:packages/conv-agent"],
-
-    "@thoth/mobile": ["@thoth/mobile@workspace:packages/mobile"],
 
     "@thoth/web": ["@thoth/web@workspace:packages/web"],
 

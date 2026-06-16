@@ -8,8 +8,7 @@ A fake ChatGPT which will do great things one day...but not today.
 thoth/
 ├── packages/
 │   ├── conv-agent/      # Conversation backend, deployed as a Cloudflare Worker
-│   ├── web/             # React + Vite web app
-│   └── mobile/          # React Native scaffold (placeholder)
+│   └── web/             # React + Vite web app
 ├── deployment/          # local + dev deploy scripts, wrangler configs, docker-compose, system-test runner
 └── docs/                # Architecture and design docs
 ```
@@ -53,7 +52,6 @@ safe.
 | Database        | Postgres (+ pgvector image), via `postgres.js` fronted by Hyperdrive |
 | Blob storage    | Cloudflare R2 over the S3 protocol; MinIO locally                    |
 | Web             | React 19 + Vite                                                      |
-| Mobile          | React Native (scaffold only)                                         |
 | Architecture    | Hexagonal + DDD                                                      |
 | Monorepo        | Bun workspaces                                                       |
 

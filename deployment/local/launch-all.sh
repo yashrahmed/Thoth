@@ -261,6 +261,8 @@ stop_worker() {
 }
 
 wait_for_dependencies() {
+  wait_for_postgres
+
   attempts=0
 
   while ! curl -sS -o /dev/null -f "$MINIO_ENDPOINT/minio/health/live" 2>/dev/null; do
@@ -275,6 +277,34 @@ wait_for_dependencies() {
   done
 
   wait_for_minio_setup
+}
+
+wait_for_postgres() {
+  attempts=0
+
+  while [ "$attempts" -lt 60 ]; do
+    postgres_state="$(docker inspect thoth-postgres-local --format '{{.State.Status}}' 2>/dev/null || true)"
+
+    case "$postgres_state" in
+      running)
+        if docker exec thoth-postgres-local sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
+          return 0
+        fi
+        ;;
+      exited|dead)
+        echo "Postgres failed with state: $postgres_state" >&2
+        docker logs thoth-postgres-local >&2 || true
+        exit 1
+        ;;
+    esac
+
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  echo "Postgres did not become ready in time." >&2
+  docker logs thoth-postgres-local >&2 || true
+  exit 1
 }
 
 wait_for_minio_setup() {

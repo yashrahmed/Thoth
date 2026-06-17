@@ -26,6 +26,9 @@
 - Context compaction support.
 - [Experimental] In-context RAG for long conversations to improve completion time.
 - [Experimental] Talking forms.
+- More MCP integration.
+  - Calorie tracker.
+  - Google Calendar and email integration.
 
 ## Performance Improvements
 - Cloudflare-hosted inference, Workers AI / AI Gateway:

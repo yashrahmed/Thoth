@@ -5,15 +5,16 @@
     - Complete React Tutorial.
     - Complete React Native tutorial.
     - Learn some basic graphic design.
+        - Complete [UI Design Bootcamp. Master Typography, Colour & Grids](https://www.udemy.com/course/ui-design-bootcamp-master-typography-colour-grids/).
+        - Review [Design Arena leaderboard](https://www.designarena.ai/leaderboard) for UI design agent benchmarks.
     - Resdesign the UI to make it appealing.
 - Tech Debt
   - Improve logging (Add structured logs).
   - Try implementing PKCE + local UI launch.
   - Timestamps on tool messages?
   - Figure out a way around repeated signing, defaulting to base64?
-- Search and MCP integration.
-  - Utility API integration, for example with Groot API reverse engineering.
-  - Search support.
+- MCP integration.
+  - Brave search API.
 
 ### Future versions.
 - User management.
@@ -25,8 +26,9 @@
 - Completion streaming.
 - Context compaction support.
 - [Experimental] In-context RAG for long conversations to improve completion time.
-- [Experimental] Talking forms.
-- More MCP integration.
+- MCP plugin support.
+- More App integration (Talking forms) + [A2UI](https://a2ui.org/#specification-versions).
+  - Groot next pickup date.
   - Calorie tracker.
   - Google Calendar and email integration.
 

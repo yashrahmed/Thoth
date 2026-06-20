@@ -1,9 +1,9 @@
 ## Goals - [Career - Building great agent UX] - Thoth 2.
 
-
 ## Next Steps
 ### Thoth 2
 - Move graph attributes into a different table - Simplify the design!!
+  - Think about support for miscellaneous messages like compactions, model changes etc.
 - Check CF models + Chinese models on OpenRouter for faster completions.
 - Build the Graph UI.
     - Complete React Tutorial.

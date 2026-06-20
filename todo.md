@@ -1,6 +1,10 @@
-## Next Steps
+## Goals - [Career - Building great agent UX] - Thoth 2.
 
+
+## Next Steps
 ### Thoth 2
+- Move graph attributes into a different table - Simplify the design!!
+- Check CF models + Chinese models on OpenRouter for faster completions.
 - Build the Graph UI.
     - Complete React Tutorial.
     - Complete React Native tutorial.
@@ -26,7 +30,8 @@
 - Completion streaming.
 - Context compaction support.
 - [Experimental] In-context RAG for long conversations to improve completion time.
-- MCP plugin support.
+- Special plugin support.
+  - See [SpatialClaw](https://spatialclaw.github.io/?linkId=100000426730902)
 - More App integration (Talking forms) + [A2UI](https://a2ui.org/#specification-versions).
   - Groot next pickup date.
   - Calorie tracker.

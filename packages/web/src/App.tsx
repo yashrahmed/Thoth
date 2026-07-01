@@ -58,6 +58,13 @@ type MessagePageResponse = {
   readonly pageSize: number;
 };
 
+type CompletionResponse = {
+  readonly messages: ReadonlyArray<{
+    readonly type: ChatMessage["type"];
+    readonly content: string;
+  }>;
+};
+
 const THOTH_API_URL = import.meta.env.VITE_THOTH_API_URL?.trim() || "/api/v1";
 const THOTH_PROFILE = import.meta.env.VITE_THOTH_PROFILE?.trim() || "local";
 const MESSAGE_PAGE_SIZE = 50;
@@ -482,18 +489,43 @@ function ConversationApp() {
       setDraft("");
       setSelectedFiles([]);
 
-      // The reply slot is declared explicitly: first child of the message that
-      // was just appended. Retrying this request is safe — a duplicate run is
-      // dropped server-side when the position is already occupied.
+      // Completions are side-effect free: the service returns the reply
+      // messages and this client appends them explicitly. Each message is
+      // chained as the first child of the previous one, so retrying an append
+      // collides with the occupied position instead of duplicating the reply.
       const completionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/request-completion`), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ parentMessageId: appendedMessage.id, appendPosition: 1 }),
+        body: JSON.stringify({ parentMessageId: appendedMessage.id }),
       });
 
       if (!completionResponse.ok) {
         throw new Error(`Message was saved, but the completion request failed with ${completionResponse.status}.`);
       }
+
+      const completion = (await completionResponse.json()) as CompletionResponse;
+      let completionParentId = appendedMessage.id;
+
+      for (const completionMessage of completion.messages) {
+        const completionFormData = new FormData();
+
+        completionFormData.set("type", completionMessage.type);
+        completionFormData.set("content", completionMessage.content);
+        completionFormData.set("appendPosition", "1");
+        completionFormData.set("parentMessageId", completionParentId);
+
+        const appendCompletionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/append-direct`), {
+          method: "POST",
+          body: completionFormData,
+        });
+
+        if (!appendCompletionResponse.ok) {
+          throw new Error(`Completion was generated, but appending it failed with ${appendCompletionResponse.status}.`);
+        }
+
+        completionParentId = ((await appendCompletionResponse.json()) as { readonly id: string }).id;
+      }
+
       await loadConversations({ quiet: true });
       await loadMessages(conversationId, { quiet: true });
     } catch (caughtError) {

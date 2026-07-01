@@ -7,8 +7,6 @@ const BASE_URL = process.env.CONV_AGENT_URL ?? "http://127.0.0.1:3001";
 const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID;
 const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET;
 const IMAGE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "resources/lambo.jpg");
-const COMPLETION_TIMEOUT_MS = 30_000;
-const COMPLETION_POLL_INTERVAL_MS = 200;
 
 // Dev: send the Access service-token headers so Cloudflare Access mints a JWT
 // and forwards it to conv-agent.
@@ -48,6 +46,10 @@ interface ConversationItem {
   readonly title: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+interface CompletionResponseBody {
+  readonly messages: ReadonlyArray<{ readonly type: MessageType; readonly content: string }>;
 }
 
 describe("conv-agent HTTP system test", () => {
@@ -291,7 +293,7 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 
-  test("requested completion lands as a child of the selected branch input", async () => {
+  test("returns a completion for the selected branch input that the client appends", async () => {
     let conversationId: string | undefined;
 
     try {
@@ -342,11 +344,18 @@ describe("conv-agent HTTP system test", () => {
       expect(appendedInput.childCount).toBe(0);
       assertInternalMessageFieldsHidden(appendedInput);
 
-      const completionResponse = await requestCompletion(conversationId, appendedInput.id, 1);
+      const completionResponse = await requestCompletion(conversationId, appendedInput.id);
 
-      expect(completionResponse.status).toBe(202);
+      expect(completionResponse.status).toBe(200);
 
-      await waitForAssistantReply(conversationId);
+      const completion = (await completionResponse.json()) as CompletionResponseBody;
+
+      expect(completion.messages.length).toBeGreaterThan(0);
+      expect(completion.messages[0]?.type).toBe("assistant");
+
+      // The completion is not persisted by the service: appending the reply at
+      // position 1 below only succeeds because the slot is still empty.
+      await appendCompletionMessages(conversationId, appendedInput.id, completion.messages);
 
       const page = await fetchPage(conversationId, 1, 50);
       const branchInput = page.items.find((item) => item.content === branchInputContent);
@@ -361,66 +370,7 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 
-  test("appends to two conversations back-to-back and both receive completions", async () => {
-    let firstConversationId: string | undefined;
-    let secondConversationId: string | undefined;
-
-    try {
-      const firstCreate = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
-      expect(firstCreate.status).toBe(201);
-      firstConversationId = ((await firstCreate.json()) as { readonly id: string }).id;
-
-      const firstAppend = await fetch(`${BASE_URL}/conversations/${firstConversationId}/append-direct`, {
-        method: "POST",
-        headers: AUTH_HEADERS,
-        body: buildUserMessageFormData("Reply with a short greeting on conversation A.", { appendPosition: 1 }),
-      });
-
-      expect(firstAppend.status).toBe(201);
-
-      const firstMessage = (await firstAppend.json()) as MessageItem;
-      const firstCompletion = await requestCompletion(firstConversationId, firstMessage.id, 1);
-
-      expect(firstCompletion.status).toBe(202);
-
-      // Immediately switch to a second conversation and append before A's completion lands.
-      const secondCreate = await fetch(`${BASE_URL}/conversations`, { method: "POST", headers: AUTH_HEADERS });
-      expect(secondCreate.status).toBe(201);
-      secondConversationId = ((await secondCreate.json()) as { readonly id: string }).id;
-
-      const secondAppend = await fetch(`${BASE_URL}/conversations/${secondConversationId}/append-direct`, {
-        method: "POST",
-        headers: AUTH_HEADERS,
-        body: buildUserMessageFormData("Reply with a short greeting on conversation B.", { appendPosition: 1 }),
-      });
-
-      expect(secondAppend.status).toBe(201);
-
-      const secondMessage = (await secondAppend.json()) as MessageItem;
-      const secondCompletion = await requestCompletion(secondConversationId, secondMessage.id, 1);
-
-      expect(secondCompletion.status).toBe(202);
-
-      // Both conversations must end up with an assistant reply.
-      await waitForAssistantReply(secondConversationId);
-      await waitForAssistantReply(firstConversationId);
-
-      const firstPage = await fetchPage(firstConversationId, 1, 50);
-      const secondPage = await fetchPage(secondConversationId, 1, 50);
-
-      expect(firstPage.items.some((item) => item.type === "assistant")).toBe(true);
-      expect(secondPage.items.some((item) => item.type === "assistant")).toBe(true);
-    } finally {
-      if (firstConversationId) {
-        await fetch(`${BASE_URL}/conversations/${firstConversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
-      }
-      if (secondConversationId) {
-        await fetch(`${BASE_URL}/conversations/${secondConversationId}`, { method: "DELETE", headers: AUTH_HEADERS });
-      }
-    }
-  });
-
-  test("duplicate completion requests for the same position collapse onto one reply", async () => {
+  test("duplicate completion appends for the same position collapse onto one reply", async () => {
     let conversationId: string | undefined;
 
     try {
@@ -439,15 +389,44 @@ describe("conv-agent HTTP system test", () => {
 
       const userMessage = (await appendResponse.json()) as MessageItem;
 
-      const [firstCompletion, secondCompletion] = await Promise.all([requestCompletion(conversationId, userMessage.id, 1), requestCompletion(conversationId, userMessage.id, 1)]);
+      // Completions are side-effect free, so requesting twice simply yields
+      // two candidate replies.
+      const [firstCompletion, secondCompletion] = await Promise.all([requestCompletion(conversationId, userMessage.id), requestCompletion(conversationId, userMessage.id)]);
 
-      expect(firstCompletion.status).toBe(202);
-      expect(secondCompletion.status).toBe(202);
+      expect(firstCompletion.status).toBe(200);
+      expect(secondCompletion.status).toBe(200);
 
-      await waitForAssistantReply(conversationId);
+      const firstBody = (await firstCompletion.json()) as CompletionResponseBody;
+      const secondBody = (await secondCompletion.json()) as CompletionResponseBody;
 
-      // Both runs target position 1 under the user message; the loser is
-      // dropped by the append store, so exactly one child may exist.
+      expect(firstBody.messages.length).toBeGreaterThan(0);
+      expect(secondBody.messages.length).toBeGreaterThan(0);
+
+      // Idempotency now lives at the append step: both replies target position
+      // 1 under the user message, and the store rejects the second append.
+      const firstAppend = await appendMessage(conversationId, {
+        type: "assistant",
+        content: firstBody.messages[0]?.content ?? "",
+        parentMessageId: userMessage.id,
+        appendPosition: 1,
+      });
+
+      expect(firstAppend.status).toBe(201);
+
+      const secondAppend = await appendMessage(conversationId, {
+        type: "assistant",
+        content: secondBody.messages[0]?.content ?? "",
+        parentMessageId: userMessage.id,
+        appendPosition: 1,
+      });
+
+      expect(secondAppend.status).toBe(400);
+
+      const secondAppendBody = (await secondAppend.json()) as { readonly error: { readonly kind: string; readonly fieldName: string } };
+
+      expect(secondAppendBody.error.kind).toBe("ValidationError");
+      expect(secondAppendBody.error.fieldName).toBe("appendPosition");
+
       const page = await fetchPage(conversationId, 1, 50);
       const updatedUserMessage = page.items.find((item) => item.id === userMessage.id);
 
@@ -492,7 +471,7 @@ describe("conv-agent HTTP system test", () => {
       expect(assistantAppend.status).toBe(201);
 
       const assistantMessage = (await assistantAppend.json()) as MessageItem;
-      const completionResponse = await requestCompletion(conversationId, assistantMessage.id, 1);
+      const completionResponse = await requestCompletion(conversationId, assistantMessage.id);
 
       expect(completionResponse.status).toBe(400);
 
@@ -507,7 +486,7 @@ describe("conv-agent HTTP system test", () => {
     }
   });
 
-  test("posts a single user message and receives an assistant completion reply", async () => {
+  test("posts a single user message, requests a completion, and appends the assistant reply", async () => {
     let conversationId: string | undefined;
 
     try {
@@ -538,11 +517,17 @@ describe("conv-agent HTTP system test", () => {
       expect(appendedUserMessage.childCount).toBe(0);
       assertInternalMessageFieldsHidden(appendedUserMessage);
 
-      const completionResponse = await requestCompletion(conversationId, appendedUserMessage.id, 1);
+      const completionResponse = await requestCompletion(conversationId, appendedUserMessage.id);
 
-      expect(completionResponse.status).toBe(202);
+      expect(completionResponse.status).toBe(200);
 
-      await waitForAssistantReply(conversationId);
+      const completion = (await completionResponse.json()) as CompletionResponseBody;
+
+      expect(completion.messages.length).toBeGreaterThan(0);
+      expect(completion.messages[0]?.type).toBe("assistant");
+      expect(completion.messages[0]?.content.length).toBeGreaterThan(0);
+
+      await appendCompletionMessages(conversationId, appendedUserMessage.id, completion.messages);
 
       const page = await fetchPage(conversationId, 1, 50);
       const userMessage = page.items.find((item) => item.type === "user");
@@ -561,15 +546,54 @@ describe("conv-agent HTTP system test", () => {
   });
 });
 
-function requestCompletion(conversationId: string, parentMessageId: string, appendPosition: number): Promise<Response> {
+function requestCompletion(conversationId: string, parentMessageId: string): Promise<Response> {
   return fetch(`${BASE_URL}/conversations/${conversationId}/request-completion`, {
     method: "POST",
     headers: {
       ...AUTH_HEADERS,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ parentMessageId, appendPosition }),
+    body: JSON.stringify({ parentMessageId }),
   });
+}
+
+function appendMessage(
+  conversationId: string,
+  message: { readonly type: MessageType; readonly content: string; readonly parentMessageId: string | null; readonly appendPosition: number },
+): Promise<Response> {
+  const formData = new FormData();
+  formData.set("type", message.type);
+  formData.set("content", message.content);
+  formData.set("appendPosition", String(message.appendPosition));
+
+  if (message.parentMessageId) {
+    formData.set("parentMessageId", message.parentMessageId);
+  }
+
+  return fetch(`${BASE_URL}/conversations/${conversationId}/append-direct`, {
+    method: "POST",
+    headers: AUTH_HEADERS,
+    body: formData,
+  });
+}
+
+// Appends the completion messages returned by /request-completion, chaining
+// each message under the previous one starting from the parent message.
+async function appendCompletionMessages(conversationId: string, parentMessageId: string, messages: CompletionResponseBody["messages"]): Promise<void> {
+  let currentParentId = parentMessageId;
+
+  for (const message of messages) {
+    const appendResponse = await appendMessage(conversationId, {
+      type: message.type,
+      content: message.content,
+      parentMessageId: currentParentId,
+      appendPosition: 1,
+    });
+
+    expect(appendResponse.status).toBe(201);
+
+    currentParentId = ((await appendResponse.json()) as MessageItem).id;
+  }
 }
 
 function buildUserMessageFormData(content: string, options: { readonly parentMessageId?: string | null; readonly appendPosition: number }): FormData {
@@ -606,35 +630,6 @@ async function fetchPage(conversationId: string, pageNum: number, pageSize: numb
   expect(response.status).toBe(200);
 
   return (await response.json()) as MessagePage;
-}
-
-// Polling can read the conversation many times before background completion
-// lands. Validate bad HTTP responses without incrementing Bun's assertion
-// count on every retry.
-async function fetchPageForPolling(conversationId: string, pageNum: number, pageSize: number): Promise<MessagePage> {
-  const response = await fetch(`${BASE_URL}/conversations/${conversationId}/chat?pageNum=${pageNum}&pageSize=${pageSize}`, { headers: AUTH_HEADERS });
-
-  if (response.status !== 200) {
-    throw new Error(`Expected conversation page fetch to return 200 while polling, received ${response.status}.`);
-  }
-
-  return (await response.json()) as MessagePage;
-}
-
-async function waitForAssistantReply(conversationId: string): Promise<void> {
-  const deadline = Date.now() + COMPLETION_TIMEOUT_MS;
-
-  while (Date.now() < deadline) {
-    const page = await fetchPageForPolling(conversationId, 1, 50);
-
-    if (page.items.some((item) => item.type === "assistant")) {
-      return;
-    }
-
-    await new Promise((resolveSleep) => setTimeout(resolveSleep, COMPLETION_POLL_INTERVAL_MS));
-  }
-
-  throw new Error(`Timed out waiting for assistant reply on conversation ${conversationId}.`);
 }
 
 function assertUserMessages(items: ReadonlyArray<MessageItem>, conversationId: string, startSequence: number, imageSize: number, totalMessages: number): void {

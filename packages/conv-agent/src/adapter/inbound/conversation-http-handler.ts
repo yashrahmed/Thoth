@@ -41,7 +41,15 @@ type HandlerError =
       readonly entityType?: string;
       readonly id?: string;
       readonly operation?: string;
+      readonly code?: string;
     };
+
+// Provider error messages can contain internal detail, so LlmError responses
+// carry a generic message keyed by the error code instead.
+const LLM_ERROR_MESSAGE_BY_CODE: Record<string, string> = {
+  timeout: "The assistant timed out while generating a reply. Please try again.",
+  other: "The assistant could not generate a reply. Please try again.",
+};
 
 type ApplicationMessageType = ApplicationAppendMessageRequest["type"];
 type ApplicationContent = ApplicationAppendMessageRequest["content"];
@@ -201,6 +209,9 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     return c.json(MessageResponse.fromMessageWithFiles(result.value), 201);
   });
 
+  // Runs the completion and returns the resulting messages without persisting
+  // them. Clients that want the completion in the conversation append it
+  // explicitly via /append-direct.
   app.post("/conversations/:id/request-completion", async (c) => {
     const conversationId = c.req.param("id");
     const completionRequestResult = await parseRequestCompletionRequest(c.req.raw, conversationId);
@@ -215,7 +226,7 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
       return mapError(c, result.error);
     }
 
-    return c.json({ status: "accepted" }, 202);
+    return c.json({ messages: result.value.map((message) => ({ type: message.type, content: message.content })) }, 200);
   });
 
   app.get("/conversations/:id/chat", async (c) => {
@@ -305,10 +316,7 @@ async function parseUpdateConversationRequest(req: Request, conversationId: stri
   };
 }
 
-async function parseRequestCompletionRequest(
-  req: Request,
-  conversationId: string,
-): Promise<TransportResult<{ readonly conversationId: string; readonly parentMessageId: string; readonly appendPosition: number }>> {
+async function parseRequestCompletionRequest(req: Request, conversationId: string): Promise<TransportResult<{ readonly conversationId: string; readonly parentMessageId: string }>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
@@ -331,16 +339,11 @@ async function parseRequestCompletionRequest(
     return transportFailure("parentMessageId", "parentMessageId must be a non-empty string.");
   }
 
-  if (typeof body.appendPosition !== "number" || !Number.isInteger(body.appendPosition) || body.appendPosition <= 0) {
-    return transportFailure("appendPosition", "appendPosition must be a positive integer.");
-  }
-
   return {
     ok: true,
     value: {
       conversationId,
       parentMessageId: body.parentMessageId.trim(),
-      appendPosition: body.appendPosition,
     },
   };
 }
@@ -352,6 +355,23 @@ function mapError(c: { json: (data: unknown, status: number) => Response }, erro
 
   if (error.kind === "NotFoundError") {
     return c.json({ error }, 404);
+  }
+
+  if (error.kind === "LlmError") {
+    console.error("[conv-agent] LLM completion failed", error);
+
+    const code = error.code ?? "other";
+
+    return c.json(
+      {
+        error: {
+          kind: "LlmError",
+          code,
+          message: LLM_ERROR_MESSAGE_BY_CODE[code] ?? LLM_ERROR_MESSAGE_BY_CODE.other,
+        },
+      },
+      502,
+    );
   }
 
   console.error("[conv-agent] request failed", error);

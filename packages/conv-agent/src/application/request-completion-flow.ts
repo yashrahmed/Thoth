@@ -1,37 +1,34 @@
-import type { LLMCompletionRunService } from "../domain/contracts/llm-completion-run-service";
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { GenericValidationService } from "../domain/services/generic-validation-service";
+import type { LlmCompletionDomainService } from "../domain/services/llm-completion-domain-service";
 import type { MessageDomainService } from "../domain/services/message-domain-service";
-import { LLMMessageType } from "../domain/objects/llm";
-import { ValidationError, type NotFoundError, type StoreError } from "../domain/objects/errors";
-import { failure, firstFailure, success, type Result } from "../domain/objects/result";
+import { LLMMessageType, type LlmCompletionMessage } from "../domain/objects/llm";
+import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
+import { failure, firstFailure, type Result } from "../domain/objects/result";
 
 interface RequestCompletionRequest {
   readonly conversationId: string;
   readonly parentMessageId: string;
-  readonly appendPosition: number;
 }
 
 /**
- * Validates a completion request and schedules the LLM run. The caller names
- * the parent message and the child slot the reply must occupy, which makes
- * retries idempotent: a duplicate request targets an occupied position and the
- * run is dropped by the append store. The flow returns once the run is
- * scheduled; the reply lands asynchronously.
+ * Validates a completion request, runs the LLM over the ancestor chain of the
+ * parent message, and returns the completion messages to the caller. Nothing
+ * is persisted: the caller decides whether to add the completion to the
+ * conversation by appending it explicitly.
  */
 export class RequestCompletionFlow {
   constructor(
     private readonly conversationDomainService: ConversationDomainService,
     private readonly messageDomainService: MessageDomainService,
     private readonly genericValidationService: GenericValidationService,
-    private readonly llmCompletionRunService: LLMCompletionRunService,
+    private readonly llmCompletionDomainService: LlmCompletionDomainService,
   ) {}
 
-  async execute(request: RequestCompletionRequest): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
+  async execute(request: RequestCompletionRequest): Promise<Result<LlmCompletionMessage[], ValidationError | NotFoundError | StoreError | LlmError>> {
     const validationResult = firstFailure(
       this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
       this.genericValidationService.requireNonEmptyString(request.parentMessageId, "parentMessageId"),
-      this.genericValidationService.requirePositiveInteger(request.appendPosition, "appendPosition"),
     );
 
     if (!validationResult.ok) {
@@ -54,12 +51,9 @@ export class RequestCompletionFlow {
       return failure(new ValidationError("parentMessageId", `parentMessageId must reference a user message; received ${parentMessageResult.value.type}.`));
     }
 
-    this.llmCompletionRunService.run({
+    return this.llmCompletionDomainService.complete({
       conversationId: request.conversationId,
-      parentMessageId: request.parentMessageId,
-      appendPosition: request.appendPosition,
+      messageId: request.parentMessageId,
     });
-
-    return success(undefined);
   }
 }

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { failure } from "../../domain/objects/result";
-import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
+import { failure, success } from "../../domain/objects/result";
+import { EntityType, LlmError, StoreError, StoreOperation } from "../../domain/objects/errors";
+import { LLMMessageType } from "../../domain/objects/llm";
 import { createConversationHttpHandler } from "./conversation-http-handler";
 
 describe("createConversationHttpHandler", () => {
@@ -55,6 +56,57 @@ describe("createConversationHttpHandler", () => {
       },
     });
     expect(JSON.stringify(body)).not.toContain("relation conversations");
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  test("returns the completion messages without appending them", async () => {
+    const execute = mock(async () => success([{ type: LLMMessageType.Assistant, content: "Hello there." }]));
+    const handler = createConversationHttpHandler(buildDeps({ requestCompletion: { execute } }));
+
+    const response = await handler(
+      new Request("http://localhost/conversations/conversation-1/request-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parentMessageId: "message-1" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      messages: [{ type: "assistant", content: "Hello there." }],
+    });
+    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", parentMessageId: "message-1" });
+  });
+
+  test("returns a generic 502 response when the completion fails at the LLM", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => undefined);
+    const handler = createConversationHttpHandler(
+      buildDeps({
+        requestCompletion: {
+          execute: async () => failure(new LlmError("provider secret detail leaked here", "timeout")),
+        },
+      }),
+    );
+
+    const response = await handler(
+      new Request("http://localhost/conversations/conversation-1/request-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parentMessageId: "message-1" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(body).toEqual({
+      error: {
+        kind: "LlmError",
+        code: "timeout",
+        message: "The assistant timed out while generating a reply. Please try again.",
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("provider secret detail");
     expect(errorSpy).toHaveBeenCalled();
   });
 });

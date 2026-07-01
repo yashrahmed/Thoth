@@ -13,7 +13,7 @@ import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-
 import { GeminiLlmAdapter } from "../adapter/llm/gemini-llm-adapter";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import { AppendMessageToConversationFlow } from "../application/append-message-to-conversation-flow";
-import { BackgroundLLMCompletionRunService } from "../domain/services/background-llm-completion-run-service";
+import { LlmCompletionDomainService } from "../domain/services/llm-completion-domain-service";
 import { CreateConversationFlow } from "../application/create-conversation-flow";
 import { RequestCompletionFlow } from "../application/request-completion-flow";
 import { DeleteConversationFlow } from "../application/delete-conversation-flow";
@@ -112,32 +112,8 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     gemini: new GeminiLlmAdapter(googleLlmConfig),
   };
 
-  // Collect background tasks (e.g. LLM completion) here. The worker registers a
-  // single ctx.waitUntil(shutdown()) so all background work finishes before the
-  // shared postgres connection is closed. Tradeoff vs the prior queue: no retry,
-  // no DLQ. Completions can be lost if the isolate is evicted before shutdown.
-  const pendingBackgroundTasks: Promise<unknown>[] = [];
-  const scheduleBackgroundTask = (task: Promise<unknown>): void => {
-    pendingBackgroundTasks.push(
-      task.catch((error: unknown) => {
-        console.error("[conv-agent] unhandled background task rejection", error);
-      }),
-    );
-  };
-
-  const backgroundCompletionRunService = new BackgroundLLMCompletionRunService(
-    messageDomainService,
-    fileDomainService,
-    fileAccessDomainService,
-    llmAdapters.gemini,
-    appendUserMessageDomainService,
-    llmPromptDomainService,
-    scheduleBackgroundTask,
-  );
+  const llmCompletionDomainService = new LlmCompletionDomainService(messageDomainService, fileDomainService, fileAccessDomainService, llmAdapters.gemini, llmPromptDomainService);
   const shutdown = async (): Promise<void> => {
-    if (pendingBackgroundTasks.length > 0) {
-      await Promise.allSettled(pendingBackgroundTasks);
-    }
     await database.end({ timeout: 5 });
   };
 
@@ -155,7 +131,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     updateConv: new UpdateConvFlow(conversationDomainService),
     deleteConversation: new DeleteConversationFlow(deleteConversationGraphDomainService, blobDomainService),
     appendMessage: new AppendMessageToConversationFlow(conversationDomainService, appendUserMessageDomainService, messageDomainService, fileDomainService),
-    requestCompletion: new RequestCompletionFlow(conversationDomainService, messageDomainService, genericValidationService, backgroundCompletionRunService),
+    requestCompletion: new RequestCompletionFlow(conversationDomainService, messageDomainService, genericValidationService, llmCompletionDomainService),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });
 

@@ -1,4 +1,4 @@
-import type { DeleteConversationGraphStore, DeletedConversationGraph } from "../../domain/contracts/delete-conversation-graph-store";
+import type { DeleteConversationStore, DeletedConversation } from "../../domain/contracts/delete-conversation-store";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import { getErrorMessage } from "../common/errors";
@@ -8,12 +8,12 @@ interface CanonicalUrlRow {
   readonly canonical_url: string;
 }
 
-export class PostgresDeleteConversationGraphStore implements DeleteConversationGraphStore {
+export class PostgresDeleteConversationStore implements DeleteConversationStore {
   constructor(private readonly sql: PostgresDatabase) {}
 
-  async deleteConversationGraph(conversationId: string): Promise<Result<DeletedConversationGraph, NotFoundError | StoreError>> {
+  async deleteConversation(conversationId: string): Promise<Result<DeletedConversation, NotFoundError | StoreError>> {
     try {
-      const deletedGraph = await this.sql.begin(async (tx) => {
+      const deletedConversation = await this.sql.begin(async (tx) => {
         const sql = tx as unknown as PostgresDatabase;
         const lockedConversationRows = await sql<{ id: string }[]>`
           select id
@@ -39,12 +39,12 @@ export class PostgresDeleteConversationGraphStore implements DeleteConversationG
           where id = ${conversationId}
         `;
 
-        return success<DeletedConversationGraph>({
+        return success<DeletedConversation>({
           canonicalUrls: canonicalUrlRows.map((row) => row.canonical_url),
         });
       });
 
-      return deletedGraph;
+      return deletedConversation;
     } catch (error) {
       return failure(new StoreError(EntityType.Conversation, StoreOperation.Remove, getErrorMessage(error)));
     }

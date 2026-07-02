@@ -14,38 +14,38 @@ import type { MessageDomainService } from "./message-domain-service";
 const CONVERSATION_ID = "conversation-1";
 const MESSAGE_ID = "message-3";
 const NOW = new Date("2026-06-04T01:30:00.000Z");
-const ANCESTOR_CHAIN = [
+const CONVERSATION_HISTORY = [
   new Message("message-1", CONVERSATION_ID, LLMMessageType.User, "What cars were in the report?", NOW, NOW),
   new Message("message-2", CONVERSATION_ID, LLMMessageType.Assistant, "The report covered two cars.", NOW, NOW),
   new Message(MESSAGE_ID, CONVERSATION_ID, LLMMessageType.User, "When was this report released?", NOW, NOW),
 ];
 
 describe("LlmCompletionDomainService", () => {
-  test("builds the prompt from the ancestor chain of the target message", async () => {
+  test("builds the prompt from the conversation history up to the target message", async () => {
     const harness = createHarness();
 
     await harness.service.complete({ conversationId: CONVERSATION_ID, messageId: MESSAGE_ID });
 
-    expect(harness.findAncestorChain).toHaveBeenCalledWith({ conversationId: CONVERSATION_ID, messageId: MESSAGE_ID });
+    expect(harness.findMessagesUpTo).toHaveBeenCalledWith({ conversationId: CONVERSATION_ID, messageId: MESSAGE_ID });
 
     const llmInput = harness.llmInputs[0];
 
     expect(llmInput).toBeDefined();
-    expect(llmInput).toHaveLength(ANCESTOR_CHAIN.length + 1);
+    expect(llmInput).toHaveLength(CONVERSATION_HISTORY.length + 1);
     expect(llmInput?.[0]?.type).toBe(LLMMessageType.System);
 
-    for (const [index, ancestor] of ANCESTOR_CHAIN.entries()) {
-      expect(llmInput?.[index + 1]?.type).toBe(ancestor.type);
-      expect(llmInput?.[index + 1]?.content).toContain(ancestor.content);
+    for (const [index, historyMessage] of CONVERSATION_HISTORY.entries()) {
+      expect(llmInput?.[index + 1]?.type).toBe(historyMessage.type);
+      expect(llmInput?.[index + 1]?.content).toContain(historyMessage.content);
     }
   });
 
-  test("requests files only for messages on the ancestor chain", async () => {
+  test("requests files only for messages in the prompt history", async () => {
     const harness = createHarness();
 
     await harness.service.complete({ conversationId: CONVERSATION_ID, messageId: MESSAGE_ID });
 
-    expect(harness.getFilesOnMessages).toHaveBeenCalledWith({ messageIds: ANCESTOR_CHAIN.map((message) => message.id) });
+    expect(harness.getFilesOnMessages).toHaveBeenCalledWith({ messageIds: CONVERSATION_HISTORY.map((message) => message.id) });
   });
 
   test("returns the completion messages without persisting anything", async () => {
@@ -110,7 +110,7 @@ describe("LlmCompletionDomainService", () => {
 function createHarness(request?: { readonly completionContent?: string; readonly llmResult?: Result<LlmCompletionResult, LlmError> }): {
   readonly service: LlmCompletionDomainService;
   readonly llmInputs: ReadonlyArray<LlmCompletionInputMessage>[];
-  readonly findAncestorChain: ReturnType<typeof mock>;
+  readonly findMessagesUpTo: ReturnType<typeof mock>;
   readonly getFilesOnMessages: ReturnType<typeof mock>;
 } {
   const llmInputs: ReadonlyArray<LlmCompletionInputMessage>[] = [];
@@ -121,12 +121,12 @@ function createHarness(request?: { readonly completionContent?: string; readonly
     },
   ];
 
-  const findAncestorChain = mock(() => Promise.resolve(success(ANCESTOR_CHAIN)));
+  const findMessagesUpTo = mock(() => Promise.resolve(success(CONVERSATION_HISTORY)));
   const getFilesOnMessages = mock(() => Promise.resolve(success([])));
 
   const service = new LlmCompletionDomainService(
     stub<MessageDomainService>({
-      findAncestorChain,
+      findMessagesUpTo,
     }),
     stub<FileDomainService>({
       getFilesOnMessages,
@@ -146,7 +146,7 @@ function createHarness(request?: { readonly completionContent?: string; readonly
   return {
     service,
     llmInputs,
-    findAncestorChain,
+    findMessagesUpTo,
     getFilesOnMessages,
   };
 }

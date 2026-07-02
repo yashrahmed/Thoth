@@ -43,9 +43,7 @@ type ChatFile = {
 type ChatMessage = {
   readonly id: string;
   readonly conversationId: string;
-  readonly parentMessageId: string | null;
   readonly type: "user" | "assistant" | "system" | "tool";
-  readonly childCount: number;
   readonly content: string;
   readonly files: ReadonlyArray<ChatFile>;
   readonly createdAt: string;
@@ -461,15 +459,9 @@ function ConversationApp() {
 
     try {
       const formData = new FormData();
-      const appendTarget = getAppendTarget(messages);
 
       formData.set("type", "user");
       formData.set("content", trimmedDraft);
-      formData.set("appendPosition", String(appendTarget.appendPosition));
-
-      if (appendTarget.parentMessageId !== null) {
-        formData.set("parentMessageId", appendTarget.parentMessageId);
-      }
 
       for (const file of selectedFiles) {
         formData.append("attachment", file);
@@ -489,49 +481,46 @@ function ConversationApp() {
       setDraft("");
       setSelectedFiles([]);
 
-      // Completions are side-effect free: the service returns the reply
-      // messages and this client appends them explicitly. Each message is
-      // chained as the first child of the previous one, so retrying an append
-      // collides with the occupied position instead of duplicating the reply.
-      const completionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/request-completion`), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ parentMessageId: appendedMessage.id }),
-      });
-
-      if (!completionResponse.ok) {
-        throw new Error(`Message was saved, but the completion request failed with ${completionResponse.status}.`);
-      }
-
-      const completion = (await completionResponse.json()) as CompletionResponse;
-      let completionParentId = appendedMessage.id;
-
-      for (const completionMessage of completion.messages) {
-        const completionFormData = new FormData();
-
-        completionFormData.set("type", completionMessage.type);
-        completionFormData.set("content", completionMessage.content);
-        completionFormData.set("appendPosition", "1");
-        completionFormData.set("parentMessageId", completionParentId);
-
-        const appendCompletionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${conversationId}/append-direct`), {
-          method: "POST",
-          body: completionFormData,
-        });
-
-        if (!appendCompletionResponse.ok) {
-          throw new Error(`Completion was generated, but appending it failed with ${appendCompletionResponse.status}.`);
-        }
-
-        completionParentId = ((await appendCompletionResponse.json()) as { readonly id: string }).id;
-      }
-
+      await requestAndAppendCompletion(conversationId, appendedMessage.id);
       await loadConversations({ quiet: true });
       await loadMessages(conversationId, { quiet: true });
     } catch (caughtError) {
       setComposerError(caughtError instanceof Error ? caughtError.message : "Unable to send the message.");
     } finally {
       setSending(false);
+    }
+  }
+
+  // Completions are side-effect free: the service returns the reply messages
+  // and this client appends them explicitly, in order, at the end of the
+  // conversation.
+  async function requestAndAppendCompletion(id: string, messageId: string): Promise<void> {
+    const completionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${id}/request-completion`), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messageId }),
+    });
+
+    if (!completionResponse.ok) {
+      throw new Error(`Message was saved, but the completion request failed with ${completionResponse.status}.`);
+    }
+
+    const completion = (await completionResponse.json()) as CompletionResponse;
+
+    for (const completionMessage of completion.messages) {
+      const completionFormData = new FormData();
+
+      completionFormData.set("type", completionMessage.type);
+      completionFormData.set("content", completionMessage.content);
+
+      const appendCompletionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${id}/append-direct`), {
+        method: "POST",
+        body: completionFormData,
+      });
+
+      if (!appendCompletionResponse.ok) {
+        throw new Error(`Completion was generated, but appending it failed with ${appendCompletionResponse.status}.`);
+      }
     }
   }
 
@@ -928,7 +917,6 @@ function MessageBubble(props: { readonly message: ChatMessage }) {
             <span>{isUserMessage ? "You" : "Assistant"}</span>
             <span style={bubbleTimestampStyle}>{formatMessageTimestamp(props.message.createdAt)}</span>
           </div>
-          <span>{props.message.childCount} children</span>
         </div>
         {props.message.content ? <p style={messageTextStyle}>{props.message.content}</p> : null}
         {props.message.files.length > 0 ? (
@@ -1029,19 +1017,6 @@ function StatusRow(props: { readonly label: string; readonly value: string; read
       <span style={props.mono ? statusValueMonoStyle : statusValueStyle}>{props.value}</span>
     </div>
   );
-}
-
-function getAppendTarget(messages: ReadonlyArray<ChatMessage>): { readonly parentMessageId: string | null; readonly appendPosition: number } {
-  const leafMessage = messages.at(-1);
-
-  if (!leafMessage) {
-    return { parentMessageId: null, appendPosition: 1 };
-  }
-
-  return {
-    parentMessageId: leafMessage.id,
-    appendPosition: leafMessage.childCount + 1,
-  };
 }
 
 function EmptyState(props: { readonly title: string; readonly body: string }) {

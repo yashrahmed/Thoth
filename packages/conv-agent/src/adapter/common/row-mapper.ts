@@ -14,8 +14,6 @@ export interface ConversationRow {
 export interface MessageRow {
   readonly id: string;
   readonly conversation_id: string;
-  readonly parent_message_id: string | null;
-  readonly child_count: number;
   readonly type: LLMMessageType;
   readonly content: string;
   readonly created_at: string | Date;
@@ -63,7 +61,7 @@ export function mapMessageRow(row: MessageRow | undefined, operation: StoreOpera
   }
 
   try {
-    return success(new Message(row.id, row.conversation_id, row.type, row.content, toDate(row.created_at), toDate(row.updated_at), row.parent_message_id, row.child_count));
+    return success(new Message(row.id, row.conversation_id, row.type, row.content, toDate(row.created_at), toDate(row.updated_at)));
   } catch (error) {
     if (error instanceof Error) {
       return failure(new StoreError(EntityType.Message, operation, error.message));

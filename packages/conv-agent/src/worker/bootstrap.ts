@@ -7,7 +7,7 @@ import { R2FileSignedUrlGenerator } from "../adapter/blob/r2-file-signed-url-gen
 import { PostgresAppendUserMessageStore } from "../adapter/postgres/postgres-append-user-message-store";
 import { PostgresConversationRepository } from "../adapter/postgres/postgres-conversation-repository";
 import { createPostgresDatabase } from "../adapter/postgres/postgres-database";
-import { PostgresDeleteConversationGraphStore } from "../adapter/postgres/postgres-delete-conversation-graph-store";
+import { PostgresDeleteConversationStore } from "../adapter/postgres/postgres-delete-conversation-store";
 import { PostgresFileRepository } from "../adapter/postgres/postgres-file-repository";
 import { PostgresMessageRepository } from "../adapter/postgres/postgres-message-repository";
 import { GeminiLlmAdapter } from "../adapter/llm/gemini-llm-adapter";
@@ -25,7 +25,7 @@ import type { AccessIdentityVerifier } from "../domain/contracts/access-identity
 import { AppendUserMessageDomainService } from "../domain/services/append-user-message-domain-service";
 import { BlobDomainService } from "../domain/services/blob-domain-service";
 import { ConversationDomainService } from "../domain/services/conversation-domain-service";
-import { DeleteConversationGraphDomainService } from "../domain/services/delete-conversation-graph-domain-service";
+import { DeleteConversationDomainService } from "../domain/services/delete-conversation-domain-service";
 import { FileAccessDomainService } from "../domain/services/file-access-domain-service";
 import { FileDomainService } from "../domain/services/file-domain-service";
 import { GenericValidationService } from "../domain/services/generic-validation-service";
@@ -94,12 +94,12 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const messageRepository = new PostgresMessageRepository(database);
   const fileRepository = new PostgresFileRepository(database);
   const appendUserMessageStore = new PostgresAppendUserMessageStore(database);
-  const deleteConversationGraphStore = new PostgresDeleteConversationGraphStore(database);
+  const deleteConversationStore = new PostgresDeleteConversationStore(database);
 
   const genericValidationService = new GenericValidationService();
   const conversationDomainService = new ConversationDomainService(conversationRepository, genericValidationService);
   const appendUserMessageDomainService = new AppendUserMessageDomainService(appendUserMessageStore);
-  const deleteConversationGraphDomainService = new DeleteConversationGraphDomainService(deleteConversationGraphStore);
+  const deleteConversationDomainService = new DeleteConversationDomainService(deleteConversationStore);
   const blobDomainService = new BlobDomainService(blobRepository, genericValidationService);
   const fileDomainService = new FileDomainService(fileRepository, blobDomainService, genericValidationService);
   const messageContentDomainService = new MessageContentDomainService(genericValidationService);
@@ -129,7 +129,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     getConversation: new GetConversationFlow(conversationDomainService),
     listConversations: new ListConversationsFlow(conversationDomainService, genericValidationService),
     updateConv: new UpdateConvFlow(conversationDomainService),
-    deleteConversation: new DeleteConversationFlow(deleteConversationGraphDomainService, blobDomainService),
+    deleteConversation: new DeleteConversationFlow(deleteConversationDomainService, blobDomainService),
     appendMessage: new AppendMessageToConversationFlow(conversationDomainService, appendUserMessageDomainService, messageDomainService, fileDomainService),
     requestCompletion: new RequestCompletionFlow(conversationDomainService, messageDomainService, genericValidationService, llmCompletionDomainService),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),

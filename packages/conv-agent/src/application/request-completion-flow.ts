@@ -8,14 +8,14 @@ import { failure, firstFailure, type Result } from "../domain/objects/result";
 
 interface RequestCompletionRequest {
   readonly conversationId: string;
-  readonly parentMessageId: string;
+  readonly messageId: string;
 }
 
 /**
- * Validates a completion request, runs the LLM over the ancestor chain of the
- * parent message, and returns the completion messages to the caller. Nothing
- * is persisted: the caller decides whether to add the completion to the
- * conversation by appending it explicitly.
+ * Validates a completion request, runs the LLM over the conversation history
+ * up to and including the target message, and returns the completion messages
+ * to the caller. Nothing is persisted: the caller decides whether to add the
+ * completion to the conversation by appending it explicitly.
  */
 export class RequestCompletionFlow {
   constructor(
@@ -28,7 +28,7 @@ export class RequestCompletionFlow {
   async execute(request: RequestCompletionRequest): Promise<Result<LlmCompletionMessage[], ValidationError | NotFoundError | StoreError | LlmError>> {
     const validationResult = firstFailure(
       this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
-      this.genericValidationService.requireNonEmptyString(request.parentMessageId, "parentMessageId"),
+      this.genericValidationService.requireNonEmptyString(request.messageId, "messageId"),
     );
 
     if (!validationResult.ok) {
@@ -41,19 +41,19 @@ export class RequestCompletionFlow {
       return conversationResult;
     }
 
-    const parentMessageResult = await this.messageDomainService.findByIdInConversation(request.parentMessageId, request.conversationId);
+    const messageResult = await this.messageDomainService.findByIdInConversation(request.messageId, request.conversationId);
 
-    if (!parentMessageResult.ok) {
-      return parentMessageResult;
+    if (!messageResult.ok) {
+      return messageResult;
     }
 
-    if (parentMessageResult.value.type !== LLMMessageType.User) {
-      return failure(new ValidationError("parentMessageId", `parentMessageId must reference a user message; received ${parentMessageResult.value.type}.`));
+    if (messageResult.value.type !== LLMMessageType.User) {
+      return failure(new ValidationError("messageId", `messageId must reference a user message; received ${messageResult.value.type}.`));
     }
 
     return this.llmCompletionDomainService.complete({
       conversationId: request.conversationId,
-      messageId: request.parentMessageId,
+      messageId: request.messageId,
     });
   }
 }

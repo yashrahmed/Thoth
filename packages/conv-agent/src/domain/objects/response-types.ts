@@ -47,30 +47,16 @@ class FileResponse {
 export class MessageResponse {
   readonly id: string;
   readonly conversationId: string;
-  readonly parentMessageId: string | null;
   readonly type: LLMMessageType;
-  readonly childCount: number;
   readonly content: string;
   readonly files: ReadonlyArray<FileResponse>;
   readonly createdAt: string;
   readonly updatedAt: string;
 
-  constructor(
-    id: string,
-    conversationId: string,
-    parentMessageId: string | null,
-    type: LLMMessageType,
-    childCount: number,
-    content: string,
-    files: ReadonlyArray<FileResponse>,
-    createdAt: string,
-    updatedAt: string,
-  ) {
+  constructor(id: string, conversationId: string, type: LLMMessageType, content: string, files: ReadonlyArray<FileResponse>, createdAt: string, updatedAt: string) {
     this.id = id;
     this.conversationId = conversationId;
-    this.parentMessageId = parentMessageId;
     this.type = type;
-    this.childCount = childCount;
     this.content = content;
     this.files = files;
     this.createdAt = createdAt;
@@ -81,9 +67,7 @@ export class MessageResponse {
     return new MessageResponse(
       message.id,
       message.conversationId,
-      message.parentMessageId,
       message.type,
-      message.childCount,
       message.content,
       message.files.map(FileResponse.fromFile),
       message.createdAt.toISOString(),

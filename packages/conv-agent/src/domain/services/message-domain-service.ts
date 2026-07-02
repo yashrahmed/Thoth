@@ -38,53 +38,11 @@ export class MessageDomainService {
     return this.messageRepository.selectMessageRowByIdAndConversationId(messageId, conversationId);
   }
 
-  findLeafMessages(conversationId: string): Promise<Result<Message[], StoreError>> {
-    return this.messageRepository.selectLeafMessagesByConversation(conversationId);
+  findPage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<Message[], StoreError>> {
+    return this.messageRepository.selectMessagePage(request);
   }
 
-  findPageForLeaf(request: {
-    readonly conversationId: string;
-    readonly leafMessageId: string;
-    readonly pageNum: number;
-    readonly pageSize: number;
-  }): Promise<Result<Message[], StoreError>> {
-    return this.messageRepository.selectMessagePageForLeaf(request);
-  }
-
-  async validateAppendTarget(request: {
-    readonly conversationId: string;
-    readonly parentMessageId: string | null;
-    readonly appendPosition: number;
-  }): Promise<Result<void, ValidationError | NotFoundError | StoreError>> {
-    const validationResult = firstFailure(
-      this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
-      this.genericValidationService.requirePositiveInteger(request.appendPosition, "appendPosition"),
-    );
-
-    if (!validationResult.ok) {
-      return validationResult;
-    }
-
-    if (request.parentMessageId === null) {
-      return { ok: true, value: undefined };
-    }
-
-    const parentMessageIdResult = this.genericValidationService.requireNonEmptyString(request.parentMessageId, "parentMessageId");
-
-    if (!parentMessageIdResult.ok) {
-      return parentMessageIdResult;
-    }
-
-    const parentMessageResult = await this.findByIdInConversation(parentMessageIdResult.value, request.conversationId);
-
-    if (!parentMessageResult.ok) {
-      return parentMessageResult;
-    }
-
-    return { ok: true, value: undefined };
-  }
-
-  async findAncestorChain(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], ValidationError | NotFoundError | StoreError>> {
+  async findMessagesUpTo(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], ValidationError | NotFoundError | StoreError>> {
     const validationResult = firstFailure(
       this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
       this.genericValidationService.requireNonEmptyString(request.messageId, "messageId"),
@@ -94,7 +52,7 @@ export class MessageDomainService {
       return validationResult;
     }
 
-    return this.messageRepository.selectAncestorMessages(request);
+    return this.messageRepository.selectMessagesUpTo(request);
   }
 
   async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {

@@ -316,7 +316,7 @@ async function parseUpdateConversationRequest(req: Request, conversationId: stri
   };
 }
 
-async function parseRequestCompletionRequest(req: Request, conversationId: string): Promise<TransportResult<{ readonly conversationId: string; readonly parentMessageId: string }>> {
+async function parseRequestCompletionRequest(req: Request, conversationId: string): Promise<TransportResult<{ readonly conversationId: string; readonly messageId: string }>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
@@ -335,15 +335,15 @@ async function parseRequestCompletionRequest(req: Request, conversationId: strin
     return transportFailure("body", "body must be a JSON object.");
   }
 
-  if (typeof body.parentMessageId !== "string" || body.parentMessageId.trim().length === 0) {
-    return transportFailure("parentMessageId", "parentMessageId must be a non-empty string.");
+  if (typeof body.messageId !== "string" || body.messageId.trim().length === 0) {
+    return transportFailure("messageId", "messageId must be a non-empty string.");
   }
 
   return {
     ok: true,
     value: {
       conversationId,
-      parentMessageId: body.parentMessageId.trim(),
+      messageId: body.messageId.trim(),
     },
   };
 }
@@ -414,26 +414,12 @@ async function parseAppendMessageRequest(req: Request, conversationId: string): 
     return contentResult;
   }
 
-  const appendPositionResult = parseAppendPositionField(formData);
-
-  if (!appendPositionResult.ok) {
-    return appendPositionResult;
-  }
-
-  const parentMessageIdResult = parseParentMessageIdField(formData);
-
-  if (!parentMessageIdResult.ok) {
-    return parentMessageIdResult;
-  }
-
   const attachments = await parseAttachments(formData);
 
   return {
     ok: true,
     value: {
       conversationId,
-      parentMessageId: parentMessageIdResult.value,
-      appendPosition: appendPositionResult.value,
       type: typeValue,
       content: contentResult.value,
       attachments,
@@ -473,38 +459,6 @@ function parseContentField(formData: FormData): TransportResult<ApplicationConte
   }
 
   return { ok: true, value };
-}
-
-function parseAppendPositionField(formData: FormData): TransportResult<number> {
-  const value = formData.get("appendPosition");
-
-  if (typeof value !== "string") {
-    return transportFailure("appendPosition", "appendPosition must be present.");
-  }
-
-  const appendPosition = Number(value);
-
-  if (!Number.isInteger(appendPosition) || appendPosition <= 0) {
-    return transportFailure("appendPosition", "appendPosition must be a positive integer.");
-  }
-
-  return { ok: true, value: appendPosition };
-}
-
-function parseParentMessageIdField(formData: FormData): TransportResult<string | null> {
-  const value = formData.get("parentMessageId");
-
-  if (value === null) {
-    return { ok: true, value: null };
-  }
-
-  if (typeof value !== "string") {
-    return transportFailure("parentMessageId", "parentMessageId must be a string.");
-  }
-
-  const parentMessageId = value.trim();
-
-  return { ok: true, value: parentMessageId.length > 0 ? parentMessageId : null };
 }
 
 function transportFailure(fieldName: string, message: string): TransportResult<never> {

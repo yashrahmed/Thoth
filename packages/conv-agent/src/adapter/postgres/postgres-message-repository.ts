@@ -6,9 +6,9 @@ import { mapMessageRow, mapMessageRows, type MessageRow } from "../common/row-ma
 import type { PostgresDatabase } from "./postgres-database";
 import type { Message } from "../../domain/objects/message-types";
 
-interface MessagePathRow {
-  readonly path: string;
-  readonly depth: number;
+interface MessagePositionRow {
+  readonly id: string;
+  readonly created_at: string | Date;
 }
 
 export class PostgresMessageRepository implements MessageRepository {
@@ -20,8 +20,6 @@ export class PostgresMessageRepository implements MessageRepository {
         select
           id,
           conversation_id,
-          parent_message_id,
-          child_count,
           type,
           content,
           created_at,
@@ -48,8 +46,6 @@ export class PostgresMessageRepository implements MessageRepository {
         select
           id,
           conversation_id,
-          parent_message_id,
-          child_count,
           type,
           content,
           created_at,
@@ -71,26 +67,22 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async selectLeafMessagesByConversation(conversationId: string) {
+  async selectMessagePage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }) {
     try {
+      const offset = (request.pageNum - 1) * request.pageSize;
       const rows = await this.sql<MessageRow[]>`
         select
           id,
           conversation_id,
-          parent_message_id,
-          child_count,
           type,
           content,
           created_at,
           updated_at
         from thoth.messages
-        where
-          conversation_id = ${conversationId}
-          and path is not null
-          and child_count = 0
-        order by
-          thoth.nlevel(path) desc,
-          string_to_array(path::text, '.')::integer[] asc
+        where conversation_id = ${request.conversationId}
+        order by created_at asc, id asc
+        limit ${request.pageSize}
+        offset ${offset}
       `;
 
       return mapMessageRows(rows, StoreOperation.ReadPage);
@@ -99,68 +91,22 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async selectMessagePageForLeaf(request: { readonly conversationId: string; readonly leafMessageId: string; readonly pageNum: number; readonly pageSize: number }) {
+  async selectMessagesUpTo(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], NotFoundError | StoreError>> {
     try {
-      const leafPathRows = await this.sql<MessagePathRow[]>`
-        select
-          path::text as path,
-          thoth.nlevel(path) as depth
-        from thoth.messages
-        where
-          conversation_id = ${request.conversationId}
-          and id = ${request.leafMessageId}
-          and path is not null
-        limit 1
-      `;
-
-      const leafPathRow = leafPathRows[0];
-
-      if (!leafPathRow) {
-        return success([]);
-      }
-
-      const { startDepth, endDepth } = calculateDepthPageWindow(request.pageNum, request.pageSize);
-      const rows = await this.sql<MessageRow[]>`
+      const targetRows = await this.sql<MessagePositionRow[]>`
         select
           id,
-          conversation_id,
-          parent_message_id,
-          child_count,
-          type,
-          content,
-          created_at,
-          updated_at
-        from thoth.messages
-        where
-          conversation_id = ${request.conversationId}
-          and path OPERATOR(thoth.@>) ${leafPathRow.path}::thoth.ltree
-          and thoth.nlevel(path) between ${startDepth} and ${endDepth}
-        order by thoth.nlevel(path) asc
-      `;
-
-      return mapMessageRows(rows, StoreOperation.ReadPage);
-    } catch (error) {
-      return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
-    }
-  }
-
-  async selectAncestorMessages(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], NotFoundError | StoreError>> {
-    try {
-      const leafPathRows = await this.sql<MessagePathRow[]>`
-        select
-          path::text as path,
-          thoth.nlevel(path) as depth
+          created_at
         from thoth.messages
         where
           conversation_id = ${request.conversationId}
           and id = ${request.messageId}
-          and path is not null
         limit 1
       `;
 
-      const leafPathRow = leafPathRows[0];
+      const targetRow = targetRows[0];
 
-      if (!leafPathRow) {
+      if (!targetRow) {
         return failure(new NotFoundError(EntityType.Message, request.messageId));
       }
 
@@ -168,8 +114,6 @@ export class PostgresMessageRepository implements MessageRepository {
         select
           id,
           conversation_id,
-          parent_message_id,
-          child_count,
           type,
           content,
           created_at,
@@ -177,8 +121,11 @@ export class PostgresMessageRepository implements MessageRepository {
         from thoth.messages
         where
           conversation_id = ${request.conversationId}
-          and path OPERATOR(thoth.@>) ${leafPathRow.path}::thoth.ltree
-        order by thoth.nlevel(path) asc
+          and (
+            created_at < ${targetRow.created_at}
+            or (created_at = ${targetRow.created_at} and id <= ${targetRow.id})
+          )
+        order by created_at asc, id asc
       `;
 
       return mapMessageRows(rows, StoreOperation.ReadPage);
@@ -211,11 +158,4 @@ export class PostgresMessageRepository implements MessageRepository {
       return failure(new StoreError(EntityType.Message, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
-}
-
-function calculateDepthPageWindow(pageNum: number, pageSize: number): { readonly startDepth: number; readonly endDepth: number } {
-  const startDepth = (pageNum - 1) * pageSize + 1;
-  const endDepth = pageNum * pageSize;
-
-  return { startDepth, endDepth };
 }

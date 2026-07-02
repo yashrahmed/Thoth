@@ -36,22 +36,8 @@ export class GetMessagesOnConversationFlow {
       return conversationResult;
     }
 
-    const leafMessagesResult = await this.messageDomainService.findLeafMessages(query.conversationId);
-
-    if (!leafMessagesResult.ok) {
-      return leafMessagesResult;
-    }
-
-    const selectedLeafMessage = leafMessagesResult.value[0];
-
-    if (!selectedLeafMessage) {
-      return success([]);
-    }
-
-    // Backward compatibility: the public get-conversation contract does not yet accept a selected leaf.
-    const messagesResult = await this.messageDomainService.findPageForLeaf({
+    const messagesResult = await this.messageDomainService.findPage({
       conversationId: query.conversationId,
-      leafMessageId: selectedLeafMessage.id,
       pageNum: query.pageNum,
       pageSize: query.pageSize,
     });

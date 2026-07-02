@@ -18,9 +18,8 @@ const THOTH_SENT_AT_METADATA_LINE_PATTERN = /^sent at \d{4}-\d{2}-\d{2} \d{2}:\d
 /**
  * Produces an LLM completion for a message and returns the resulting messages
  * to the caller without persisting anything. The prompt is built from the
- * ancestor chain of the target message, so sibling branches never leak into
- * the context. Whether (and where) the completion is appended to the
- * conversation is the caller's decision.
+ * conversation history up to and including the target message. Whether the
+ * completion is appended to the conversation is the caller's decision.
  */
 export class LlmCompletionDomainService {
   constructor(
@@ -32,17 +31,17 @@ export class LlmCompletionDomainService {
   ) {}
 
   async complete(request: LlmCompletionRequest): Promise<Result<LlmCompletionMessage[], ValidationError | NotFoundError | StoreError | LlmError>> {
-    const ancestorChainResult = await this.messageDomainService.findAncestorChain({
+    const historyResult = await this.messageDomainService.findMessagesUpTo({
       conversationId: request.conversationId,
       messageId: request.messageId,
     });
 
-    if (!ancestorChainResult.ok) {
-      return ancestorChainResult;
+    if (!historyResult.ok) {
+      return historyResult;
     }
 
     const filesResult = await this.fileDomainService.getFilesOnMessages({
-      messageIds: ancestorChainResult.value.map((message) => message.id),
+      messageIds: historyResult.value.map((message) => message.id),
     });
 
     if (!filesResult.ok) {
@@ -55,7 +54,7 @@ export class LlmCompletionDomainService {
       return signedFilesResult;
     }
 
-    const llmInput = this.buildLlmInputMessages(ancestorChainResult.value, signedFilesResult.value);
+    const llmInput = this.buildLlmInputMessages(historyResult.value, signedFilesResult.value);
     const llmResult = await this.llmService.llmComplete(llmInput);
 
     if (!llmResult.ok) {

@@ -27,16 +27,6 @@ export class AppendMessageToConversationFlow {
       return conversationResult;
     }
 
-    const appendPositionResult = await this.messageDomainService.validateAppendTarget({
-      conversationId: request.conversationId,
-      parentMessageId: request.parentMessageId,
-      appendPosition: request.appendPosition,
-    });
-
-    if (!appendPositionResult.ok) {
-      return appendPositionResult;
-    }
-
     if (request.content.trim().length === 0 && request.attachments.length === 0) {
       return failure(new ValidationError("content", "content must be a non-empty string when no files are attached."));
     }
@@ -62,8 +52,6 @@ export class AppendMessageToConversationFlow {
 
     const createUserMessageResult = await this.appendUserMessageDomainService.persistUserMessageWithFiles({
       message: nextMessageRecordResult.value,
-      parentMessageId: request.parentMessageId,
-      appendPosition: request.appendPosition,
       files: uploadFilesResult.value,
     });
 

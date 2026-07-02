@@ -14,16 +14,12 @@ export class Attachment {
 
 export class AppendMessageRequest {
   readonly conversationId: string;
-  readonly parentMessageId: string | null;
-  readonly appendPosition: number;
   readonly type: LLMMessageType;
   readonly content: string;
   readonly attachments: ReadonlyArray<Attachment>;
 
-  constructor(conversationId: string, parentMessageId: string | null, appendPosition: number, type: LLMMessageType, content: string, attachments: ReadonlyArray<Attachment>) {
+  constructor(conversationId: string, type: LLMMessageType, content: string, attachments: ReadonlyArray<Attachment>) {
     this.conversationId = conversationId;
-    this.parentMessageId = parentMessageId;
-    this.appendPosition = appendPosition;
     this.type = type;
     this.content = content;
     this.attachments = attachments;

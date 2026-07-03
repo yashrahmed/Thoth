@@ -481,7 +481,12 @@ function ConversationApp() {
       setDraft("");
       setSelectedFiles([]);
 
-      await requestAndAppendCompletion(conversationId, appendedMessage.id);
+      // The endpoint completes exactly the messages whose ids are sent, so
+      // this client shapes the chat as the loaded history plus the message
+      // that was just appended.
+      const completionMessageIds = [...messages.map((message) => message.id), appendedMessage.id];
+
+      await requestAndAppendCompletion(conversationId, completionMessageIds);
       await loadConversations({ quiet: true });
       await loadMessages(conversationId, { quiet: true });
     } catch (caughtError) {
@@ -491,14 +496,14 @@ function ConversationApp() {
     }
   }
 
-  // Completions are side-effect free: the service returns the reply messages
-  // and this client appends them explicitly, in order, at the end of the
-  // conversation.
-  async function requestAndAppendCompletion(id: string, messageId: string): Promise<void> {
+  // Completions are side-effect free: the service runs the LLM over exactly
+  // the messages whose ids are sent and returns the reply messages, which
+  // this client appends explicitly, in order, at the end of the conversation.
+  async function requestAndAppendCompletion(id: string, messageIds: ReadonlyArray<string>): Promise<void> {
     const completionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${id}/request-completion`), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messageId }),
+      body: JSON.stringify({ messageIds }),
     });
 
     if (!completionResponse.ok) {

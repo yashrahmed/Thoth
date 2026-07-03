@@ -67,7 +67,7 @@ describe("createConversationHttpHandler", () => {
       new Request("http://localhost/conversations/conversation-1/request-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messageId: "message-1" }),
+        body: JSON.stringify({ messageIds: ["message-1", "message-2"] }),
       }),
     );
     const body = await response.json();
@@ -76,7 +76,29 @@ describe("createConversationHttpHandler", () => {
     expect(body).toEqual({
       messages: [{ type: "assistant", content: "Hello there." }],
     });
-    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageId: "message-1" });
+    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: ["message-1", "message-2"] });
+  });
+
+  test("rejects a completion request with an empty messageIds list", async () => {
+    const handler = createConversationHttpHandler(buildDeps());
+
+    const response = await handler(
+      new Request("http://localhost/conversations/conversation-1/request-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageIds: [] }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({
+      error: {
+        kind: "ValidationError",
+        fieldName: "messageIds",
+        message: "messageIds must be a non-empty array of message ids.",
+      },
+    });
   });
 
   test("returns a generic 502 response when the completion fails at the LLM", async () => {
@@ -93,7 +115,7 @@ describe("createConversationHttpHandler", () => {
       new Request("http://localhost/conversations/conversation-1/request-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messageId: "message-1" }),
+        body: JSON.stringify({ messageIds: ["message-1"] }),
       }),
     );
     const body = await response.json();

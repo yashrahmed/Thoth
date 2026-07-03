@@ -209,9 +209,10 @@ export function createConversationHttpHandler(deps: ConversationHttpHandlerDeps)
     return c.json(MessageResponse.fromMessageWithFiles(result.value), 201);
   });
 
-  // Runs the completion and returns the resulting messages without persisting
-  // them. Clients that want the completion in the conversation append it
-  // explicitly via /append-direct.
+  // Runs the completion over exactly the requested messages (in the order
+  // their ids are listed) and returns the resulting messages without
+  // persisting them. Clients that want the completion in the conversation
+  // append it explicitly via /append-direct.
   app.post("/conversations/:id/request-completion", async (c) => {
     const conversationId = c.req.param("id");
     const completionRequestResult = await parseRequestCompletionRequest(c.req.raw, conversationId);
@@ -316,7 +317,10 @@ async function parseUpdateConversationRequest(req: Request, conversationId: stri
   };
 }
 
-async function parseRequestCompletionRequest(req: Request, conversationId: string): Promise<TransportResult<{ readonly conversationId: string; readonly messageId: string }>> {
+async function parseRequestCompletionRequest(
+  req: Request,
+  conversationId: string,
+): Promise<TransportResult<{ readonly conversationId: string; readonly messageIds: ReadonlyArray<string> }>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
@@ -335,15 +339,19 @@ async function parseRequestCompletionRequest(req: Request, conversationId: strin
     return transportFailure("body", "body must be a JSON object.");
   }
 
-  if (typeof body.messageId !== "string" || body.messageId.trim().length === 0) {
-    return transportFailure("messageId", "messageId must be a non-empty string.");
+  if (!Array.isArray(body.messageIds) || body.messageIds.length === 0) {
+    return transportFailure("messageIds", "messageIds must be a non-empty array of message ids.");
+  }
+
+  if (!body.messageIds.every((messageId) => typeof messageId === "string" && messageId.trim().length > 0)) {
+    return transportFailure("messageIds", "messageIds must contain only non-empty strings.");
   }
 
   return {
     ok: true,
     value: {
       conversationId,
-      messageId: body.messageId.trim(),
+      messageIds: body.messageIds.map((messageId: string) => messageId.trim()),
     },
   };
 }

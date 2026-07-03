@@ -131,7 +131,7 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     updateConv: new UpdateConvFlow(conversationDomainService),
     deleteConversation: new DeleteConversationFlow(deleteConversationDomainService, blobDomainService),
     appendMessage: new AppendMessageToConversationFlow(conversationDomainService, appendUserMessageDomainService, messageDomainService, fileDomainService),
-    requestCompletion: new RequestCompletionFlow(conversationDomainService, messageDomainService, genericValidationService, llmCompletionDomainService),
+    requestCompletion: new RequestCompletionFlow(conversationDomainService, genericValidationService, llmCompletionDomainService),
     getMessagesOnConversation: new GetMessagesOnConversationFlow(conversationDomainService, messageDomainService, fileDomainService, genericValidationService),
   });
 

@@ -1,6 +1,6 @@
 import type { MessageRepository } from "../contracts/message-repository";
 import type { AppendMessageRecord, CreateMessageContentInput, Message } from "../objects/message-types";
-import { NotFoundError, ValidationError, type StoreError } from "../objects/errors";
+import { EntityType, NotFoundError, ValidationError, type StoreError } from "../objects/errors";
 import type { Result } from "../objects/result";
 import { firstFailure } from "../objects/result";
 import type { FileDomainService } from "./file-domain-service";
@@ -25,34 +25,52 @@ export class MessageDomainService {
     return this.messageRepository.selectMessageRow(messageIdResult.value);
   }
 
-  async findByIdInConversation(messageId: string, conversationId: string): Promise<Result<Message, ValidationError | NotFoundError | StoreError>> {
-    const validationResult = firstFailure(
-      this.genericValidationService.requireNonEmptyString(messageId, "messageId"),
-      this.genericValidationService.requireNonEmptyString(conversationId, "conversationId"),
-    );
-
-    if (!validationResult.ok) {
-      return validationResult;
-    }
-
-    return this.messageRepository.selectMessageRowByIdAndConversationId(messageId, conversationId);
-  }
-
   findPage(request: { readonly conversationId: string; readonly pageNum: number; readonly pageSize: number }): Promise<Result<Message[], StoreError>> {
     return this.messageRepository.selectMessagePage(request);
   }
 
-  async findMessagesUpTo(request: { readonly conversationId: string; readonly messageId: string }): Promise<Result<Message[], ValidationError | NotFoundError | StoreError>> {
+  // Returns the requested messages in the order the ids were given, so callers
+  // control how the resulting chat is shaped.
+  async findMessagesByIds(request: {
+    readonly conversationId: string;
+    readonly messageIds: ReadonlyArray<string>;
+  }): Promise<Result<Message[], ValidationError | NotFoundError | StoreError>> {
+    if (request.messageIds.length === 0) {
+      return {
+        ok: false,
+        error: new ValidationError("messageIds", "messageIds must contain at least one message id."),
+      };
+    }
+
     const validationResult = firstFailure(
       this.genericValidationService.requireNonEmptyString(request.conversationId, "conversationId"),
-      this.genericValidationService.requireNonEmptyString(request.messageId, "messageId"),
+      ...request.messageIds.map((messageId) => this.genericValidationService.requireNonEmptyString(messageId, "messageIds")),
     );
 
     if (!validationResult.ok) {
       return validationResult;
     }
 
-    return this.messageRepository.selectMessagesUpTo(request);
+    const messagesResult = await this.messageRepository.selectMessagesByIds(request);
+
+    if (!messagesResult.ok) {
+      return messagesResult;
+    }
+
+    const messagesById = new Map(messagesResult.value.map((message) => [message.id, message]));
+    const orderedMessages: Message[] = [];
+
+    for (const messageId of request.messageIds) {
+      const message = messagesById.get(messageId);
+
+      if (!message) {
+        return { ok: false, error: new NotFoundError(EntityType.Message, messageId) };
+      }
+
+      orderedMessages.push(message);
+    }
+
+    return { ok: true, value: orderedMessages };
   }
 
   async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {

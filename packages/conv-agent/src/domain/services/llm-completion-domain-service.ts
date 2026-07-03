@@ -10,16 +10,17 @@ import type { MessageDomainService } from "./message-domain-service";
 
 export interface LlmCompletionRequest {
   readonly conversationId: string;
-  readonly messageId: string;
+  readonly messageIds: ReadonlyArray<string>;
 }
 
 const THOTH_SENT_AT_METADATA_LINE_PATTERN = /^sent at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+00:00 UTC$/gm;
 
 /**
- * Produces an LLM completion for a message and returns the resulting messages
- * to the caller without persisting anything. The prompt is built from the
- * conversation history up to and including the target message. Whether the
- * completion is appended to the conversation is the caller's decision.
+ * Produces an LLM completion and returns the resulting messages to the caller
+ * without persisting anything. The prompt consists of the system prompt
+ * followed by exactly the requested messages, in the order their ids were
+ * given: the caller shapes the chat. Whether the completion is appended to
+ * the conversation is also the caller's decision.
  */
 export class LlmCompletionDomainService {
   constructor(
@@ -31,9 +32,9 @@ export class LlmCompletionDomainService {
   ) {}
 
   async complete(request: LlmCompletionRequest): Promise<Result<LlmCompletionMessage[], ValidationError | NotFoundError | StoreError | LlmError>> {
-    const historyResult = await this.messageDomainService.findMessagesUpTo({
+    const historyResult = await this.messageDomainService.findMessagesByIds({
       conversationId: request.conversationId,
-      messageId: request.messageId,
+      messageIds: request.messageIds,
     });
 
     if (!historyResult.ok) {

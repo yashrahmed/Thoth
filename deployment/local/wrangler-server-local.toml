@@ -8,7 +8,6 @@ port = 3001
 
 [vars]
 AUTH_ENABLED = false
-MESSAGE_ID_RESPONSE_MODE = "bigint"
 BLOB_STORAGE_ENDPOINT = "http://127.0.0.1:9000"
 BLOB_STORAGE_BUCKET = "thoth-local-blob-store"
 BLOB_STORAGE_REGION = "us-east-1"

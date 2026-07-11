@@ -2,7 +2,6 @@ import type { MessageRepository, ResolvedMessage } from "../../domain/contracts/
 import type { Message } from "../../domain/objects/message-types";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
-import type { MessageIdResponseMode } from "../../config/config";
 import { getErrorMessage } from "../common/errors";
 import { mapMessageRow, mapMessageRows, type MessageRow } from "../common/row-mapper";
 import type { PostgresDatabase } from "./postgres-database";
@@ -12,25 +11,20 @@ interface ResolvedMessageRow extends MessageRow {
 }
 
 export class PostgresMessageRepository implements MessageRepository {
-  constructor(
-    private readonly sql: PostgresDatabase,
-    private readonly messageIdResponseMode: MessageIdResponseMode,
-  ) {}
+  constructor(private readonly sql: PostgresDatabase) {}
 
   async selectMessageRow(messageId: string) {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
-          case when ${this.messageIdResponseMode} = 'uuid' then id else id_bigint::text end as id,
+          id_bigint::text as id,
           conversation_id,
           type,
           content,
           created_at,
           updated_at
         from thoth.messages
-        where
-          (${this.messageIdResponseMode} = 'uuid' and id = ${messageId})
-          or (${this.messageIdResponseMode} = 'bigint' and id_bigint::text = ${messageId})
+        where id_bigint = ${messageId}::bigint
       `;
 
       const row = rows[0];
@@ -50,7 +44,7 @@ export class PostgresMessageRepository implements MessageRepository {
       const offset = (request.pageNum - 1) * request.pageSize;
       const rows = await this.sql<MessageRow[]>`
         select
-          case when ${this.messageIdResponseMode} = 'uuid' then id else id_bigint::text end as id,
+          id_bigint::text as id,
           conversation_id,
           type,
           content,
@@ -80,21 +74,36 @@ export class PostgresMessageRepository implements MessageRepository {
           select requested_id, ordinal
           from unnest(${request.messageIds as string[]}::text[])
             with ordinality as input(requested_id, ordinal)
+        ),
+        canonicalized as (
+          select
+            requested.requested_id,
+            requested.ordinal,
+            case
+              when requested.requested_id ~ '^[1-9][0-9]{0,18}$'
+                and (
+                  length(requested.requested_id) < 19
+                  or requested.requested_id <= '9223372036854775807'
+                )
+                then requested.requested_id::bigint
+              else aliases.message_id
+            end as message_id
+          from requested
+          left join thoth.message_id_aliases as aliases
+            on aliases.legacy_uuid = requested.requested_id
         )
         select
-          requested.requested_id,
-          case when ${this.messageIdResponseMode} = 'uuid' then m.id else m.id_bigint::text end as id,
+          canonicalized.requested_id,
+          m.id_bigint::text as id,
           m.conversation_id,
           m.type,
           m.content,
           m.created_at,
           m.updated_at
-        from requested
-        join thoth.messages as m
-          on m.id = requested.requested_id
-          or m.id_bigint::text = requested.requested_id
+        from canonicalized
+        join thoth.messages as m on m.id_bigint = canonicalized.message_id
         where m.conversation_id = ${request.conversationId}
-        order by requested.ordinal asc
+        order by canonicalized.ordinal asc
       `;
 
       return mapResolvedRows(rows);
@@ -107,9 +116,7 @@ export class PostgresMessageRepository implements MessageRepository {
     try {
       await this.sql`
         delete from thoth.messages
-        where
-          (${this.messageIdResponseMode} = 'uuid' and id = ${messageId})
-          or (${this.messageIdResponseMode} = 'bigint' and id_bigint::text = ${messageId})
+        where id_bigint = ${messageId}::bigint
       `;
 
       return success(undefined);

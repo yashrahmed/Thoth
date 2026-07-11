@@ -32,7 +32,7 @@ import { GenericValidationService } from "../domain/services/generic-validation-
 import { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
-import type { AccessConfig, AuthConfig, BlobStorageConfig, LlmConfig, MessageIdResponseMode } from "../config/config";
+import type { AccessConfig, AuthConfig, BlobStorageConfig, LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
   HYPERDRIVE: Hyperdrive;
@@ -44,7 +44,6 @@ export interface WorkerEnv {
   BLOB_STORAGE_SECRET_ACCESS_KEY: string;
   OPENAI_LLM_API_KEY: string;
   GOOGLE_LLM_API_KEY: string;
-  MESSAGE_ID_RESPONSE_MODE: string;
   AUTH_ENABLED?: boolean | string;
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
@@ -91,11 +90,10 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
     apiKey: requireString(env.GOOGLE_LLM_API_KEY, "GOOGLE_LLM_API_KEY"),
   };
 
-  const messageIdResponseMode = requireMessageIdResponseMode(env.MESSAGE_ID_RESPONSE_MODE);
   const conversationRepository = new PostgresConversationRepository(database);
-  const messageRepository = new PostgresMessageRepository(database, messageIdResponseMode);
-  const fileRepository = new PostgresFileRepository(database, messageIdResponseMode);
-  const appendUserMessageStore = new PostgresAppendUserMessageStore(database, messageIdResponseMode);
+  const messageRepository = new PostgresMessageRepository(database);
+  const fileRepository = new PostgresFileRepository(database);
+  const appendUserMessageStore = new PostgresAppendUserMessageStore(database);
   const deleteConversationStore = new PostgresDeleteConversationStore(database);
 
   const genericValidationService = new GenericValidationService();
@@ -158,14 +156,6 @@ function requireBooleanFlag(value: boolean | string | undefined, name: string): 
   }
 
   throw new Error(`${name} must be set to true or false.`);
-}
-
-function requireMessageIdResponseMode(value: string | undefined): MessageIdResponseMode {
-  if (value === "uuid" || value === "bigint") {
-    return value;
-  }
-
-  throw new Error("MESSAGE_ID_RESPONSE_MODE must be set to uuid or bigint.");
 }
 
 // Auth must be explicitly enabled or disabled. Deployed profiles should set it

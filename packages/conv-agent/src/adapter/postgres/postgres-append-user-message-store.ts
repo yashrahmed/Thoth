@@ -1,5 +1,4 @@
 import type { AppendUserMessageStore, PersistUserMessageWithFilesInput } from "../../domain/contracts/append-user-message-store";
-import type { MessageIdResponseMode } from "../../config/config";
 import { EntityType, StoreError, StoreOperation } from "../../domain/objects/errors";
 import type { MessageWithFiles } from "../../domain/objects/message-types";
 import { failure, success, type Result } from "../../domain/objects/result";
@@ -12,16 +11,8 @@ interface MessageWithFilesRow {
   readonly files: FileRow[];
 }
 
-interface TransitionalMessageRow extends MessageRow {
-  readonly legacy_id: string;
-  readonly bigint_id: string;
-}
-
 export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
-  constructor(
-    private readonly sql: PostgresDatabase,
-    private readonly messageIdResponseMode: MessageIdResponseMode,
-  ) {}
+  constructor(private readonly sql: PostgresDatabase) {}
 
   async persistUserMessageWithFiles(input: PersistUserMessageWithFilesInput): Promise<Result<MessageWithFiles, StoreError>> {
     try {
@@ -29,7 +20,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         const sql = tx as unknown as PostgresDatabase;
         const timestamp = new Date();
 
-        const messageRows = await sql<TransitionalMessageRow[]>`
+        const messageRows = await sql<MessageRow[]>`
           insert into thoth.messages (
             conversation_id,
             type,
@@ -45,9 +36,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             ${input.message.updatedAt.toISOString()}
           )
           returning
-            case when ${this.messageIdResponseMode} = 'uuid' then id else id_bigint::text end as id,
-            id as legacy_id,
-            id_bigint::text as bigint_id,
+            id_bigint::text as id,
             conversation_id,
             type,
             content,
@@ -66,7 +55,6 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         for (const file of input.files) {
           const insertedFileRows = await sql<FileRow[]>`
             insert into thoth.files (
-              message_id,
               message_id_bigint,
               canonical_url,
               filename,
@@ -76,8 +64,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
               updated_at
             )
             values (
-              ${messageRow.legacy_id},
-              ${messageRow.bigint_id},
+              ${messageRow.id},
               ${file.canonicalUrl},
               ${file.filename},
               ${file.mimeType},
@@ -87,7 +74,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             )
             returning
               id,
-              case when ${this.messageIdResponseMode} = 'uuid' then message_id else message_id_bigint::text end as message_id,
+              message_id_bigint::text as message_id,
               canonical_url,
               filename,
               mime_type,

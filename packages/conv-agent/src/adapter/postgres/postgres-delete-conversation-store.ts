@@ -29,7 +29,7 @@ export class PostgresDeleteConversationStore implements DeleteConversationStore 
         const canonicalUrlRows = await sql<CanonicalUrlRow[]>`
           select f.canonical_url
           from thoth.messages as m
-          join thoth.files as f on f.message_id = m.id
+          join thoth.files as f on f.message_id_bigint = m.id_bigint
           where m.conversation_id = ${conversationId}
           order by f.created_at asc, f.id asc
         `;

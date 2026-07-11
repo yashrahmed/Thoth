@@ -1,10 +1,13 @@
-import type { MessageRepository } from "../../domain/contracts/message-repository";
+import type { MessageRepository, ResolvedMessage } from "../../domain/contracts/message-repository";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import { getErrorMessage } from "../common/errors";
 import { mapMessageRow, mapMessageRows, type MessageRow } from "../common/row-mapper";
 import type { PostgresDatabase } from "./postgres-database";
-import type { Message } from "../../domain/objects/message-types";
+
+interface ResolvedMessageRow extends MessageRow {
+  readonly requested_id: string;
+}
 
 export class PostgresMessageRepository implements MessageRepository {
   constructor(private readonly sql: PostgresDatabase) {}
@@ -13,14 +16,14 @@ export class PostgresMessageRepository implements MessageRepository {
     try {
       const rows = await this.sql<MessageRow[]>`
         select
-          id,
+          id_bigint::text as id,
           conversation_id,
           type,
           content,
           created_at,
           updated_at
         from thoth.messages
-        where id = ${messageId}
+        where id_bigint = ${messageId}::bigint
       `;
 
       const row = rows[0];
@@ -40,7 +43,7 @@ export class PostgresMessageRepository implements MessageRepository {
       const offset = (request.pageNum - 1) * request.pageSize;
       const rows = await this.sql<MessageRow[]>`
         select
-          id,
+          id_bigint::text as id,
           conversation_id,
           type,
           content,
@@ -48,7 +51,7 @@ export class PostgresMessageRepository implements MessageRepository {
           updated_at
         from thoth.messages
         where conversation_id = ${request.conversationId}
-        order by created_at asc, id asc
+        order by created_at asc, id_bigint asc
         limit ${request.pageSize}
         offset ${offset}
       `;
@@ -59,27 +62,50 @@ export class PostgresMessageRepository implements MessageRepository {
     }
   }
 
-  async selectMessagesByIds(request: { readonly conversationId: string; readonly messageIds: ReadonlyArray<string> }): Promise<Result<Message[], StoreError>> {
+  async selectMessagesByIds(request: { readonly conversationId: string; readonly messageIds: ReadonlyArray<string> }): Promise<Result<ResolvedMessage[], StoreError>> {
     if (request.messageIds.length === 0) {
       return success([]);
     }
 
     try {
-      const rows = await this.sql<MessageRow[]>`
+      const rows = await this.sql<ResolvedMessageRow[]>`
+        with requested as (
+          select requested_id, ordinal
+          from unnest(${request.messageIds as string[]}::text[])
+            with ordinality as input(requested_id, ordinal)
+        ),
+        canonicalized as (
+          select
+            requested.requested_id,
+            requested.ordinal,
+            case
+              when requested.requested_id ~ '^[1-9][0-9]{0,18}$'
+                and (
+                  length(requested.requested_id) < 19
+                  or requested.requested_id <= '9223372036854775807'
+                )
+                then requested.requested_id::bigint
+              else aliases.message_id
+            end as message_id
+          from requested
+          left join thoth.message_id_aliases as aliases
+            on aliases.legacy_uuid = requested.requested_id
+        )
         select
-          id,
-          conversation_id,
-          type,
-          content,
-          created_at,
-          updated_at
-        from thoth.messages
-        where
-          conversation_id = ${request.conversationId}
-          and id = any(${request.messageIds as string[]})
+          canonicalized.requested_id,
+          m.id_bigint::text as id,
+          m.conversation_id,
+          m.type,
+          m.content,
+          m.created_at,
+          m.updated_at
+        from canonicalized
+        join thoth.messages as m on m.id_bigint = canonicalized.message_id
+        where m.conversation_id = ${request.conversationId}
+        order by canonicalized.ordinal asc
       `;
 
-      return mapMessageRows(rows, StoreOperation.ReadPage);
+      return mapResolvedRows(rows);
     } catch (error) {
       return failure(new StoreError(EntityType.Message, StoreOperation.ReadPage, getErrorMessage(error)));
     }
@@ -89,7 +115,7 @@ export class PostgresMessageRepository implements MessageRepository {
     try {
       await this.sql`
         delete from thoth.messages
-        where id = ${messageId}
+        where id_bigint = ${messageId}::bigint
       `;
 
       return success(undefined);
@@ -97,6 +123,7 @@ export class PostgresMessageRepository implements MessageRepository {
       return failure(new StoreError(EntityType.Message, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
+
   async deleteMessagesByConversation(conversationId: string) {
     try {
       await this.sql`
@@ -109,4 +136,23 @@ export class PostgresMessageRepository implements MessageRepository {
       return failure(new StoreError(EntityType.Message, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
+}
+
+function mapResolvedRows(rows: ReadonlyArray<ResolvedMessageRow>): Result<ResolvedMessage[], StoreError> {
+  const resolvedMessages: ResolvedMessage[] = [];
+
+  for (const row of rows) {
+    const messageResult = mapMessageRow(row, StoreOperation.ReadPage);
+
+    if (!messageResult.ok) {
+      return messageResult;
+    }
+
+    resolvedMessages.push({
+      requestedId: row.requested_id,
+      message: messageResult.value,
+    });
+  }
+
+  return success(resolvedMessages);
 }

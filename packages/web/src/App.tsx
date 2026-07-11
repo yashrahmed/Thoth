@@ -40,8 +40,12 @@ type ChatFile = {
   readonly updatedAt: string;
 };
 
+// Message IDs are transport identifiers. Keep UUIDs and decimal bigint IDs
+// byte-for-byte intact; never parse them as JavaScript numbers.
+type MessageId = string;
+
 type ChatMessage = {
-  readonly id: string;
+  readonly id: MessageId;
   readonly conversationId: string;
   readonly type: "user" | "assistant" | "system" | "tool";
   readonly content: string;
@@ -325,7 +329,7 @@ function ConversationApp() {
         throw new Error(`Message fetch failed with ${response.status}.`);
       }
 
-      const page = (await response.json()) as MessagePageResponse;
+      const page = requireMessagePageResponse(await response.json());
 
       setMessages(page.items);
       setError("");
@@ -476,7 +480,7 @@ function ConversationApp() {
         throw new Error(`Message send failed with ${response.status}.`);
       }
 
-      const appendedMessage = (await response.json()) as { readonly id: string };
+      const appendedMessageId = requireMessageId((await response.json()) as unknown);
 
       setDraft("");
       setSelectedFiles([]);
@@ -484,7 +488,7 @@ function ConversationApp() {
       // The endpoint completes exactly the messages whose ids are sent, so
       // this client shapes the chat as the loaded history plus the message
       // that was just appended.
-      const completionMessageIds = [...messages.map((message) => message.id), appendedMessage.id];
+      const completionMessageIds = [...messages.map((message) => message.id), appendedMessageId];
 
       await requestAndAppendCompletion(conversationId, completionMessageIds);
       await loadConversations({ quiet: true });
@@ -499,7 +503,7 @@ function ConversationApp() {
   // Completions are side-effect free: the service runs the LLM over exactly
   // the messages whose ids are sent and returns the reply messages, which
   // this client appends explicitly, in order, at the end of the conversation.
-  async function requestAndAppendCompletion(id: string, messageIds: ReadonlyArray<string>): Promise<void> {
+  async function requestAndAppendCompletion(id: string, messageIds: ReadonlyArray<MessageId>): Promise<void> {
     const completionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${id}/request-completion`), {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1189,6 +1193,22 @@ function extractResponseErrorMessage(body: unknown): string | null {
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null;
+}
+
+function requireMessageId(value: unknown): MessageId {
+  if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0) {
+    throw new Error("Message response did not contain a valid message id.");
+  }
+
+  return value.id;
+}
+
+function requireMessagePageResponse(value: unknown): MessagePageResponse {
+  if (!isRecord(value) || !Array.isArray(value.items) || !value.items.every((item) => isRecord(item) && typeof item.id === "string" && item.id.length > 0)) {
+    throw new Error("Message page response contained an invalid message id.");
+  }
+
+  return value as unknown as MessagePageResponse;
 }
 
 function isSpreadsheetFile(mimeType: string, extension: string): boolean {

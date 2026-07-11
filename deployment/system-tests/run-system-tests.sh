@@ -80,6 +80,12 @@ if [ "$PROFILE" = "dev" ]; then
 fi
 
 export CONV_AGENT_URL="$CONV_AGENT_TARGET"
+export SYSTEM_TEST_DATABASE_URL="$(read_secret_value "MIGRATION_DATABASE_URL" "$CREDS_FILE")"
+
+if [ -z "$SYSTEM_TEST_DATABASE_URL" ]; then
+  echo "Missing MIGRATION_DATABASE_URL in $CREDS_FILE." >&2
+  exit 1
+fi
 
 health_check() {
   if [ "$PROFILE" = "dev" ]; then
@@ -108,4 +114,7 @@ echo "Running conv-agent system tests with profile '$PROFILE'."
 echo "Target: $CONV_AGENT_URL"
 
 cd "$REPO_ROOT/packages/conv-agent"
-bun test --timeout 180000 src/system-tests/conv-agent-st.test.ts "$@"
+bun test --timeout 180000 \
+  src/system-tests/conv-agent-st.test.ts \
+  src/system-tests/message-id-migration-st.test.ts \
+  "$@"

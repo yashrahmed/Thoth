@@ -13,7 +13,7 @@ export class PostgresFileRepository implements FileRepository {
     try {
       const rows = await this.sql<FileRow[]>`
         insert into thoth.files (
-          message_id,
+          message_id_bigint,
           canonical_url,
           filename,
           mime_type,
@@ -32,7 +32,7 @@ export class PostgresFileRepository implements FileRepository {
         )
         returning
           id,
-          message_id,
+          message_id_bigint::text as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -52,7 +52,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
-          message_id,
+          message_id_bigint::text as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -84,7 +84,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
-          message_id,
+          message_id_bigint::text as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -110,7 +110,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
-          message_id,
+          message_id_bigint::text as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -118,7 +118,7 @@ export class PostgresFileRepository implements FileRepository {
           created_at,
           updated_at
         from thoth.files
-        where message_id = any(${messageIds as string[]})
+        where message_id_bigint = any(${messageIds as string[]}::bigint[])
         order by created_at asc, id asc
       `;
 
@@ -133,7 +133,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           f.id,
-          f.message_id,
+          f.message_id_bigint::text as message_id,
           f.canonical_url,
           f.filename,
           f.mime_type,
@@ -141,7 +141,7 @@ export class PostgresFileRepository implements FileRepository {
           f.created_at,
           f.updated_at
         from thoth.files f
-        join thoth.messages m on m.id = f.message_id
+        join thoth.messages m on m.id_bigint = f.message_id_bigint
         where m.conversation_id = ${conversationId}
         order by f.created_at asc, f.id asc
       `;
@@ -164,6 +164,7 @@ export class PostgresFileRepository implements FileRepository {
       return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
+
   async deleteFileRows(ids: ReadonlyArray<string>): Promise<Result<void, StoreError>> {
     if (ids.length === 0) {
       return success(undefined);
@@ -189,7 +190,7 @@ export class PostgresFileRepository implements FileRepository {
     try {
       await this.sql`
         delete from thoth.files
-        where message_id = any(${messageIds as string[]})
+        where message_id_bigint = any(${messageIds as string[]}::bigint[])
       `;
 
       return success(undefined);

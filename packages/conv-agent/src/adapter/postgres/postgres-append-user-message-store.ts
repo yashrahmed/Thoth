@@ -36,7 +36,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             ${input.message.updatedAt.toISOString()}
           )
           returning
-            id,
+            id_bigint::text as id,
             conversation_id,
             type,
             content,
@@ -55,7 +55,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
         for (const file of input.files) {
           const insertedFileRows = await sql<FileRow[]>`
             insert into thoth.files (
-              message_id,
+              message_id_bigint,
               canonical_url,
               filename,
               mime_type,
@@ -74,7 +74,7 @@ export class PostgresAppendUserMessageStore implements AppendUserMessageStore {
             )
             returning
               id,
-              message_id,
+              message_id_bigint::text as message_id,
               canonical_url,
               filename,
               mime_type,

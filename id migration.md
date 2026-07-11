@@ -2,9 +2,23 @@
 
 This is a zero-downtime, expand-migrate-contract plan. It assumes a globally generated sequential PostgreSQL `bigint`, represented as a decimal string in JSON and TypeScript.
 
+## Implementation status and dev rollout scope
+
+All application, Worker, UI, and test code described by this plan has already been implemented. The descriptions of application behavior below are deployment acceptance criteria, not instructions to make more code changes.
+
+For the dev rollout:
+
+- Do not repeat or reimplement any backend, UI, mapping, validation, or test changes described below.
+- Do not perform a separate UI deployment for this migration; the UI already treats message IDs as opaque strings.
+- Application rollout gates require only deployment of the already-prepared Worker releases.
+- Database migrations and the bounded backfill still run at their stated gates.
+- Phase 15 remains excluded and requires a new, explicit user request.
+
+Phase 15 is the only section that describes possible future application changes, and those changes are prohibited until that explicit request is made.
+
 ## Starting state
 
-The current implementation has:
+The pre-migration implementation had:
 
 - `thoth.messages.id` as a `text` primary key generated from `gen_random_uuid()`.
 - `thoth.files.message_id` as a nullable `text` foreign key to `messages.id`.
@@ -43,9 +57,9 @@ These must hold throughout the rollout:
 
 Do not expose them as JSON numbers, because the full PostgreSQL `bigint` range exceeds JavaScript's safe-integer range.
 
-## Phase 1: Establish migration tests
+## Phase 1: Migration tests (completed; no code changes required)
 
-Before changing the schema, add system tests covering:
+The completed system-test coverage includes:
 
 - Appending a message and receiving its ID.
 - Listing messages and using the returned IDs in a completion request.
@@ -55,7 +69,7 @@ Before changing the schema, add system tests covering:
 - Deleting conversations and cascading to messages/files.
 - Concurrent message creation while a backfill runs.
 
-Create a compatibility test matrix:
+Use the completed compatibility matrix as a deployment gate:
 
 | Server behavior | UUID input | Bigint input | Output |
 |---|---:|---:|---|
@@ -64,7 +78,7 @@ Create a compatibility test matrix:
 | Cutover release | Yes | Yes | Bigint |
 | Final release | Via alias | Yes | Bigint |
 
-These tests become deployment gates.
+No new test implementation is required for the dev rollout.
 
 ## Phase 2: Expand the message schema
 
@@ -194,11 +208,11 @@ Once backfill verification succeeds:
 
 At this point, every message has both a UUID ID and a bigint ID. Both old and new applications can operate safely.
 
-## Phase 7: Deploy the compatibility backend
+## Phase 7: Deploy the prepared compatibility Worker
 
-Deploy a backend release that understands both identifier formats but continues returning UUIDs initially.
+Deploy the already-implemented Worker release that understands both identifier formats but continues returning UUIDs initially. No code changes are required.
 
-Required changes:
+Verify its already-implemented behavior:
 
 - Treat external IDs as opaque strings at the HTTP/application boundary.
 - Recognize an all-decimal string as a bigint ID.
@@ -210,39 +224,25 @@ Required changes:
 - Read and write both file reference columns.
 - Map PostgreSQL bigint values to strings.
 
-The compatibility repository should select both columns:
-
-```sql
-select
-  id,
-  id_bigint,
-  conversation_id,
-  type,
-  content,
-  created_at,
-  updated_at
-from thoth.messages;
-```
-
-Keep the API response mode behind configuration:
+This prepared release uses the UUID response mode:
 
 ```text
 MESSAGE_ID_RESPONSE_MODE=uuid
 ```
 
-This release must be deployed to every backend instance before changing that setting.
+Deploy this prepared Worker release to every backend instance before moving to the bigint-emitting Worker release.
 
-## Phase 8: Deploy the bigint-compatible UI
+## Phase 8: Confirm UI compatibility (completed; no UI deployment required)
 
-Keep the UI type as an opaque string:
+The implemented UI keeps the ID type as an opaque string:
 
 ```ts
 type MessageId = string;
 ```
 
-Do not convert it with `Number()`, `parseInt()`, or arithmetic.
+It does not convert IDs with `Number()`, `parseInt()`, or arithmetic.
 
-The UI should:
+Verify the existing UI behavior:
 
 - Accept either UUID strings or decimal strings from append/list responses.
 - Preserve IDs exactly as received.
@@ -250,9 +250,7 @@ The UI should:
 - Use them unchanged as React keys.
 - Avoid UUID-specific validation or formatting.
 
-The current UI already does most of this because `ChatMessage.id` is a string.
-
-Deploy and verify this UI while the backend still returns UUIDs.
+No UI code change or separate UI deployment is needed. Verify the existing deployed UI while the Worker still returns UUIDs.
 
 ## Phase 9: Complete the server fleet gate
 
@@ -265,15 +263,15 @@ Before emitting bigint IDs, prove that:
 
 This is the most important no-break deployment gate. If a bigint-emitting server coexists with a UUID-only server, a client could receive a bigint from one instance and get a 404 when sending it to another.
 
-## Phase 10: Switch API responses to bigint IDs
+## Phase 10: Deploy the prepared bigint-response Worker
 
-Change:
+Deploy the already-implemented Worker release whose response mode is:
 
 ```text
 MESSAGE_ID_RESPONSE_MODE=bigint
 ```
 
-The following responses now expose decimal bigint strings as `id`:
+No code or configuration authoring is required. After the Worker deployment, the following responses expose decimal bigint strings as `id`:
 
 - `POST /conversations/:id/append-direct`
 - `GET /conversations/:id/chat`
@@ -325,9 +323,9 @@ The compatibility backend can then continue accepting old UUID requests after th
 
 This is logically necessary for indefinite compatibility. If every UUID value and mapping is deleted, an old UUID can no longer be resolved. If permanent legacy support is unnecessary, retain the alias table only for a defined maximum client/session lifetime and remove it later as an explicitly scheduled contract change.
 
-## Phase 12: Make bigint canonical internally
+## Phase 12: Deploy the prepared bigint-canonical Worker
 
-Deploy another backend release that:
+Deploy the already-implemented Worker release that:
 
 - Uses `id_bigint` as the canonical domain/application ID.
 - Returns only bigint IDs.
@@ -336,7 +334,7 @@ Deploy another backend release that:
 - No longer reads or writes the UUID columns during normal operations.
 - Keeps the temporary synchronization trigger functioning only for rollback safety.
 
-Run this release long enough to demonstrate zero UUID-column reads or writes.
+No code changes are required. Run this Worker release long enough to demonstrate zero UUID-column reads or writes.
 
 At this point, rollback remains possible to the earlier compatibility backend, but not to the original UUID-only backend.
 
@@ -361,26 +359,51 @@ Use a short metadata-only transaction for primary-key replacement and column rem
 
 Keep the physical new column named `id_bigint` during this rollout. Renaming it to `id` adds another schema/application compatibility boundary without changing API behavior. If the conventional name is important, perform that later through a stable persistence view or a separate carefully gated migration.
 
-## Phase 14: Final cleanup
+## Phase 14: Verify completed application cleanup
 
-Remove transitional code:
+The prepared Worker release has already removed transitional application code. Verify that it contains no normal-path use of:
 
 - UUID response mode.
 - UUID dual-write behavior.
 - Transitional row fields.
 - UUID-specific repository queries.
 - Compatibility metrics that are no longer needed.
-- Temporary migration scripts and triggers.
 
-Keep UUID input resolution only if the alias table remains part of the supported API contract.
+Database migration tooling is not application code and remains available until the dev rollout has completed. The contract migration removes the temporary database triggers.
 
-Update tests so the primary contract is:
+UUID input resolution remains only because the alias table is part of the supported API contract.
+
+The completed tests use the primary contract:
 
 ```ts
 type MessageId = string; // decimal representation of PostgreSQL bigint
 ```
 
-Validation should require a positive decimal integer within the PostgreSQL signed bigint range.
+Validation already requires a positive decimal integer within the PostgreSQL signed bigint range. No additional application or test changes are required during the normal dev rollout.
+
+## Phase 15: Remove legacy UUID lookup support (explicit opt-in only)
+
+This phase is **not part of the normal message ID migration**. Do not create, apply, schedule, or automatically include a migration that removes UUID aliases. Execute this phase only after the user makes a separate, explicit request to remove legacy UUID lookup support.
+
+Until that explicit request is made:
+
+- Keep `thoth.message_id_aliases` and its data.
+- Keep UUID recognition at the inbound compatibility boundary.
+- Keep repository resolution from `legacy_uuid` to the canonical bigint ID.
+- Keep tests proving that historical UUID inputs still resolve.
+
+After an explicit removal request, treat removal as a new expand-contract rollout rather than appending an automatically executable cleanup migration to the original sequence:
+
+1. Confirm UUID request traffic has remained at zero for longer than the maximum supported browser session, retry, bookmark, and persisted-client lifetime.
+2. Confirm no supported rollback release requires UUID lookup.
+3. Explicitly acknowledge that any remaining client holding an old message UUID will receive a validation or not-found response after this change.
+4. Change inbound validation to accept only positive decimal bigint strings.
+5. Remove the repository alias lookup and deploy that backend release everywhere while leaving the alias table intact.
+6. Soak and verify bigint-only completion requests, explicit ordering, conversation ownership checks, file lookup, and deletion behavior.
+7. Only then create and apply a new database migration that drops `thoth.message_id_aliases`.
+8. Remove legacy UUID compatibility tests and metrics after the database migration succeeds.
+
+The database migration for this phase must not exist in the normal migration chain ahead of the explicit request. This prevents a routine Flyway run from irreversibly removing compatibility data.
 
 ## End state
 
@@ -389,7 +412,8 @@ Validation should require a positive decimal integer within the PostgreSQL signe
 - Messages use a sequential 8-byte bigint primary key.
 - Files reference the bigint message key with `ON DELETE CASCADE`.
 - UUID columns on `messages` and `files` are deleted.
-- Optionally, UUID aliases remain in a cold compatibility table.
+- The normal migration retains UUID aliases in a cold compatibility table.
+- The alias table is removed only by the separately requested Phase 15.
 - No UUID is generated for new messages.
 
 ### API
@@ -398,7 +422,8 @@ Validation should require a positive decimal integer within the PostgreSQL signe
 - Message IDs are returned as decimal strings.
 - `messageIds` remains an explicit, ordered selection.
 - Bigint IDs are validated against the route conversation.
-- Legacy UUID inputs can continue working through aliases if required.
+- Legacy UUID inputs continue working through aliases after the normal migration.
+- Bigint-only input is enforced only after the separately requested Phase 15.
 
 ### UI
 
@@ -411,13 +436,18 @@ The critical deployment sequence is:
 ```text
 Expand DB
 -> backfill
--> dual-ID backend
--> compatible UI
--> drain UUID-only servers
--> emit bigint IDs
--> switch internal reads/writes
+-> deploy prepared dual-ID Worker
+-> verify existing UI compatibility (no UI deployment)
+-> drain UUID-only Workers
+-> deploy prepared bigint-response Worker
+-> deploy prepared bigint-canonical Worker
 -> preserve aliases
 -> delete UUID columns
+-> STOP: normal migration complete
 ```
 
 Reversing any of the first five deployment gates risks transient completion failures.
+
+All normal application transitions above are Worker deployments of completed code. They do not require new code changes or a web/UI deployment.
+
+Phase 15 is a separate, explicit opt-in operation and must never run as part of this sequence without a new user request.

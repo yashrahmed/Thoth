@@ -19,7 +19,6 @@ import { ConversationResponse, MessageResponse, PageResponse } from "../../domai
 const ACCESS_JWT_HEADER = "cf-access-jwt-assertion";
 const ALWAYS_AUTHORIZED_PATHS = new Set(["/auth/logout"]);
 const GENERIC_INTERNAL_ERROR_MESSAGE = "An unexpected error occurred.";
-const LEGACY_MESSAGE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const BIGINT_MESSAGE_ID_PATTERN = /^[1-9][0-9]{0,18}$/u;
 const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
 
@@ -347,7 +346,7 @@ async function parseRequestCompletionRequest(
   }
 
   if (!body.messageIds.every((messageId) => typeof messageId === "string" && isSupportedMessageId(messageId.trim()))) {
-    return transportFailure("messageIds", "messageIds must contain only UUIDs or positive decimal bigint strings.");
+    return transportFailure("messageIds", "messageIds must contain only positive decimal bigint strings.");
   }
 
   return {
@@ -360,10 +359,6 @@ async function parseRequestCompletionRequest(
 }
 
 function isSupportedMessageId(value: string): boolean {
-  if (LEGACY_MESSAGE_UUID_PATTERN.test(value)) {
-    return true;
-  }
-
   return BIGINT_MESSAGE_ID_PATTERN.test(value) && BigInt(value) <= POSTGRES_BIGINT_MAX;
 }
 

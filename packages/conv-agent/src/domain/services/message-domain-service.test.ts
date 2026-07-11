@@ -8,8 +8,6 @@ import { MessageDomainService } from "./message-domain-service";
 import type { MessageContentDomainService } from "./message-content-domain-service";
 
 const CONVERSATION_ID = "conversation-1";
-const LEGACY_ID_1 = "4f3de38e-3226-40f2-a7d8-958cc82a4c55";
-const LEGACY_ID_2 = "29e5f4cd-bd97-45d8-b122-08e1a4874348";
 const NOW = new Date("2026-07-10T12:00:00.000Z");
 const MESSAGE_1 = new Message("1", CONVERSATION_ID, LLMMessageType.User, "First", NOW, NOW);
 const MESSAGE_2 = new Message("2", CONVERSATION_ID, LLMMessageType.Assistant, "Second", NOW, NOW);
@@ -17,32 +15,32 @@ const MESSAGE_2 = new Message("2", CONVERSATION_ID, LLMMessageType.Assistant, "S
 describe("MessageDomainService.findMessagesByIds", () => {
   test("preserves the explicit caller order returned by ID resolution", async () => {
     const resolved = [
-      { requestedId: LEGACY_ID_2, message: MESSAGE_2 },
+      { requestedId: "2", message: MESSAGE_2 },
       { requestedId: "1", message: MESSAGE_1 },
     ];
     const { service, selectMessagesByIds } = createHarness(resolved);
 
     const result = await service.findMessagesByIds({
       conversationId: CONVERSATION_ID,
-      messageIds: [LEGACY_ID_2, "1"],
+      messageIds: ["2", "1"],
     });
 
     expect(result).toEqual(success([MESSAGE_2, MESSAGE_1]));
     expect(selectMessagesByIds).toHaveBeenCalledWith({
       conversationId: CONVERSATION_ID,
-      messageIds: [LEGACY_ID_2, "1"],
+      messageIds: ["2", "1"],
     });
   });
 
-  test("rejects UUID and bigint aliases that resolve to the same message", async () => {
+  test("rejects a duplicate bigint ID", async () => {
     const { service } = createHarness([
-      { requestedId: LEGACY_ID_1, message: MESSAGE_1 },
+      { requestedId: "1", message: MESSAGE_1 },
       { requestedId: "1", message: MESSAGE_1 },
     ]);
 
     const result = await service.findMessagesByIds({
       conversationId: CONVERSATION_ID,
-      messageIds: [LEGACY_ID_1, "1"],
+      messageIds: ["1", "1"],
     });
 
     expect(result.ok).toBe(false);
@@ -57,14 +55,14 @@ describe("MessageDomainService.findMessagesByIds", () => {
 
     const result = await service.findMessagesByIds({
       conversationId: CONVERSATION_ID,
-      messageIds: ["1", LEGACY_ID_2],
+      messageIds: ["1", "999"],
     });
 
     expect(result.ok).toBe(false);
     expect(result.ok ? undefined : result.error).toMatchObject({
       kind: "NotFoundError",
       entityType: "Message",
-      id: LEGACY_ID_2,
+      id: "999",
     });
   });
 });

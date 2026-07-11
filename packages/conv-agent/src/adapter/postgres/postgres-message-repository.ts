@@ -73,36 +73,19 @@ export class PostgresMessageRepository implements MessageRepository {
           select requested_id, ordinal
           from unnest(${request.messageIds as string[]}::text[])
             with ordinality as input(requested_id, ordinal)
-        ),
-        canonicalized as (
-          select
-            requested.requested_id,
-            requested.ordinal,
-            case
-              when requested.requested_id ~ '^[1-9][0-9]{0,18}$'
-                and (
-                  length(requested.requested_id) < 19
-                  or requested.requested_id <= '9223372036854775807'
-                )
-                then requested.requested_id::bigint
-              else aliases.message_id
-            end as message_id
-          from requested
-          left join thoth.message_id_aliases as aliases
-            on aliases.legacy_uuid = requested.requested_id
         )
         select
-          canonicalized.requested_id,
+          requested.requested_id,
           m.id_bigint::text as id,
           m.conversation_id,
           m.type,
           m.content,
           m.created_at,
           m.updated_at
-        from canonicalized
-        join thoth.messages as m on m.id_bigint = canonicalized.message_id
+        from requested
+        join thoth.messages as m on m.id_bigint = requested.requested_id::bigint
         where m.conversation_id = ${request.conversationId}
-        order by canonicalized.ordinal asc
+        order by requested.ordinal asc
       `;
 
       return mapResolvedRows(rows);

@@ -35,7 +35,7 @@ describe("message bigint ID migration", () => {
     await sql.end({ timeout: 5 });
   });
 
-  test("round-trips bigint IDs, resolves legacy UUIDs, and cascades every association", async () => {
+  test("round-trips bigint IDs, rejects legacy UUIDs, and cascades every association", async () => {
     let conversationId: string | undefined;
 
     try {
@@ -70,27 +70,17 @@ describe("message bigint ID migration", () => {
       expect(page.items.find((message) => message.id === firstMessageId)?.files).toHaveLength(1);
       const completionMessageId = messageIds[1];
       expect(completionMessageId).toBeDefined();
-      // Expanded-schema messages already have aliases. In the contracted
-      // schema, seed one to model a UUID persisted by a pre-cutover client;
-      // newly created messages must not generate fresh UUIDs.
-      const [alias] = await sql<{ legacy_uuid: string }[]>`
-        insert into thoth.message_id_aliases (legacy_uuid, message_id)
-        values (gen_random_uuid()::text, ${completionMessageId as string})
-        on conflict (message_id)
-        do update set message_id = excluded.message_id
-        returning legacy_uuid
-      `;
-
-      expect(alias?.legacy_uuid).toMatch(/^[0-9a-f-]{36}$/u);
-
-      const duplicateResponse = await requestCompletion(conversationId, [completionMessageId as string, alias?.legacy_uuid as string]);
+      const duplicateResponse = await requestCompletion(conversationId, [completionMessageId as string, completionMessageId as string]);
       expect(duplicateResponse.status).toBe(400);
       expect(await duplicateResponse.json()).toMatchObject({
         error: { kind: "ValidationError", fieldName: "messageIds" },
       });
 
-      const legacyCompletionResponse = await requestCompletion(conversationId, [alias?.legacy_uuid as string]);
-      expect(legacyCompletionResponse.status).toBe(200);
+      const legacyCompletionResponse = await requestCompletion(conversationId, ["4f3de38e-3226-40f2-a7d8-958cc82a4c55"]);
+      expect(legacyCompletionResponse.status).toBe(400);
+      expect(await legacyCompletionResponse.json()).toMatchObject({
+        error: { kind: "ValidationError", fieldName: "messageIds" },
+      });
 
       const [linkedFileCount] = await sql<{ count: number }[]>`
         select count(*)::integer as count
@@ -104,14 +94,13 @@ describe("message bigint ID migration", () => {
       const deletedConversationId = conversationId;
       conversationId = undefined;
 
-      const [remaining] = await sql<{ messages: number; aliases: number; files: number }[]>`
+      const [remaining] = await sql<{ messages: number; files: number }[]>`
         select
           (select count(*)::integer from thoth.messages where conversation_id = ${deletedConversationId}) as messages,
-          (select count(*)::integer from thoth.message_id_aliases where message_id = any(${messageIds}::bigint[])) as aliases,
           (select count(*)::integer from thoth.files where message_id_bigint = any(${messageIds}::bigint[])) as files
       `;
 
-      expect(remaining).toEqual({ messages: 0, aliases: 0, files: 0 });
+      expect(remaining).toEqual({ messages: 0, files: 0 });
     } finally {
       if (conversationId) {
         await fetch(`${BASE_URL}/conversations/${conversationId}`, { method: "DELETE", headers: AUTH_HEADERS });

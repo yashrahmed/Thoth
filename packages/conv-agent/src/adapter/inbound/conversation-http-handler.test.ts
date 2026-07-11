@@ -4,8 +4,8 @@ import { EntityType, LlmError, StoreError, StoreOperation } from "../../domain/o
 import { LLMMessageType } from "../../domain/objects/llm";
 import { createConversationHttpHandler } from "./conversation-http-handler";
 
-const MESSAGE_ID_1 = "4f3de38e-3226-40f2-a7d8-958cc82a4c55";
-const MESSAGE_ID_2 = "29e5f4cd-bd97-45d8-b122-08e1a4874348";
+const MESSAGE_ID_1 = "1";
+const MESSAGE_ID_2 = "2";
 
 describe("createConversationHttpHandler", () => {
   afterEach(() => {
@@ -155,7 +155,7 @@ describe("createConversationHttpHandler", () => {
   test("rejects invalid or out-of-range bigint message IDs", async () => {
     const handler = createConversationHttpHandler(buildDeps());
 
-    for (const messageId of ["0", "-1", "01", "9223372036854775808", "message-1"]) {
+    for (const messageId of ["0", "-1", "01", "9223372036854775808", "message-1", "4f3de38e-3226-40f2-a7d8-958cc82a4c55"]) {
       const response = await handler(
         new Request("http://localhost/conversations/conversation-1/request-completion", {
           method: "POST",

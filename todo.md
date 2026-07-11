@@ -5,8 +5,10 @@
 - Move graph attributes into a different table - Simplify the design!!
   - Think about support for miscellaneous messages like compactions, model changes etc.
     - [x] Let the client shape the inbound message when requesting completion.
-    - [ ] Change ids to numbers instead of a GUID?
-- Run an experiment to build a world model for Thoth in a logic program (or somthing similar) and try using it to specify a development goal.
+    - [x] Change ids to numbers instead of a GUID?
+- Run an experiment to build a world model for Thoth
+  - logic program (or somthing similar) and try using it to specify a development goal.
+  - Bayesian modeling.
 - Try out time measurement using a tool call instead of prompt tuning.
 - Check CF models + Chinese models on OpenRouter for faster completions.
 - Build a better UI.
@@ -37,4 +39,3 @@
 - Deeplink content support.
 - Add support for overlay mode and video/audio inputs.
 - Context compaction support.
-

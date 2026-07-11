@@ -9,6 +9,8 @@ export interface LlmConfig {
   readonly apiKey: string;
 }
 
+export type MessageIdResponseMode = "uuid" | "bigint";
+
 export interface AccessConfig {
   readonly teamDomain: string;
   readonly aud: string;

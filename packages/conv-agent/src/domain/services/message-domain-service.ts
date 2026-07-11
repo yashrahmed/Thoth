@@ -57,20 +57,28 @@ export class MessageDomainService {
       return messagesResult;
     }
 
-    const messagesById = new Map(messagesResult.value.map((message) => [message.id, message]));
-    const orderedMessages: Message[] = [];
+    const resolvedRequestedIds = new Set(messagesResult.value.map((resolved) => resolved.requestedId));
 
     for (const messageId of request.messageIds) {
-      const message = messagesById.get(messageId);
-
-      if (!message) {
+      if (!resolvedRequestedIds.has(messageId)) {
         return { ok: false, error: new NotFoundError(EntityType.Message, messageId) };
       }
-
-      orderedMessages.push(message);
     }
 
-    return { ok: true, value: orderedMessages };
+    const canonicalIds = new Set<string>();
+
+    for (const resolved of messagesResult.value) {
+      if (canonicalIds.has(resolved.message.id)) {
+        return {
+          ok: false,
+          error: new ValidationError("messageIds", "messageIds must not identify the same message more than once."),
+        };
+      }
+
+      canonicalIds.add(resolved.message.id);
+    }
+
+    return { ok: true, value: messagesResult.value.map((resolved) => resolved.message) };
   }
 
   async delete(messageId: string): Promise<Result<void, ValidationError | StoreError>> {

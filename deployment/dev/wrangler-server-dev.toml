@@ -16,6 +16,7 @@ port = 3001
 
 [vars]
 AUTH_ENABLED = true
+MESSAGE_ID_RESPONSE_MODE = "uuid"
 BLOB_STORAGE_ENDPOINT = "https://61caa9d56c5a0143bfda0f07fd01088a.r2.cloudflarestorage.com"
 BLOB_STORAGE_BUCKET = "thoth-obj-store-dev"
 BLOB_STORAGE_REGION = "auto"

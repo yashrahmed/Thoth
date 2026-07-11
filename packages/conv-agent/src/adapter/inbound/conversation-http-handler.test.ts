@@ -4,6 +4,9 @@ import { EntityType, LlmError, StoreError, StoreOperation } from "../../domain/o
 import { LLMMessageType } from "../../domain/objects/llm";
 import { createConversationHttpHandler } from "./conversation-http-handler";
 
+const MESSAGE_ID_1 = "4f3de38e-3226-40f2-a7d8-958cc82a4c55";
+const MESSAGE_ID_2 = "29e5f4cd-bd97-45d8-b122-08e1a4874348";
+
 describe("createConversationHttpHandler", () => {
   afterEach(() => {
     mock.restore();
@@ -67,7 +70,7 @@ describe("createConversationHttpHandler", () => {
       new Request("http://localhost/conversations/conversation-1/request-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messageIds: ["message-1", "message-2"] }),
+        body: JSON.stringify({ messageIds: [MESSAGE_ID_1, MESSAGE_ID_2] }),
       }),
     );
     const body = await response.json();
@@ -76,7 +79,7 @@ describe("createConversationHttpHandler", () => {
     expect(body).toEqual({
       messages: [{ type: "assistant", content: "Hello there." }],
     });
-    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: ["message-1", "message-2"] });
+    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: [MESSAGE_ID_1, MESSAGE_ID_2] });
   });
 
   test("rejects a completion request with an empty messageIds list", async () => {
@@ -115,7 +118,7 @@ describe("createConversationHttpHandler", () => {
       new Request("http://localhost/conversations/conversation-1/request-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messageIds: ["message-1"] }),
+        body: JSON.stringify({ messageIds: [MESSAGE_ID_1] }),
       }),
     );
     const body = await response.json();
@@ -130,6 +133,39 @@ describe("createConversationHttpHandler", () => {
     });
     expect(JSON.stringify(body)).not.toContain("provider secret detail");
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  test("accepts positive bigint message IDs without converting them to numbers", async () => {
+    const execute = mock(async () => success([]));
+    const handler = createConversationHttpHandler(buildDeps({ requestCompletion: { execute } }));
+    const messageId = "9223372036854775807";
+
+    const response = await handler(
+      new Request("http://localhost/conversations/conversation-1/request-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageIds: [messageId] }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: [messageId] });
+  });
+
+  test("rejects invalid or out-of-range bigint message IDs", async () => {
+    const handler = createConversationHttpHandler(buildDeps());
+
+    for (const messageId of ["0", "-1", "01", "9223372036854775808", "message-1"]) {
+      const response = await handler(
+        new Request("http://localhost/conversations/conversation-1/request-completion", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messageIds: [messageId] }),
+        }),
+      );
+
+      expect(response.status).toBe(400);
+    }
   });
 });
 

@@ -1,3 +1,4 @@
+import type { MessageIdResponseMode } from "../../config/config";
 import type { FileRepository } from "../../domain/contracts/file-repository";
 import type { File } from "../../domain/objects/message-types";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
@@ -7,13 +8,17 @@ import { mapFileRow, mapFileRows, type FileRow } from "../common/row-mapper";
 import type { PostgresDatabase } from "./postgres-database";
 
 export class PostgresFileRepository implements FileRepository {
-  constructor(private readonly sql: PostgresDatabase) {}
+  constructor(
+    private readonly sql: PostgresDatabase,
+    private readonly messageIdResponseMode: MessageIdResponseMode,
+  ) {}
 
   async upsertFileRow(record: Omit<File, "id">) {
     try {
       const rows = await this.sql<FileRow[]>`
         insert into thoth.files (
           message_id,
+          message_id_bigint,
           canonical_url,
           filename,
           mime_type,
@@ -21,18 +26,22 @@ export class PostgresFileRepository implements FileRepository {
           created_at,
           updated_at
         )
-        values (
-          ${record.messageId},
+        select
+          m.id,
+          m.id_bigint,
           ${record.canonicalUrl},
           ${record.filename},
           ${record.mimeType},
           ${record.sizeInBytes},
           ${record.createdAt.toISOString()},
           ${record.updatedAt.toISOString()}
-        )
+        from thoth.messages as m
+        where
+          (${this.messageIdResponseMode} = 'uuid' and m.id = ${record.messageId})
+          or (${this.messageIdResponseMode} = 'bigint' and m.id_bigint::text = ${record.messageId})
         returning
           id,
-          message_id,
+          case when ${this.messageIdResponseMode} = 'uuid' then message_id else message_id_bigint::text end as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -52,7 +61,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
-          message_id,
+          case when ${this.messageIdResponseMode} = 'uuid' then message_id else message_id_bigint::text end as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -84,7 +93,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
-          message_id,
+          case when ${this.messageIdResponseMode} = 'uuid' then message_id else message_id_bigint::text end as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -110,7 +119,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           id,
-          message_id,
+          case when ${this.messageIdResponseMode} = 'uuid' then message_id else message_id_bigint::text end as message_id,
           canonical_url,
           filename,
           mime_type,
@@ -118,7 +127,11 @@ export class PostgresFileRepository implements FileRepository {
           created_at,
           updated_at
         from thoth.files
-        where message_id = any(${messageIds as string[]})
+        where
+          case
+            when ${this.messageIdResponseMode} = 'uuid' then message_id
+            else message_id_bigint::text
+          end = any(${messageIds as string[]})
         order by created_at asc, id asc
       `;
 
@@ -133,7 +146,7 @@ export class PostgresFileRepository implements FileRepository {
       const rows = await this.sql<FileRow[]>`
         select
           f.id,
-          f.message_id,
+          case when ${this.messageIdResponseMode} = 'uuid' then f.message_id else f.message_id_bigint::text end as message_id,
           f.canonical_url,
           f.filename,
           f.mime_type,
@@ -141,7 +154,7 @@ export class PostgresFileRepository implements FileRepository {
           f.created_at,
           f.updated_at
         from thoth.files f
-        join thoth.messages m on m.id = f.message_id
+        join thoth.messages m on m.id_bigint = f.message_id_bigint
         where m.conversation_id = ${conversationId}
         order by f.created_at asc, f.id asc
       `;
@@ -164,6 +177,7 @@ export class PostgresFileRepository implements FileRepository {
       return failure(new StoreError(EntityType.File, StoreOperation.Remove, getErrorMessage(error)));
     }
   }
+
   async deleteFileRows(ids: ReadonlyArray<string>): Promise<Result<void, StoreError>> {
     if (ids.length === 0) {
       return success(undefined);
@@ -189,7 +203,11 @@ export class PostgresFileRepository implements FileRepository {
     try {
       await this.sql`
         delete from thoth.files
-        where message_id = any(${messageIds as string[]})
+        where
+          case
+            when ${this.messageIdResponseMode} = 'uuid' then message_id
+            else message_id_bigint::text
+          end = any(${messageIds as string[]})
       `;
 
       return success(undefined);

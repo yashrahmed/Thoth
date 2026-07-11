@@ -6,6 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 CREDENTIALS_DIR="$HOME/.thoth"
 PROFILE="${1:-local}"
+TARGET="${2:-latest}"
 CREDS_FILE=""
 MIGRATIONS_DIR="$REPO_ROOT/packages/conv-agent/resources/db/migrations"
 
@@ -73,6 +74,16 @@ case "$PROFILE" in
     ;;
 esac
 
+case "$TARGET" in
+  latest)
+    ;;
+  ""|*[!0-9]*)
+    echo "Unsupported migration target: $TARGET" >&2
+    echo "Expected a Flyway version number or 'latest'." >&2
+    exit 1
+    ;;
+esac
+
 CREDS_FILE="$CREDENTIALS_DIR/$PROFILE-secrets.env"
 
 migration_database_url="$(get_env_value "MIGRATION_DATABASE_URL" "$CREDS_FILE")"
@@ -91,6 +102,7 @@ docker run --rm \
   -e FLYWAY_SCHEMAS=flyway,thoth \
   -e FLYWAY_LOCATIONS=filesystem:/flyway/sql \
   -e FLYWAY_POSTGRESQL_TRANSACTIONAL_LOCK=false \
+  -e FLYWAY_TARGET="$TARGET" \
   -e FLYWAY_URL="$flyway_jdbc_url" \
   -v "$MIGRATIONS_DIR:/flyway/sql:ro" \
   redgate/flyway:11-alpine \

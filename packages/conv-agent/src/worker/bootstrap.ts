@@ -32,6 +32,7 @@ import { GenericValidationService } from "../domain/services/generic-validation-
 import { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-service";
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
+import { TimingToolsService } from "../domain/services/timing-tools-service";
 import type { AccessConfig, AuthConfig, BlobStorageConfig, LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
@@ -106,13 +107,22 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const messageDomainService = new MessageDomainService(messageRepository, messageContentDomainService, genericValidationService);
 
   const llmPromptDomainService = new LlmPromptDomainService();
+  const timingToolsService = new TimingToolsService();
+  const timingToolDefinitions = timingToolsService.get_description();
   const fileAccessDomainService = new FileAccessDomainService(fileSignedUrlGenerator);
   const llmAdapters = {
-    openAi: new OpenAiLlmAdapter(openAiLlmConfig),
-    gemini: new GeminiLlmAdapter(googleLlmConfig),
+    openAi: new OpenAiLlmAdapter(openAiLlmConfig, timingToolDefinitions),
+    gemini: new GeminiLlmAdapter(googleLlmConfig, timingToolDefinitions),
   };
 
-  const llmCompletionDomainService = new LlmCompletionDomainService(messageDomainService, fileDomainService, fileAccessDomainService, llmAdapters.gemini, llmPromptDomainService);
+  const llmCompletionDomainService = new LlmCompletionDomainService(
+    messageDomainService,
+    fileDomainService,
+    fileAccessDomainService,
+    llmAdapters.gemini,
+    llmPromptDomainService,
+    timingToolsService,
+  );
   const shutdown = async (): Promise<void> => {
     await database.end({ timeout: 5 });
   };

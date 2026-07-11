@@ -1,19 +1,20 @@
 import type { LlmService } from "../contracts/llm-service";
+import { LlmError, type NotFoundError, type StoreError, type ValidationError } from "../objects/errors";
 import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../objects/llm";
-import type { LlmError, NotFoundError, StoreError, ValidationError } from "../objects/errors";
-import { success, type Result } from "../objects/result";
+import { failure, success, type Result } from "../objects/result";
 import type { Message } from "../objects/message-types";
 import type { FileAccessDomainService, SignedFileAccess } from "./file-access-domain-service";
 import { type FileDomainService } from "./file-domain-service";
 import type { LlmPromptDomainService } from "./llm-prompt-domain-service";
 import type { MessageDomainService } from "./message-domain-service";
+import type { TimingToolsService } from "./timing-tools-service";
 
 export interface LlmCompletionRequest {
   readonly conversationId: string;
   readonly messageIds: ReadonlyArray<string>;
 }
 
-const THOTH_SENT_AT_METADATA_LINE_PATTERN = /^sent at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+00:00 UTC$/gm;
+const MAX_TOOL_CALL_ROUNDS = 5;
 
 /**
  * Produces an LLM completion and returns the resulting messages to the caller
@@ -29,6 +30,7 @@ export class LlmCompletionDomainService {
     private readonly fileAccessDomainService: FileAccessDomainService,
     private readonly llmService: LlmService,
     private readonly llmPromptDomainService: LlmPromptDomainService,
+    private readonly timingToolsService: TimingToolsService,
   ) {}
 
   async complete(request: LlmCompletionRequest): Promise<Result<LlmCompletionMessage[], ValidationError | NotFoundError | StoreError | LlmError>> {
@@ -55,33 +57,47 @@ export class LlmCompletionDomainService {
       return signedFilesResult;
     }
 
-    const llmInput = this.buildLlmInputMessages(historyResult.value, signedFilesResult.value);
-    const llmResult = await this.llmService.llmComplete(llmInput);
-
-    if (!llmResult.ok) {
-      return llmResult;
-    }
-
-    return success(this.sanitizeCompletionMessages(llmResult.value.messages));
+    return this.completeWithTools(this.buildLlmInputMessages(historyResult.value, signedFilesResult.value), historyResult.value);
   }
 
-  private sanitizeCompletionMessages(messages: ReadonlyArray<LlmCompletionMessage>): LlmCompletionMessage[] {
-    return messages
-      .map((message) => {
-        if (message.type !== LLMMessageType.Assistant) {
-          return message;
-        }
+  private async completeWithTools(
+    initialMessages: ReadonlyArray<LlmCompletionInputMessage>,
+    messageContext: ReadonlyArray<Message>,
+  ): Promise<Result<LlmCompletionMessage[], LlmError>> {
+    const transcript: Array<LlmCompletionInputMessage | LlmCompletionMessage> = [...initialMessages];
 
-        // Providers can copy Thoth's synthetic timestamp metadata from prompt
-        // history into their answer. Strip exact standalone metadata lines at
-        // the completion boundary so every adapter gets the same protection
-        // before assistant-authored content reaches the caller.
-        return {
-          ...message,
-          content: message.content.replace(THOTH_SENT_AT_METADATA_LINE_PATTERN, "").trim(),
-        };
-      })
-      .filter((message) => message.content.length > 0);
+    for (let round = 0; ; round += 1) {
+      const llmResult = await this.llmService.llmComplete(transcript);
+
+      if (!llmResult.ok) {
+        return llmResult;
+      }
+
+      const response = llmResult.value;
+      transcript.push(response);
+      const toolCalls = response.toolCalls ?? [];
+
+      if (toolCalls.length === 0) {
+        return success(response.content.length > 0 ? [{ type: response.type, content: response.content }] : []);
+      }
+
+      if (round >= MAX_TOOL_CALL_ROUNDS) {
+        return failure(new LlmError(`LLM tool call loop exceeded ${MAX_TOOL_CALL_ROUNDS} rounds.`));
+      }
+
+      for (const toolCall of toolCalls) {
+        try {
+          transcript.push({
+            type: LLMMessageType.Tool,
+            content: await this.timingToolsService.run_tool(toolCall.name, toolCall.inputs, messageContext),
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+          });
+        } catch (error) {
+          return failure(error instanceof LlmError ? error : new LlmError(getErrorMessage(error)));
+        }
+      }
+    }
   }
 
   private buildLlmInputMessages(messages: ReadonlyArray<Message>, files: ReadonlyArray<SignedFileAccess>): LlmCompletionInputMessage[] {
@@ -105,4 +121,8 @@ export class LlmCompletionDomainService {
 
     return [this.llmPromptDomainService.buildSystemPrompt(), ...renderedMessages];
   }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unexpected timing tool execution error.";
 }

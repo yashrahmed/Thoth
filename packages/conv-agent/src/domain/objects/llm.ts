@@ -19,11 +19,26 @@ export interface LlmCompletionInputMessage {
   readonly files: ReadonlyArray<LlmCompletionInputFile>;
 }
 
+export type LlmToolInputSchema = Readonly<Record<string, unknown>>;
+
+export interface LlmToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: LlmToolInputSchema;
+}
+
+export interface LlmToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly inputs: Readonly<Record<string, unknown>>;
+}
+
 export interface LlmCompletionMessage {
   readonly type: LLMMessageType.Assistant | LLMMessageType.Tool;
   readonly content: string;
-}
-
-export interface LlmCompletionResult {
-  readonly messages: ReadonlyArray<LlmCompletionMessage>;
+  readonly toolCalls?: ReadonlyArray<LlmToolCall>;
+  readonly toolCallId?: string;
+  readonly toolName?: string;
+  /** Provider-owned continuation data. It is transient and never leaves the completion boundary. */
+  readonly providerContext?: unknown;
 }

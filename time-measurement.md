@@ -2,38 +2,21 @@
 
 ## Problem
 
-Thoth currently gives the LLM temporal awareness by prepending a timestamp to
-every user and assistant message. Because the timestamp is placed in the same
-text channel as the message content, weaker models sometimes imitate the
-metadata and include a completion time or a `sent at ...` line in their reply.
+Thoth previously gave the LLM temporal awareness by prepending a timestamp to
+every user and assistant message. Because the timestamp was placed in the same
+text channel as message content, weaker models sometimes imitated the metadata
+and included a completion time or a `sent at ...` line in their replies.
 
-Message timestamps should remain in persistence for ordering, auditing, and UI
-display, but they should no longer be rendered into the message text sent to
-the LLM. Temporal information should instead be available through tools and
-returned as structured tool results only when needed.
+Message timestamps remain in persistence for ordering, auditing, and UI
+display, but they are no longer rendered into message text sent to the LLM.
+Temporal information is available through two transient tools.
 
-## Design Principles
-
-- The application, not the model, owns timestamp lookup, timezone conversion,
-  message selection, and elapsed-time arithmetic.
-- The model should express the temporal fact it needs rather than calculate it
-  from raw timestamps.
-- Do not require the model to count conversation turns.
-- Do not accept a turn ID unless that ID has already been made visible to the
-  model. IDs that exist only in persistence or application DTOs cannot be used
-  reliably by the model.
-- Resolve all message selectors only against the messages authorized for the
-  current completion.
-- Treat temporal tool results as transient. Do not persist them as conversation
-  history, because values involving the current time become stale.
-- If a semantic selector matches multiple messages, return an ambiguity result
-  instead of guessing.
-
-## Proposed Tools
+## Tools
 
 ### `get_current_time`
 
-Returns the current time in UTC and in the user's configured timezone.
+Returns the authoritative current time in UTC and in the configured timezone.
+The configured timezone is UTC until per-user timezone settings are available.
 
 Input:
 
@@ -45,86 +28,24 @@ Example output:
 
 ```json
 {
-  "utc": "2026-07-11T18:42:10Z",
-  "timezone": "America/Chicago",
-  "local": "2026-07-11T13:42:10-05:00"
-}
-```
-
-The model should use this tool for questions involving "now," "today," or the
-current date and time.
-
-### `get_turn_age`
-
-Returns how long ago a selected message was sent. The message is selected by a
-relative or semantic selector, not by a numeric position that the model must
-count.
-
-Example input using a relative selector:
-
-```json
-{
-  "turn": {
-    "kind": "relative",
-    "value": "latest_user"
-  }
-}
-```
-
-Example input using a semantic selector:
-
-```json
-{
-  "turn": {
-    "kind": "semantic",
-    "role": "user",
-    "query": "my question about deployment"
-  }
-}
-```
-
-Example output:
-
-```json
-{
-  "sentAt": "2026-07-11T12:40:05-05:00",
-  "ageSeconds": 3725,
-  "description": "1 hour, 2 minutes, and 5 seconds ago"
+  "status": "ok",
+  "utc": "2026-07-11T18:42:10.000Z",
+  "timezone": "UTC",
+  "local": "2026-07-11T18:42:10+00:00"
 }
 ```
 
 ### `get_elapsed_time`
 
-Calculates the elapsed time between two selected messages, or between a message
-and the current time.
+Calculates the elapsed time between two messages authorized for the current
+completion.
 
-Example input for two relative messages:
-
-```json
-{
-  "start": {
-    "kind": "relative",
-    "value": "previous_user"
-  },
-  "end": {
-    "kind": "relative",
-    "value": "latest_user"
-  }
-}
-```
-
-Example input for a content-specific message and the current time:
+Input:
 
 ```json
 {
-  "start": {
-    "kind": "semantic",
-    "role": "user",
-    "query": "my question about deployment"
-  },
-  "end": {
-    "kind": "now"
-  }
+  "before_turn_number": 1,
+  "after_turn_number": 2
 }
 ```
 
@@ -132,122 +53,85 @@ Example output:
 
 ```json
 {
-  "start": "2026-07-11T10:12:00-05:00",
-  "end": "2026-07-11T11:14:05-05:00",
-  "elapsedSeconds": 3725,
-  "description": "1 hour, 2 minutes, and 5 seconds"
+  "status": "ok",
+  "beforeTurnNumber": 1,
+  "afterTurnNumber": 2,
+  "beforeTimestamp": "2026-07-11T12:00:00.000Z",
+  "afterTimestamp": "2026-07-11T12:01:05.000Z",
+  "elapsedSeconds": 65,
+  "description": "1 minute and 5 seconds"
 }
 ```
 
-## Message Selectors
+Turn numbers are 1-based positions in the messages supplied to the current
+completion:
 
-The tool contract should support two selector types.
-
-Relative selectors cover common references without requiring counting:
-
-```ts
-type RelativeMessageSelector = {
-  readonly kind: "relative";
-  readonly value:
-    | "latest_user"
-    | "previous_user"
-    | "latest_assistant"
-    | "previous_assistant"
-    | "first_user"
-    | "first_assistant";
-};
+```text
+turn 1 → first supplied message
+turn 2 → second supplied message
+turn 3 → third supplied message
 ```
 
-Semantic selectors cover content-specific references to older messages:
+The definitions are static. They accept positive integer turn numbers and
+contain no persisted IDs or per-request values. The model calls
+`get_elapsed_time` with the relevant positions. `TimingToolsService.run_tool`
+maps each position to `messageContext[turnNumber - 1]`, validates that both
+messages exist, and subtracts their persisted timestamps.
 
-```ts
-type SemanticMessageSelector = {
-  readonly kind: "semantic";
-  readonly role: "user" | "assistant";
-  readonly query: string;
-};
+## Initialization and Execution
 
-type MessageSelector = RelativeMessageSelector | SemanticMessageSelector;
+At adapter initialization:
 
-type TimeEndpoint = MessageSelector | { readonly kind: "now" };
-```
+1. `TimingToolsService.get_description()` returns the two static tool
+   definitions.
+2. The OpenAI adapter binds those definitions to its model client.
+3. The Gemini adapter stores the definitions used in every Generate Content
+   request.
 
-Semantic matching may be implemented as deterministic text matching initially
-and replaced or augmented by retrieval later. The result should identify no
-match, one match, or an ambiguous set of matches explicitly.
+At completion time:
 
-## Why Turn IDs Alone Do Not Solve Selection
+1. The completion service loads the ordered messages selected by the caller.
+2. The completion service calls the configured adapter once.
+3. The adapter returns exactly one provider-neutral message. An assistant
+   message may contain one or more structured tool calls.
+4. For each tool call, the completion service calls
+   `TimingToolsService.run_tool(toolName, inputs, messages)`, then appends the
+   correlated tool result to its transient transcript.
+5. The completion service calls the adapter again with the extended transcript
+   and repeats until the adapter returns a message without tool calls.
+6. An unresolved tool fails the completion with an `LlmError`.
 
-Turn IDs are not part of the message text sent to the model. A model therefore
-cannot provide the ID of a message it is referring to unless the ID is exposed
-through some other model-visible channel. Asking for an unseen numeric turn ID
-implicitly asks the model to count messages, which is unreliable for weaker
-models.
+## Responsibilities
 
-Opaque IDs can still be used internally after the application resolves a
-relative or semantic selector. They should not be the primary model-facing
-input unless a preceding tool result explicitly exposed them.
+The completion/domain layer:
 
-## Tool Errors
+- Owns the provider-independent tool-call continuation loop.
+- Passes exactly the authorized messages into `TimingToolsService.run_tool` as
+  its message context.
+- Resolves tool names and fails the completion when no matching timing tool
+  exists.
+- Performs timestamp lookup and elapsed-time arithmetic in code.
+- Keeps temporal tool results transient and out of persisted conversation
+  history.
 
-Tool results should distinguish selection failures from execution failures.
+The OpenAI and Gemini outbound adapters:
 
-No match:
+- Translate the provider-neutral tool definitions into native function
+  declarations during initialization.
+- Perform one model invocation per adapter call and return one message.
+- Translate transient assistant tool-call messages and correlated tool-result
+  messages to and from provider-native formats.
+- Preserve provider call IDs and continuation data such as OpenAI reasoning
+  items and Gemini thought signatures.
+- Do not resolve or execute tools.
 
-```json
-{
-  "status": "not_found",
-  "message": "No authorized user message matched the supplied description."
-}
-```
+The persistence adapters continue storing message timestamps unchanged. No
+database migration is required.
 
-Ambiguous match:
+## Validation
 
-```json
-{
-  "status": "ambiguous",
-  "matches": [
-    { "preview": "How should deployment work?" },
-    { "preview": "Can we simplify the deployment script?" }
-  ]
-}
-```
-
-The model can use these results to ask the user which message they meant.
-
-## Application and Adapter Responsibilities
-
-The application layer should:
-
-- Build the temporal tool definitions available for the completion.
-- Bind execution to the authorized conversation messages and user timezone.
-- Resolve relative and semantic message selectors.
-- Read timestamps and calculate derived values.
-- Orchestrate the tool-call loop and enforce its maximum number of rounds.
-
-The LLM adapters should:
-
-- Translate provider-neutral tool definitions into provider-specific schemas.
-- Translate provider tool calls and tool results into provider-neutral types.
-- Preserve tool-call identifiers required by the provider.
-- Avoid owning temporal business rules or message-selection logic.
-
-The persistence adapters should continue storing message timestamps unchanged.
-No database migration is required for removing timestamps from LLM message
-content.
-
-## Migration
-
-1. Introduce provider-neutral tool definitions, tool calls, and tool results at
-   the application boundary.
-2. Implement the temporal tools with selector resolution scoped to the current
-   completion's authorized messages.
-3. Add native tool declaration and tool-result handling to each LLM adapter.
-4. Remove the `sent at ...` prefix from rendered user and assistant messages.
-5. Replace the timestamp-specific system prompt with concise instructions about
-   when to use the temporal tools.
-6. Keep completion sanitization temporarily during rollout, then remove it once
-   evaluation shows that models no longer reproduce timestamp metadata.
-7. Add tests for current time, relative selectors, semantic selection, no match,
-   ambiguous matches, timezone handling, and ordinary prompts that should not
-   call a temporal tool.
+- Unit tests verify static definitions, absence of persisted IDs, current time,
+  1-based turn mapping, elapsed-time arithmetic, and out-of-range rejection.
+- Dedicated system tests require both OpenAI GPT and Gemini to call
+  `get_elapsed_time` with turn numbers 1 and 2 and return the exact computed
+  duration.

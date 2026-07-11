@@ -10,7 +10,7 @@ import { GeminiLlmAdapter } from "../adapter/llm/gemini-llm-adapter";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import type { BlobStorageConfig } from "../config/config";
 import type { LlmError } from "../domain/objects/errors";
-import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionResult } from "../domain/objects/llm";
+import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../domain/objects/llm";
 import { File as DomainFile } from "../domain/objects/message-types";
 import type { Result } from "../domain/objects/result";
 
@@ -130,12 +130,12 @@ async function completeWithGeminiMessages(messages: ReadonlyArray<LlmCompletionI
   return extractCompletionText(completionResult);
 }
 
-function extractCompletionText(completionResult: Result<LlmCompletionResult, LlmError>): string {
+function extractCompletionText(completionResult: Result<LlmCompletionMessage, LlmError>): string {
   if (!completionResult.ok) {
     throw new Error(`LLM completion failed: ${completionResult.error.message}`);
   }
 
-  return completionResult.value.messages.map((message) => message.content).join("\n");
+  return completionResult.value.content;
 }
 
 function requireEnv(name: string): string {

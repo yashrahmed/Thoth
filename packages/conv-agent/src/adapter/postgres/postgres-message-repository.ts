@@ -1,5 +1,4 @@
 import type { MessageRepository, ResolvedMessage } from "../../domain/contracts/message-repository";
-import type { Message } from "../../domain/objects/message-types";
 import { EntityType, NotFoundError, StoreError, StoreOperation } from "../../domain/objects/errors";
 import { failure, success, type Result } from "../../domain/objects/result";
 import { getErrorMessage } from "../common/errors";

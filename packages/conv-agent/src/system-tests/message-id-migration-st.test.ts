@@ -70,10 +70,15 @@ describe("message bigint ID migration", () => {
       expect(page.items.find((message) => message.id === firstMessageId)?.files).toHaveLength(1);
       const completionMessageId = messageIds[1];
       expect(completionMessageId).toBeDefined();
+      // Expanded-schema messages already have aliases. In the contracted
+      // schema, seed one to model a UUID persisted by a pre-cutover client;
+      // newly created messages must not generate fresh UUIDs.
       const [alias] = await sql<{ legacy_uuid: string }[]>`
-        select legacy_uuid
-        from thoth.message_id_aliases
-        where message_id = ${completionMessageId as string}
+        insert into thoth.message_id_aliases (legacy_uuid, message_id)
+        values (gen_random_uuid()::text, ${completionMessageId as string})
+        on conflict (message_id)
+        do update set message_id = excluded.message_id
+        returning legacy_uuid
       `;
 
       expect(alias?.legacy_uuid).toMatch(/^[0-9a-f-]{36}$/u);

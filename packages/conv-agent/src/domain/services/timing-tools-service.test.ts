@@ -56,6 +56,28 @@ describe("TimingToolsService", () => {
     });
   });
 
+  test("includes days when elapsed time is greater than 24 hours", async () => {
+    const messages = [message("before", LLMMessageType.User, "Before", "2026-07-11T12:00:00.000Z"), message("after", LLMMessageType.User, "After", "2026-07-13T13:02:05.000Z")];
+
+    const result = await runTool("get_elapsed_time", { before_turn_number: 1, after_turn_number: 2 }, messages);
+
+    expect(result).toMatchObject({
+      elapsedSeconds: 176_525,
+      description: "2 days, 1 hour, 2 minutes, and 5 seconds",
+    });
+  });
+
+  test("includes days when elapsed time is exactly 24 hours", async () => {
+    const messages = [message("before", LLMMessageType.User, "Before", "2026-07-11T12:00:00.000Z"), message("after", LLMMessageType.User, "After", "2026-07-12T12:00:00.000Z")];
+
+    const result = await runTool("get_elapsed_time", { before_turn_number: 1, after_turn_number: 2 }, messages);
+
+    expect(result).toMatchObject({
+      elapsedSeconds: 86_400,
+      description: "1 day and 0 seconds",
+    });
+  });
+
   test("rejects turn numbers outside the supplied message context", async () => {
     const result = await runTool("get_elapsed_time", {
       before_turn_number: 1,
@@ -74,8 +96,8 @@ describe("TimingToolsService", () => {
   });
 });
 
-async function runTool(name: string, inputs: Readonly<Record<string, unknown>>): Promise<Record<string, unknown>> {
-  return JSON.parse(await createService().run_tool(name, inputs, MESSAGES)) as Record<string, unknown>;
+async function runTool(name: string, inputs: Readonly<Record<string, unknown>>, messages: ReadonlyArray<Message> = MESSAGES): Promise<Record<string, unknown>> {
+  return JSON.parse(await createService().run_tool(name, inputs, messages)) as Record<string, unknown>;
 }
 
 function createService(): TimingToolsService {

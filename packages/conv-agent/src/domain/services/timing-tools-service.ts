@@ -114,13 +114,21 @@ function isTurnNumber(value: unknown): value is number {
 function formatDuration(seconds: number): string {
   const sign = seconds < 0 ? "-" : "";
   let remaining = Math.abs(seconds);
+  const includeDays = remaining >= 86_400;
+  const days = includeDays ? Math.floor(remaining / 86_400) : 0;
+  if (includeDays) {
+    remaining %= 86_400;
+  }
   const hours = Math.floor(remaining / 3_600);
   remaining %= 3_600;
   const minutes = Math.floor(remaining / 60);
   const finalSeconds = remaining % 60;
-  const parts = [hours > 0 ? formatDurationUnit(hours, "hour") : "", minutes > 0 ? formatDurationUnit(minutes, "minute") : "", formatDurationUnit(finalSeconds, "second")].filter(
-    (part) => part.length > 0,
-  );
+  const parts = [
+    days > 0 ? formatDurationUnit(days, "day") : "",
+    hours > 0 ? formatDurationUnit(hours, "hour") : "",
+    minutes > 0 ? formatDurationUnit(minutes, "minute") : "",
+    formatDurationUnit(finalSeconds, "second"),
+  ].filter((part) => part.length > 0);
 
   if (parts.length === 1) {
     return `${sign}${parts[0]}`;

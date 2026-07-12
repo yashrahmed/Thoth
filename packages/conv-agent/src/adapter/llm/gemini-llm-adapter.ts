@@ -1,7 +1,7 @@
 import type { LlmConfig } from "../../config/config";
 import type { LlmService } from "../../domain/contracts/llm-service";
 import { LlmError } from "../../domain/objects/errors";
-import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
+import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmToolDefinition } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
 const GEMINI_3_FLASH_MODEL = "gemini-3-flash-preview";
@@ -22,7 +22,24 @@ interface GeminiInlineDataPart {
   };
 }
 
-type GeminiPart = GeminiTextPart | GeminiInlineDataPart;
+interface GeminiFunctionCallPart {
+  readonly functionCall: {
+    readonly id?: string;
+    readonly name: string;
+    readonly args?: Record<string, unknown>;
+  };
+  readonly thoughtSignature?: string;
+}
+
+interface GeminiFunctionResponsePart {
+  readonly functionResponse: {
+    readonly id: string;
+    readonly name: string;
+    readonly response: Record<string, unknown>;
+  };
+}
+
+type GeminiPart = GeminiTextPart | GeminiInlineDataPart | GeminiFunctionCallPart | GeminiFunctionResponsePart;
 
 interface GeminiContent {
   readonly role?: GeminiContentRole;
@@ -30,8 +47,15 @@ interface GeminiContent {
 }
 
 interface GeminiGenerateContentRequest {
-  readonly contents: ReadonlyArray<GeminiContent>;
+  readonly contents: GeminiContent[];
   readonly systemInstruction?: GeminiContent;
+  readonly tools?: ReadonlyArray<{
+    readonly functionDeclarations: ReadonlyArray<{
+      readonly name: string;
+      readonly description: string;
+      readonly parametersJsonSchema: Readonly<Record<string, unknown>>;
+    }>;
+  }>;
 }
 
 interface GeminiGenerateContentResponse {
@@ -39,7 +63,14 @@ interface GeminiGenerateContentResponse {
     readonly content?: {
       readonly parts?: ReadonlyArray<{
         readonly text?: string;
+        readonly functionCall?: {
+          readonly id?: string;
+          readonly name: string;
+          readonly args?: Record<string, unknown>;
+        };
+        readonly thoughtSignature?: string;
       }>;
+      readonly role?: GeminiContentRole;
     };
   }>;
   readonly error?: {
@@ -48,17 +79,17 @@ interface GeminiGenerateContentResponse {
 }
 
 export class GeminiLlmAdapter implements LlmService {
-  constructor(private readonly config: LlmConfig) {}
+  constructor(
+    private readonly config: LlmConfig,
+    private readonly toolDefinitions: ReadonlyArray<LlmToolDefinition> = [],
+  ) {}
 
-  async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>> {
+  async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>): Promise<Result<LlmCompletionMessage, LlmError>> {
     try {
-      const request = await toGeminiGenerateContentRequest(messages);
+      const request = await toGeminiGenerateContentRequest(messages, this.toolDefinitions);
       const response = await this.generateContent(request);
-      const completionMessages = toLlmCompletionMessages(response);
 
-      return success({
-        messages: completionMessages,
-      });
+      return success(toLlmCompletionMessage(response));
     } catch (error) {
       const code = error instanceof TimeoutError ? "timeout" : "other";
       return failure(new LlmError(getErrorMessage(error), code));
@@ -90,7 +121,10 @@ export class GeminiLlmAdapter implements LlmService {
   }
 }
 
-async function toGeminiGenerateContentRequest(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<GeminiGenerateContentRequest> {
+async function toGeminiGenerateContentRequest(
+  messages: ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>,
+  tools: ReadonlyArray<LlmToolDefinition>,
+): Promise<GeminiGenerateContentRequest> {
   const systemParts = messages.filter((message) => message.type === LLMMessageType.System && message.content.length > 0).map((message) => ({ text: message.content }));
   const contents: GeminiContent[] = [];
 
@@ -118,10 +152,27 @@ async function toGeminiGenerateContentRequest(messages: ReadonlyArray<LlmComplet
           },
         }
       : {}),
+    ...(tools.length > 0
+      ? {
+          tools: [
+            {
+              functionDeclarations: tools.map((tool) => ({
+                name: tool.name,
+                description: tool.description,
+                parametersJsonSchema: tool.inputSchema,
+              })),
+            },
+          ],
+        }
+      : {}),
   };
 }
 
-async function toGeminiContent(message: LlmCompletionInputMessage): Promise<GeminiContent> {
+async function toGeminiContent(message: LlmCompletionInputMessage | LlmCompletionMessage): Promise<GeminiContent> {
+  if ("providerContext" in message && isGeminiContent(message.providerContext)) {
+    return message.providerContext;
+  }
+
   return {
     role: toGeminiRole(message.type),
     parts: await toGeminiParts(message),
@@ -136,7 +187,19 @@ function toGeminiRole(type: LLMMessageType): GeminiContentRole {
   return "user";
 }
 
-async function toGeminiParts(message: LlmCompletionInputMessage): Promise<GeminiPart[]> {
+async function toGeminiParts(message: LlmCompletionInputMessage | LlmCompletionMessage): Promise<GeminiPart[]> {
+  if (message.type === LLMMessageType.Tool && "toolCallId" in message && message.toolCallId && message.toolName) {
+    return [
+      {
+        functionResponse: {
+          id: message.toolCallId,
+          name: message.toolName,
+          response: parseToolOutput(message.content),
+        },
+      },
+    ];
+  }
+
   const parts: GeminiPart[] = [];
   const text = toGeminiText(message);
 
@@ -144,14 +207,16 @@ async function toGeminiParts(message: LlmCompletionInputMessage): Promise<Gemini
     parts.push({ text });
   }
 
-  for (const file of message.files) {
-    parts.push(await toGeminiInlineDataPart(file));
+  if ("files" in message) {
+    for (const file of message.files) {
+      parts.push(await toGeminiInlineDataPart(file));
+    }
   }
 
   return parts;
 }
 
-function toGeminiText(message: LlmCompletionInputMessage): string {
+function toGeminiText(message: LlmCompletionInputMessage | LlmCompletionMessage): string {
   if (message.type === LLMMessageType.Tool) {
     return `Tool result:\n${message.content}`;
   }
@@ -178,23 +243,80 @@ async function toGeminiInlineDataPart(file: LlmCompletionInputFile): Promise<Gem
   };
 }
 
-function toLlmCompletionMessages(response: GeminiGenerateContentResponse): ReadonlyArray<LlmCompletionMessage> {
-  const text = response.candidates
-    ?.flatMap((candidate) => candidate.content?.parts ?? [])
-    .map((part) => part.text ?? "")
-    .join("")
-    .trim();
+function toGeminiResponseContent(response: GeminiGenerateContentResponse): GeminiContent | undefined {
+  const content = response.candidates?.[0]?.content;
 
-  if (!text) {
-    return [];
+  if (!content?.parts) {
+    return undefined;
   }
 
-  return [
-    {
-      type: LLMMessageType.Assistant,
-      content: text,
-    },
-  ];
+  return {
+    role: content.role ?? "model",
+    parts: content.parts.map((part) => {
+      if (part.functionCall) {
+        return {
+          functionCall: part.functionCall,
+          ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}),
+        };
+      }
+
+      return { text: part.text ?? "", ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}) };
+    }),
+  };
+}
+
+function toLlmCompletionMessage(response: GeminiGenerateContentResponse): LlmCompletionMessage {
+  const content = toGeminiResponseContent(response);
+
+  if (!content) {
+    return { type: LLMMessageType.Assistant, content: "" };
+  }
+
+  const text = content.parts
+    .map((part) => ("text" in part ? part.text : ""))
+    .join("")
+    .trim();
+  const toolCalls = content.parts.flatMap((part) => {
+    if (!("functionCall" in part)) {
+      return [];
+    }
+
+    if (!part.functionCall.id) {
+      throw new Error(`Gemini tool call ${part.functionCall.name} did not include an id.`);
+    }
+
+    return [
+      {
+        id: part.functionCall.id,
+        name: part.functionCall.name,
+        inputs: part.functionCall.args ?? {},
+      },
+    ];
+  });
+
+  return {
+    type: LLMMessageType.Assistant,
+    content: text,
+    ...(toolCalls.length > 0 ? { toolCalls, providerContext: content } : {}),
+  };
+}
+
+function isGeminiContent(value: unknown): value is GeminiContent {
+  return typeof value === "object" && value !== null && "parts" in value && Array.isArray(value.parts);
+}
+
+function parseToolOutput(content: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+
+    return { result: parsed };
+  } catch {
+    return { result: content };
+  }
 }
 
 async function readGeminiResponse(response: Response): Promise<GeminiGenerateContentResponse> {

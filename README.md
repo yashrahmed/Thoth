@@ -324,29 +324,45 @@ supports `local` and `dev` profiles. It picks the target URL, loads profile
 credentials from `~/.thoth/{profile}-secrets.env`, polls `/health`, and runs:
 
 ```sh
-bun test --timeout 180000 src/system-tests/conv-agent-st.test.ts
+bun test --timeout 180000 \
+  src/system-tests/conv-agent-st.test.ts \
+  src/system-tests/message-id-migration-st.test.ts
 ```
 
 Pass extra Bun test arguments after the optional profile.
 
+The temporal-tool model-adapter tests call the real OpenAI and Gemini APIs.
+They load `OPENAI_LLM_API_KEY` and `GOOGLE_LLM_API_KEY` from
+`~/.thoth/llm-test-secrets.env`:
+
+```sh
+./deployment/system-tests/run-temporal-tools-test.sh
+```
+
 ## Temporal Awareness
 
-Every user and assistant message sent to the LLM is prefixed with a `sent at ...` header derived from the message's `createdAt`, so the model can reason about when each turn happened and how much time has passed between them.
+Message timestamps remain in persistence for ordering and UI display, but they
+are not rendered into user or assistant text sent to the LLM. Instead, every
+completion receives two transient tools:
 
-The header is rendered as the first line of each user/assistant turn:
+- `get_current_time` returns the authoritative current time.
+- `get_elapsed_time` calculates the duration between two authorized messages.
 
-```
-sent at 2026-05-10 14:30:22 +00:00 UTC
+The elapsed-time tool accepts two 1-based turn numbers. Turn 1 maps to the first
+message supplied to the completion, turn 2 to the second, and so on. Persisted
+message IDs remain internal and are never included in the tool definition. The
+application validates both positions, looks up the corresponding messages, and
+performs the timestamp arithmetic.
 
-<message content>
-```
-
-Format details:
-
-- Timestamps are always UTC for now. A per-user timezone setting is on the roadmap; once added, the header will switch to the user's local zone with the offset and abbreviation (e.g. `-05:00 CDT`).
-- System and tool messages are not stamped. System messages are directives, not turns; tool messages are model-generated and have no meaningful authoring time.
-- The header rendering and the system preamble live in [llm-prompt-domain-service.ts](packages/conv-agent/src/domain/services/llm-prompt-domain-service.ts). The `LlmCompletionFlow` calls the service to shape every message and to prepend the system prompt before handing the result to the LLM adapter, which stays prompt-agnostic. New LLM adapters inherit the behavior automatically.
-- Because assistant turns also carry the header, the model would otherwise learn to mimic the format and emit a literal `sent at ...` line at the top of its replies. The system prompt prepended by `LlmPromptDomainService.buildSystemPrompt()` instructs the model to treat the header as system-injected metadata and never reproduce it. This is defense-in-depth, not a guarantee — see the caveat below.
+The provider-neutral tool definitions and temporal rules live in
+[timing-tools-service.ts](packages/conv-agent/src/domain/services/timing-tools-service.ts).
+The definitions are static and installed when the OpenAI and Gemini adapters
+are initialized. `LlmCompletionDomainService` owns the tool-call loop and
+passes its ordered authorized messages into `TimingToolsService.run_tool` as
+message context. Each adapter performs one provider invocation and returns one
+message; it does not resolve tools. Provider call identifiers, continuation
+data, and tool results remain transient and are not persisted. See
+[time-measurement.md](time-measurement.md) for the full design.
 
 ## Caveats
 
@@ -355,12 +371,6 @@ Format details:
 Cloudflare Secrets Store is useful for the deployed dev Worker because secrets become account-level values that can be bound to the Worker instead of uploaded with `wrangler secret put`. The main caveat is that local and deployed secret access differ: local runs still need `~/.thoth/local-secrets.env` / `.dev.vars`, while deployed Workers read Secrets Store bindings asynchronously with `await env.<BINDING>.get()`.
 
 For this repo, moving to Secrets Store mainly changes the dev deploy path. It does not remove local credential files, and it requires small Worker bootstrap changes because Secrets Store bindings are not plain string environment variables.
-
-### `sent at` header is user-spoofable
-
-Because the `sent at ...` header is prepended to the same text channel as the user's content, a user can type a line that looks like the header (e.g. `sent at 2099-01-01 00:00:00 +00:00 UTC\n\n...`) inside their own message. The model sees both lines in one user turn and may treat the spoofed timestamp as authoritative.
-
-The risk is low — turns are still role-tagged and the legitimate header always appears first — and we do not defend against it. If temporal claims ever become security-relevant (rate limits, eligibility windows, audit), move the timestamp out of the text channel into a structured field the LLM can see but the user cannot author.
 
 ### Hyperdrive query caching
 

@@ -4,17 +4,11 @@ import { ChatOpenAI } from "@langchain/openai";
 import type { LlmConfig } from "../../config/config";
 import type { LlmService } from "../../domain/contracts/llm-service";
 import { LlmError } from "../../domain/objects/errors";
-import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmCompletionResult } from "../../domain/objects/llm";
+import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmToolDefinition } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
 const OPENAI_LLM_MODEL = "gpt-5.4";
-const MAX_TOOL_CALL_ROUNDS = 5;
 const OPENAI_REQUEST_TIMEOUT_MS = 25_000;
-
-interface OpenAiTool {
-  readonly name: string;
-  execute(args: Record<string, unknown>): Promise<string>;
-}
 
 // Module-scope cache for the ChatOpenAI client. The dependency graph (and the
 // adapter wrapping this client) is rebuilt per request because Cloudflare
@@ -54,72 +48,68 @@ function getOrCreateChatOpenAI(config: LlmConfig): ChatOpenAI {
 }
 
 export class OpenAiLlmAdapter implements LlmService {
-  private readonly model: ChatOpenAI;
-  private readonly toolsByName: ReadonlyMap<string, OpenAiTool>;
+  private readonly model: ReturnType<ChatOpenAI["bindTools"]>;
 
-  constructor(config: LlmConfig, tools: ReadonlyArray<OpenAiTool> = []) {
-    this.model = getOrCreateChatOpenAI(config);
-    this.toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
+  constructor(config: LlmConfig, toolDefinitions: ReadonlyArray<LlmToolDefinition> = []) {
+    this.model = getOrCreateChatOpenAI(config).bindTools(toolDefinitions.map(toOpenAiTool), {
+      strict: true,
+      parallel_tool_calls: false,
+    });
   }
 
-  async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage>): Promise<Result<LlmCompletionResult, LlmError>> {
+  async llmComplete(messages: ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>): Promise<Result<LlmCompletionMessage, LlmError>> {
     try {
-      const completionMessages = await this.complete(messages.map(toLangChainMessage));
+      const response = await withTimeout(
+        this.model.invoke(messages.map(toLangChainMessage)),
+        OPENAI_REQUEST_TIMEOUT_MS,
+        `OpenAI invoke timed out after ${OPENAI_REQUEST_TIMEOUT_MS} ms.`,
+      );
 
-      if (completionMessages.length === 0) {
-        return success({ messages: [] });
-      }
-
-      return success({
-        messages: completionMessages,
-      });
+      return success(toLlmCompletionMessage(response));
     } catch (error) {
       const code = error instanceof TimeoutError ? "timeout" : "other";
       return failure(new LlmError(getErrorMessage(error), code));
     }
   }
-
-  private async complete(messages: ReadonlyArray<BaseMessage>): Promise<ReadonlyArray<LlmCompletionMessage>> {
-    const transcript: BaseMessage[] = [...messages];
-    const completionMessages: LlmCompletionMessage[] = [];
-
-    for (let round = 0; round <= MAX_TOOL_CALL_ROUNDS; round += 1) {
-      const response = await withTimeout(this.model.invoke(transcript), OPENAI_REQUEST_TIMEOUT_MS, `OpenAI invoke timed out after ${OPENAI_REQUEST_TIMEOUT_MS} ms.`);
-      transcript.push(response);
-
-      if (response.text.trim().length > 0) {
-        completionMessages.push({
-          type: LLMMessageType.Assistant,
-          content: response.text,
-        });
-      }
-
-      if (response.tool_calls === undefined || response.tool_calls.length === 0) {
-        return completionMessages;
-      }
-
-      for (const toolCall of response.tool_calls) {
-        const tool = this.toolsByName.get(toolCall.name);
-
-        if (!tool) {
-          throw new Error(`OpenAI requested unsupported tool ${toolCall.name}.`);
-        }
-
-        const content = await tool.execute(toolCall.args);
-        const toolCallId = toolCall.id ?? toolCall.name;
-        transcript.push(new ToolMessage({ content, tool_call_id: toolCallId }));
-        completionMessages.push({
-          type: LLMMessageType.Tool,
-          content,
-        });
-      }
-    }
-
-    throw new Error(`OpenAI tool call loop exceeded ${MAX_TOOL_CALL_ROUNDS} rounds.`);
-  }
 }
 
-function toLangChainMessage(message: LlmCompletionInputMessage): BaseMessage {
+function toLlmCompletionMessage(response: AIMessage): LlmCompletionMessage {
+  const toolCalls = (response.tool_calls ?? []).map((toolCall) => ({
+    id: toolCall.id ?? toolCall.name,
+    name: toolCall.name,
+    inputs: toolCall.args,
+  }));
+
+  return {
+    type: LLMMessageType.Assistant,
+    content: response.text.trim(),
+    ...(toolCalls.length > 0 ? { toolCalls, providerContext: response } : {}),
+  };
+}
+
+function toOpenAiTool(tool: LlmToolDefinition): {
+  readonly type: "function";
+  readonly function: {
+    readonly name: string;
+    readonly description: string;
+    readonly parameters: Readonly<Record<string, unknown>>;
+  };
+} {
+  return {
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema,
+    },
+  };
+}
+
+function toLangChainMessage(message: LlmCompletionInputMessage | LlmCompletionMessage): BaseMessage {
+  if ("providerContext" in message && message.providerContext instanceof AIMessage) {
+    return message.providerContext;
+  }
+
   switch (message.type) {
     case LLMMessageType.User:
       return toHumanMessage(message);
@@ -128,8 +118,9 @@ function toLangChainMessage(message: LlmCompletionInputMessage): BaseMessage {
     case LLMMessageType.System:
       return new SystemMessage(message.content);
     case LLMMessageType.Tool:
-      // Domain tool messages do not yet store provider tool_call_id values.
-      return new HumanMessage(`Tool result:\n${message.content}`);
+      return "toolCallId" in message && message.toolCallId
+        ? new ToolMessage({ content: message.content, tool_call_id: message.toolCallId })
+        : new HumanMessage(`Tool result:\n${message.content}`);
   }
 }
 

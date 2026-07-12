@@ -1,14 +1,10 @@
 import { LLMMessageType, type LlmCompletionInputMessage } from "../objects/llm";
 import type { Message } from "../objects/message-types";
 
-const HEADER_TYPES: ReadonlySet<LLMMessageType> = new Set([LLMMessageType.User, LLMMessageType.Assistant]);
-
 const SYSTEM_PROMPT = [
   "You are Thoth, a helpful conversational assistant.",
   "",
-  "Each user and assistant turn in the conversation history is prefixed by the system with a metadata line of the form `sent at YYYY-MM-DD HH:MM:SS +00:00 UTC` followed by a blank line and then the message content. This line is metadata used to give you temporal awareness; it is never something the user or assistant wrote.",
-  "",
-  "Never reproduce that pattern in your own replies. Do not begin a reply with `sent at ...`, do not include such a line anywhere in your output, and do not echo or restate the metadata. Metadata before prior assistant turns is not an example of assistant-authored content to imitate. If the user asks what time it is or when something was sent, answer in natural prose using the timestamps you have been given.",
+  "Use get_current_time whenever the user asks about the current date or time. Use get_elapsed_time whenever the user asks for the elapsed time between two conversation turns. Turn numbers are 1-based positions in the supplied messages: turn 1 is the first message, turn 2 is the second, and so on. Never guess timestamps or perform date arithmetic yourself.",
 ].join("\n");
 
 export class LlmPromptDomainService {
@@ -21,15 +17,6 @@ export class LlmPromptDomainService {
   }
 
   renderMessageContent(message: Message): string {
-    if (!HEADER_TYPES.has(message.type)) {
-      return message.content;
-    }
-
-    return `${formatSentAtHeader(message.createdAt)}\n\n${message.content}`;
+    return message.content;
   }
-}
-
-function formatSentAtHeader(createdAt: Date): string {
-  const iso = createdAt.toISOString();
-  return `sent at ${iso.slice(0, 10)} ${iso.slice(11, 19)} +00:00 UTC`;
 }

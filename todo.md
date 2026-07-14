@@ -7,23 +7,20 @@
     - [x] Let the client shape the inbound message when requesting completion.
     - [x] Change ids to numbers instead of a GUID?
 - [x] Try out time measurement using a tool call instead of prompt tuning.
-- [ ] Run an experiment to build a world model for Thoth
-  - logic program (or somthing similar) and try using it to specify a development goal.
-  - Bayesian modeling.
 - [ ] Build a better UI.
     - [ ] Complete React Tutorial.
     - [ ] Complete React Native tutorial.
     - [ ] Learn some basic graphic design.
         - Complete [UI Design Bootcamp. Master Typography, Colour & Grids](https://www.udemy.com/course/ui-design-bootcamp-master-typography-colour-grids/).
         - Review [Design Arena leaderboard](https://www.designarena.ai/leaderboard) for UI design agent benchmarks.
-    - Resdesign the UI to make it appealing.
+    - [ ] Resdesign the UI to make it appealing.
+  - [ ] Run an experiment to build a world model for Thoth
+      - logic program (or somthing similar) and try using it to specify a development goal.
+      - Bayesian modeling.
 - Tech Debt
+  - [x] Add markdown rendering.
   - [ ] Improve logging (Add structured logs).
   - [ ] Try implementing PKCE + local UI launch.
-  - [ ] Figure out a way around repeated signing, defaulting to base64?
-    - Document store API exposed via a tool call (Some context is lost; But I think it is an acceptable compromise.)
-  - [ ] Cloudflare-hosted inference, Workers AI / AI Gateway:
-    - Explore CF agents as an inference option to reduce completion time.
 
 ### Future versions.
 - User management.
@@ -38,3 +35,7 @@
 - Deeplink content support.
 - Add support for overlay mode and video/audio inputs.
 - Context compaction support.
+- [ ] Figure out a way around repeated signing, defaulting to base64?
+  - Document store API exposed via a tool call (Some context is lost; But I think it is an acceptable compromise.)
+- [ ] Cloudflare-hosted inference, Workers AI / AI Gateway:
+  - Explore CF agents as an inference option to reduce completion time.

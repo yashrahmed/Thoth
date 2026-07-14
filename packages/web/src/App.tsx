@@ -21,6 +21,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { MarkdownMessage } from "./MarkdownMessage";
 
 type ConversationResponse = {
   readonly id: string;
@@ -949,7 +950,7 @@ function MessageBubble(props: { readonly message: ChatMessage }) {
             <span style={bubbleTimestampStyle}>{formatMessageTimestamp(props.message.createdAt)}</span>
           </div>
         </div>
-        {props.message.content ? <p style={messageTextStyle}>{props.message.content}</p> : null}
+        {props.message.content ? <MarkdownMessage content={props.message.content} /> : null}
         {props.message.files.length > 0 ? (
           <div style={fileListStyle}>
             <p style={attachmentLabelStyle}>Attachments</p>
@@ -1965,13 +1966,6 @@ const bubbleTimestampStyle: React.CSSProperties = {
   letterSpacing: "0.02em",
   textTransform: "none",
   color: "#c4b5fd",
-};
-
-const messageTextStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: "0.82rem",
-  lineHeight: 1.52,
-  whiteSpace: "pre-wrap",
 };
 
 const fileListStyle: React.CSSProperties = {

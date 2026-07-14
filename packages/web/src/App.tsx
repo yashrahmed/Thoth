@@ -11,8 +11,13 @@ import {
   FileType,
   FileVideoCamera,
   LogOut,
+  MessageSquare,
+  Paperclip,
   Pencil,
+  Plus,
   Presentation,
+  RefreshCw,
+  SendHorizontal,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -204,6 +209,8 @@ function ConversationApp() {
   const [titleError, setTitleError] = useState("");
   const [composerError, setComposerError] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const previousLastMessageIdRef = useRef<MessageId>("");
+  const lastMessageId = messages[messages.length - 1]?.id ?? "";
 
   useEffect(() => {
     void initializeConversationView();
@@ -228,8 +235,16 @@ function ConversationApp() {
       return;
     }
 
-    scroller.scrollTop = scroller.scrollHeight;
-  }, [messages, booting, sending]);
+    const lastMessageChanged = lastMessageId !== previousLastMessageIdRef.current;
+    const isInitialMessageLoad = !previousLastMessageIdRef.current && Boolean(lastMessageId);
+    const isNearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+
+    if (booting || sending || isInitialMessageLoad || (lastMessageChanged && isNearBottom)) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+
+    previousLastMessageIdRef.current = lastMessageId;
+  }, [lastMessageId, booting, sending]);
 
   async function initializeConversationView(): Promise<void> {
     setBooting(true);
@@ -551,7 +566,7 @@ function ConversationApp() {
   const activeConversation = conversations.find((conversation) => conversation.id === conversationId) ?? null;
 
   return (
-    <div style={shellStyle}>
+    <div className="app-shell" style={shellStyle}>
       <style>{globalStyles}</style>
       <div className="chat-frame" style={frameStyle}>
         <ConversationSidebar
@@ -602,7 +617,7 @@ function ConversationApp() {
 
 function ForbiddenView() {
   return (
-    <div style={shellStyle}>
+    <div className="app-shell" style={shellStyle}>
       <style>{globalStyles}</style>
       <div style={forbiddenFrameStyle}>
         <div style={forbiddenCardStyle}>
@@ -627,7 +642,7 @@ function ForbiddenView() {
 
 function LoginView() {
   return (
-    <div style={shellStyle}>
+    <div className="app-shell" style={shellStyle}>
       <style>{globalStyles}</style>
       <div style={forbiddenFrameStyle}>
         <div style={forbiddenCardStyle}>
@@ -666,11 +681,16 @@ function ConversationSidebar(props: {
   readonly onLogout: () => void;
 }) {
   return (
-    <aside style={sidebarStyle}>
-      <div>
-        <p style={eyebrowStyle}>Thoth</p>
-        <h1 style={titleStyle}>Conversation UI</h1>
-        <p style={bodyStyle}>Minimal chat client for Thoth.</p>
+    <aside className="conversation-sidebar" style={sidebarStyle}>
+      <div style={brandLockupStyle}>
+        <span style={brandMarkStyle} aria-hidden="true">
+          <MessageSquare size={17} strokeWidth={2.1} />
+        </span>
+        <div>
+          <p style={eyebrowStyle}>Thoth</p>
+          <h1 style={titleStyle}>Workspace</h1>
+          <p style={bodyStyle}>Conversation console</p>
+        </div>
       </div>
 
       <div style={statusPanelStyle}>
@@ -690,14 +710,15 @@ function ConversationSidebar(props: {
         onDeleteConversation={props.onDeleteConversation}
       />
 
-      <div style={sidebarActionsStyle}>
+      <div className="sidebar-actions" style={sidebarActionsStyle}>
         <button
           type="button"
           onClick={() => {
             void props.onCreateConversation();
           }}
-          style={ghostButtonStyle}
+          style={primarySidebarButtonStyle}
         >
+          <Plus aria-hidden="true" size={15} strokeWidth={2.3} />
           New Conversation
         </button>
         <button
@@ -708,10 +729,11 @@ function ConversationSidebar(props: {
           disabled={(!props.conversationId || props.refreshing) && !props.loadingConversations}
           style={ghostButtonStyle}
         >
+          <RefreshCw aria-hidden="true" size={14} strokeWidth={2.1} />
           Refresh
         </button>
         <button type="button" onClick={props.onLogout} style={dangerButtonStyle}>
-          <LogOut aria-hidden="true" size={16} strokeWidth={2.2} />
+          <LogOut aria-hidden="true" size={14} strokeWidth={2.2} />
           Logout
         </button>
       </div>
@@ -736,7 +758,7 @@ function ConversationListSection(props: {
         <span style={sectionMetaStyle}>{props.loadingConversations ? "Loading..." : `${props.conversations.length} total`}</span>
       </div>
 
-      <div style={conversationListStyle}>
+      <div className="conversation-list" style={conversationListStyle}>
         {props.conversations.length === 0 ? (
           <p style={conversationEmptyStyle}>No saved conversations yet.</p>
         ) : (
@@ -842,8 +864,8 @@ function ChatPanel(props: {
   }
 
   return (
-    <main style={chatPanelStyle}>
-      <header style={chatHeaderStyle}>
+    <main className="chat-panel" style={chatPanelStyle}>
+      <header className="chat-header" style={chatHeaderStyle}>
         <div style={chatHeaderTextStyle}>
           <p style={chatHeaderEyebrowStyle}>Current Conversation</p>
           {editingTitle ? (
@@ -903,7 +925,7 @@ function ChatPanel(props: {
 
 function MessageList(props: { readonly scrollerRef: React.RefObject<HTMLDivElement | null>; readonly booting: boolean; readonly messages: ReadonlyArray<ChatMessage> }) {
   return (
-    <div ref={props.scrollerRef} style={messageListStyle}>
+    <div className="message-list" ref={props.scrollerRef} style={messageListStyle}>
       {props.booting ? (
         <EmptyState title="Starting conversation" body="The UI is creating a fresh conversation and waiting for the service." />
       ) : props.messages.length === 0 ? (
@@ -953,13 +975,14 @@ function Composer(props: {
   readonly onRemoveSelectedFile: (index: number) => void;
 }) {
   return (
-    <form onSubmit={(event) => void props.onSendMessage(event)} style={composerStyle}>
+    <form className="composer" onSubmit={(event) => void props.onSendMessage(event)} style={composerStyle}>
       <label htmlFor="chat-input" style={composerLabelStyle}>
         Message
       </label>
       <div style={attachmentToolbarStyle}>
         <label style={attachmentPickerStyle}>
           <input type="file" multiple onChange={props.onFileSelection} disabled={props.booting || props.sending} style={visuallyHiddenInputStyle} />
+          <Paperclip aria-hidden="true" size={14} strokeWidth={2.1} />
           Attach Files
         </label>
         {props.selectedFiles.length > 0 ? (
@@ -976,12 +999,13 @@ function Composer(props: {
           value={props.draft}
           onChange={(event) => props.onDraftChange(event.target.value)}
           placeholder="Ask Thoth something practical."
-          rows={3}
+          rows={2}
           disabled={props.booting || props.sending}
           style={composerInputStyle}
         />
         <button type="submit" disabled={props.booting || props.sending} style={primaryButtonStyle}>
-          {props.sending ? "Sending..." : "Send"}
+          <SendHorizontal aria-hidden="true" size={15} strokeWidth={2.2} />
+          {props.sending ? "Sending" : "Send"}
         </button>
       </div>
       {props.composerError ? <p style={composerErrorStyle}>{props.composerError}</p> : null}
@@ -1304,38 +1328,154 @@ function formatUiState(booting: boolean, sending: boolean, refreshing: boolean):
 
 const globalStyles = `
   :root {
-    color: #f7f1e8;
-    background:
-      radial-gradient(circle at top, rgba(236, 157, 88, 0.26), transparent 34%),
-      linear-gradient(180deg, #21150f 0%, #130d0b 100%);
-    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    color: #f4f7ff;
+    background: #010205;
+    font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    font-synthesis: none;
   }
 
   * {
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: #263550 transparent;
   }
 
+  html,
   body {
     margin: 0;
     min-width: 320px;
+    min-height: 100%;
+    background:
+      radial-gradient(circle at 84% -20%, rgba(34, 211, 238, 0.12), transparent 36%),
+      radial-gradient(circle at -10% 110%, rgba(217, 70, 239, 0.08), transparent 34%),
+      linear-gradient(rgba(34, 211, 238, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34, 211, 238, 0.018) 1px, transparent 1px),
+      #010205;
+    background-size: auto, auto, 48px 48px, 48px 48px, auto;
+  }
+
+  body {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100%;
   }
 
   .chat-frame {
-    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-columns: 272px minmax(0, 1fr);
   }
 
   .composer-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  @media (max-width: 960px) {
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  button,
+  label {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button {
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease;
+  }
+
+  button:hover:not(:disabled) {
+    border-color: #36506d !important;
+  }
+
+  button:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  button:disabled,
+  textarea:disabled,
+  input:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.52;
+  }
+
+  input:focus,
+  textarea:focus {
+    border-color: #22d3ee !important;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.11), 0 0 18px rgba(34, 211, 238, 0.07);
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: #263550;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  @media (max-width: 760px) {
+    body {
+      height: auto;
+      overflow: auto;
+    }
+
+    #root {
+      height: auto;
+    }
+
+    .app-shell {
+      min-height: 100dvh !important;
+      padding: 0 !important;
+    }
+
     .chat-frame {
       grid-template-columns: 1fr;
-      min-height: auto;
+      grid-template-rows: minmax(280px, 42dvh) minmax(480px, 58dvh);
+      gap: 0 !important;
+      min-height: 100dvh !important;
+      height: auto !important;
+    }
+
+    .conversation-sidebar,
+    .chat-panel {
+      border-radius: 0 !important;
+    }
+
+    .conversation-sidebar {
+      position: relative !important;
+      top: 0 !important;
+      border-width: 0 0 1px !important;
+    }
+
+    .chat-panel {
+      border-width: 0 !important;
+    }
+
+    .chat-header {
+      padding-inline: 16px !important;
+    }
+
+    .message-list {
+      padding: 16px !important;
+    }
+
+    .composer {
+      padding-inline: 12px !important;
     }
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 520px) {
     body {
       min-width: 0;
     }
@@ -1343,12 +1483,10 @@ const globalStyles = `
     .composer-row {
       grid-template-columns: 1fr;
     }
-  }
 
-  button,
-  input,
-  textarea {
-    font: inherit;
+    .sidebar-actions {
+      grid-template-columns: 1fr !important;
+    }
   }
 
   code {
@@ -1361,99 +1499,138 @@ const globalStyles = `
 `;
 
 const shellStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  padding: "24px",
+  height: "100dvh",
+  padding: "12px",
 };
 
 const frameStyle: React.CSSProperties = {
   display: "grid",
-  gap: "20px",
-  minHeight: "calc(100vh - 48px)",
+  gap: "12px",
+  height: "100%",
+  minHeight: 0,
 };
 
 const forbiddenFrameStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  minHeight: "calc(100vh - 48px)",
+  minHeight: "100%",
 };
 
 const forbiddenCardStyle: React.CSSProperties = {
   maxWidth: "480px",
-  padding: "40px",
-  borderRadius: "28px",
-  background: "linear-gradient(180deg, rgba(44, 28, 20, 0.95), rgba(26, 17, 13, 0.92))",
-  border: "1px solid rgba(255, 214, 179, 0.12)",
-  boxShadow: "0 24px 80px rgba(0, 0, 0, 0.28)",
+  padding: "32px",
+  borderRadius: "10px",
+  background: "#060910",
+  border: "1px solid #14263c",
+  boxShadow: "0 18px 60px rgba(0, 0, 0, 0.34)",
   textAlign: "center",
 };
 
 const sidebarStyle: React.CSSProperties = {
+  position: "sticky",
+  top: "12px",
+  display: "grid",
+  gridTemplateRows: "auto auto minmax(0, 1fr) auto auto",
+  gap: "14px",
+  height: "100%",
+  minHeight: 0,
+  padding: "16px",
+  overflow: "hidden",
+  borderRadius: "10px",
+  background: "linear-gradient(180deg, #060a13 0%, #03050a 100%)",
+  border: "1px solid #14243a",
+  boxShadow: "0 0 0 1px rgba(34, 211, 238, 0.02), 0 18px 48px rgba(0, 0, 0, 0.42)",
+};
+
+const brandLockupStyle: React.CSSProperties = {
   display: "flex",
-  flexDirection: "column",
-  justifyContent: "space-between",
-  gap: "20px",
-  padding: "28px",
-  borderRadius: "28px",
-  background: "linear-gradient(180deg, rgba(44, 28, 20, 0.95), rgba(26, 17, 13, 0.92))",
-  border: "1px solid rgba(255, 214, 179, 0.12)",
-  boxShadow: "0 24px 80px rgba(0, 0, 0, 0.28)",
+  alignItems: "center",
+  gap: "11px",
+  minWidth: 0,
+};
+
+const brandMarkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "34px",
+  height: "34px",
+  flexShrink: 0,
+  borderRadius: "8px",
+  color: "#67e8f9",
+  background: "linear-gradient(145deg, rgba(34, 211, 238, 0.15), rgba(217, 70, 239, 0.16))",
+  border: "1px solid rgba(103, 232, 249, 0.34)",
+  boxShadow: "0 0 18px rgba(34, 211, 238, 0.1)",
 };
 
 const eyebrowStyle: React.CSSProperties = {
   margin: 0,
-  color: "#e5aa78",
-  fontSize: "0.78rem",
-  letterSpacing: "0.16em",
+  color: "#67e8f9",
+  fontSize: "0.68rem",
+  fontWeight: 700,
+  letterSpacing: "0.18em",
   textTransform: "uppercase",
 };
 
 const titleStyle: React.CSSProperties = {
-  margin: "10px 0 8px",
-  fontSize: "2.5rem",
-  lineHeight: 1,
+  margin: "2px 0 1px",
+  fontSize: "1.08rem",
+  lineHeight: 1.2,
+  fontWeight: 650,
+  letterSpacing: "-0.01em",
 };
 
 const bodyStyle: React.CSSProperties = {
   margin: 0,
-  color: "rgba(247, 241, 232, 0.78)",
-  lineHeight: 1.5,
+  color: "#8090aa",
+  fontSize: "0.76rem",
+  lineHeight: 1.35,
 };
 
 const statusPanelStyle: React.CSSProperties = {
   display: "grid",
-  gap: "12px",
-  padding: "16px",
-  borderRadius: "20px",
-  background: "rgba(255, 248, 240, 0.05)",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "9px 12px",
+  padding: "11px 12px",
+  borderRadius: "8px",
+  background: "#020408",
+  border: "1px solid #102038",
 };
 
 const statusRowStyle: React.CSSProperties = {
   display: "grid",
-  gap: "4px",
+  gap: "2px",
+  minWidth: 0,
 };
 
 const statusLabelStyle: React.CSSProperties = {
-  fontSize: "0.75rem",
-  color: "rgba(247, 241, 232, 0.56)",
+  fontSize: "0.61rem",
+  color: "#70809b",
+  fontWeight: 650,
   textTransform: "uppercase",
-  letterSpacing: "0.12em",
+  letterSpacing: "0.11em",
 };
 
 const statusValueStyle: React.CSSProperties = {
-  color: "#f7f1e8",
+  minWidth: 0,
+  overflow: "hidden",
+  color: "#dbeafe",
+  fontSize: "0.73rem",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const statusValueMonoStyle: React.CSSProperties = {
   ...statusValueStyle,
   fontFamily: '"SFMono-Regular", Menlo, Consolas, monospace',
-  fontSize: "0.88rem",
-  wordBreak: "break-all",
+  fontSize: "0.68rem",
 };
 
 const conversationSectionStyle: React.CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gridTemplateRows: "auto minmax(0, 1fr)",
+  gap: "8px",
   minHeight: 0,
 };
 
@@ -1466,52 +1643,56 @@ const conversationSectionHeaderStyle: React.CSSProperties = {
 
 const sectionEyebrowStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: "0.78rem",
-  color: "rgba(247, 241, 232, 0.62)",
+  fontSize: "0.67rem",
+  color: "#a8b4c7",
+  fontWeight: 700,
   textTransform: "uppercase",
-  letterSpacing: "0.14em",
+  letterSpacing: "0.12em",
 };
 
 const sectionMetaStyle: React.CSSProperties = {
-  color: "rgba(247, 241, 232, 0.56)",
-  fontSize: "0.82rem",
+  color: "#c084fc",
+  fontSize: "0.7rem",
 };
 
 const conversationListStyle: React.CSSProperties = {
   display: "grid",
-  gap: "10px",
-  maxHeight: "280px",
+  alignContent: "start",
+  gap: "6px",
+  minHeight: 0,
   overflowY: "auto",
-  paddingRight: "4px",
+  paddingRight: "3px",
 };
 
 const conversationButtonBaseStyle: React.CSSProperties = {
   width: "100%",
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr) auto",
-  gap: "10px",
+  gap: "6px",
   alignItems: "center",
-  padding: "14px 16px",
-  borderRadius: "18px",
+  minHeight: "48px",
+  padding: "7px 7px 7px 10px",
+  borderRadius: "7px",
 };
 
 const conversationButtonStyle: React.CSSProperties = {
   ...conversationButtonBaseStyle,
-  border: "1px solid rgba(255, 214, 179, 0.1)",
-  background: "rgba(255, 248, 240, 0.04)",
-  color: "#f7f1e8",
+  border: "1px solid transparent",
+  background: "transparent",
+  color: "#d5deec",
 };
 
 const activeConversationButtonStyle: React.CSSProperties = {
   ...conversationButtonBaseStyle,
-  border: "1px solid rgba(255, 196, 146, 0.38)",
-  background: "linear-gradient(135deg, rgba(229, 141, 76, 0.24), rgba(212, 109, 66, 0.18))",
-  color: "#fff5ef",
+  border: "1px solid rgba(34, 211, 238, 0.38)",
+  background: "linear-gradient(90deg, rgba(34, 211, 238, 0.12), rgba(217, 70, 239, 0.1))",
+  color: "#f4f7ff",
+  boxShadow: "inset 2px 0 0 #22d3ee, 0 0 18px rgba(34, 211, 238, 0.06)",
 };
 
 const conversationSelectButtonStyle: React.CSSProperties = {
   display: "grid",
-  gap: "4px",
+  gap: "3px",
   textAlign: "left",
   padding: 0,
   border: "none",
@@ -1524,48 +1705,67 @@ const deleteConversationButtonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "34px",
-  height: "34px",
-  borderRadius: "999px",
-  border: "1px solid rgba(255, 214, 179, 0.14)",
-  background: "rgba(17, 17, 17, 0.18)",
-  color: "inherit",
+  width: "29px",
+  height: "29px",
+  borderRadius: "6px",
+  border: "1px solid transparent",
+  background: "transparent",
+  color: "#63738d",
   cursor: "pointer",
 };
 
 const conversationButtonTitleStyle: React.CSSProperties = {
-  fontSize: "0.86rem",
+  fontSize: "0.78rem",
+  fontWeight: 560,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
 const conversationButtonMetaStyle: React.CSSProperties = {
-  color: "rgba(247, 241, 232, 0.62)",
-  fontSize: "0.78rem",
+  color: "#70809b",
+  fontSize: "0.67rem",
 };
 
 const conversationEmptyStyle: React.CSSProperties = {
   margin: 0,
-  padding: "14px 16px",
-  borderRadius: "18px",
-  background: "rgba(255, 248, 240, 0.04)",
-  color: "rgba(247, 241, 232, 0.64)",
+  padding: "12px",
+  borderRadius: "7px",
+  background: "#020408",
+  color: "#70809b",
+  fontSize: "0.76rem",
 };
 
 const sidebarActionsStyle: React.CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "6px",
 };
 
 const ghostButtonStyle: React.CSSProperties = {
   width: "100%",
-  padding: "14px 16px",
-  borderRadius: "999px",
-  border: "1px solid rgba(255, 214, 179, 0.18)",
-  background: "rgba(255, 248, 240, 0.04)",
-  color: "#f7f1e8",
+  minHeight: "34px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "6px",
+  padding: "7px 9px",
+  borderRadius: "6px",
+  border: "1px solid #17283e",
+  background: "#080d16",
+  color: "#b9c5d8",
+  fontSize: "0.72rem",
+  fontWeight: 600,
   cursor: "pointer",
+};
+
+const primarySidebarButtonStyle: React.CSSProperties = {
+  ...ghostButtonStyle,
+  gridColumn: "1 / -1",
+  background: "linear-gradient(135deg, #0891b2 0%, #4f46e5 52%, #a21caf 100%)",
+  border: "1px solid rgba(103, 232, 249, 0.58)",
+  color: "#ffffff",
+  boxShadow: "0 0 20px rgba(34, 211, 238, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
 };
 
 const dangerButtonStyle: React.CSSProperties = {
@@ -1573,30 +1773,32 @@ const dangerButtonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  gap: "8px",
-  border: "1px solid rgba(255, 120, 110, 0.34)",
-  background: "rgba(190, 74, 65, 0.16)",
-  color: "#ffd1cb",
+  border: "1px solid rgba(248, 113, 113, 0.24)",
+  background: "rgba(68, 8, 36, 0.3)",
+  color: "#fca5a5",
 };
 
 const errorCardStyle: React.CSSProperties = {
   margin: 0,
-  padding: "14px 16px",
-  borderRadius: "18px",
-  background: "rgba(190, 74, 65, 0.18)",
-  color: "#ffd1cb",
-  lineHeight: 1.5,
+  padding: "9px 10px",
+  borderRadius: "7px",
+  background: "rgba(127, 29, 29, 0.16)",
+  border: "1px solid rgba(248, 113, 113, 0.24)",
+  color: "#fca5a5",
+  fontSize: "0.72rem",
+  lineHeight: 1.4,
 };
 
 const chatPanelStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateRows: "auto minmax(0, 1fr) auto",
-  borderRadius: "32px",
+  minWidth: 0,
+  minHeight: 0,
+  borderRadius: "10px",
   overflow: "hidden",
-  background: "linear-gradient(180deg, rgba(247, 241, 232, 0.12), rgba(247, 241, 232, 0.06))",
-  border: "1px solid rgba(255, 214, 179, 0.16)",
-  boxShadow: "0 28px 100px rgba(0, 0, 0, 0.32)",
-  backdropFilter: "blur(14px)",
+  background: "#03060b",
+  border: "1px solid #14243a",
+  boxShadow: "0 0 0 1px rgba(217, 70, 239, 0.015), 0 20px 58px rgba(0, 0, 0, 0.46)",
 };
 
 const chatHeaderStyle: React.CSSProperties = {
@@ -1604,23 +1806,25 @@ const chatHeaderStyle: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "center",
   flexWrap: "wrap",
-  gap: "16px",
-  padding: "22px 28px",
-  borderBottom: "1px solid rgba(255, 214, 179, 0.16)",
-  background: "rgba(22, 14, 11, 0.54)",
+  gap: "12px",
+  minHeight: "64px",
+  padding: "11px 18px",
+  borderBottom: "1px solid #14243a",
+  background: "#060a12",
 };
 
 const chatHeaderTextStyle: React.CSSProperties = {
   minWidth: 0,
   display: "grid",
-  gap: "6px",
+  gap: "2px",
 };
 
 const chatHeaderEyebrowStyle: React.CSSProperties = {
-  margin: "0 0 6px",
-  color: "rgba(247, 241, 232, 0.56)",
-  fontSize: "0.72rem",
-  letterSpacing: "0.12em",
+  margin: 0,
+  color: "#67e8f9",
+  fontSize: "0.62rem",
+  fontWeight: 700,
+  letterSpacing: "0.11em",
   textTransform: "uppercase",
 };
 
@@ -1629,7 +1833,8 @@ const chatHeaderTitleStyle: React.CSSProperties = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-  fontSize: "1.35rem",
+  fontSize: "1rem",
+  fontWeight: 630,
   lineHeight: 1.2,
 };
 
@@ -1638,7 +1843,7 @@ const chatHeaderTitleRowStyle: React.CSSProperties = {
   gridTemplateColumns: "minmax(0, auto) auto",
   justifyContent: "start",
   alignItems: "center",
-  gap: "10px",
+  gap: "7px",
   minWidth: 0,
 };
 
@@ -1646,18 +1851,18 @@ const titleEditFormStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 420px) auto auto",
   alignItems: "center",
-  gap: "8px",
+  gap: "6px",
   maxWidth: "min(100%, 560px)",
 };
 
 const titleEditInputStyle: React.CSSProperties = {
   minWidth: 0,
   width: "100%",
-  padding: "9px 12px",
-  borderRadius: "12px",
-  border: "1px solid rgba(255, 214, 179, 0.2)",
-  background: "rgba(12, 8, 7, 0.48)",
-  color: "#f7f1e8",
+  padding: "7px 9px",
+  borderRadius: "6px",
+  border: "1px solid #1b304a",
+  background: "#020408",
+  color: "#f4f7ff",
   outline: "none",
 };
 
@@ -1665,34 +1870,41 @@ const titleIconButtonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "34px",
-  height: "34px",
-  borderRadius: "999px",
-  border: "1px solid rgba(255, 214, 179, 0.16)",
-  background: "rgba(255, 248, 240, 0.06)",
-  color: "#f7f1e8",
+  width: "28px",
+  height: "28px",
+  borderRadius: "6px",
+  border: "1px solid #17283e",
+  background: "#080d16",
+  color: "#9fb0c8",
   cursor: "pointer",
 };
 
 const titleErrorStyle: React.CSSProperties = {
   margin: 0,
-  color: "#ffd1cb",
-  fontSize: "0.84rem",
+  color: "#fca5a5",
+  fontSize: "0.72rem",
   lineHeight: 1.4,
 };
 
 const chatHeaderMetaStyle: React.CSSProperties = {
   flexShrink: 0,
-  color: "rgba(247, 241, 232, 0.62)",
+  padding: "4px 7px",
+  borderRadius: "5px",
+  background: "#020408",
+  border: "1px solid #102038",
+  color: "#67e8f9",
   fontFamily: '"SFMono-Regular", Menlo, Consolas, monospace',
-  fontSize: "0.8rem",
+  fontSize: "0.65rem",
 };
 
 const messageListStyle: React.CSSProperties = {
+  minHeight: 0,
   overflowY: "auto",
-  padding: "28px",
+  padding: "18px 22px",
   display: "grid",
-  gap: "16px",
+  alignContent: "start",
+  gap: "10px",
+  background: "radial-gradient(circle at 90% 0%, rgba(34, 211, 238, 0.035), transparent 28%), linear-gradient(180deg, #03060b 0%, #020409 100%)",
 };
 
 const userBubbleWrapStyle: React.CSSProperties = {
@@ -1706,69 +1918,74 @@ const assistantBubbleWrapStyle: React.CSSProperties = {
 };
 
 const bubbleBaseStyle: React.CSSProperties = {
-  maxWidth: "min(720px, 100%)",
-  padding: "16px 18px",
-  borderRadius: "22px",
-  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.18)",
+  maxWidth: "min(820px, 82%)",
+  padding: "11px 13px",
+  borderRadius: "9px",
+  boxShadow: "0 7px 18px rgba(0, 0, 0, 0.16)",
 };
 
 const userBubbleStyle: React.CSSProperties = {
   ...bubbleBaseStyle,
-  background: "linear-gradient(135deg, #e58d4c, #bd5d32)",
-  color: "#fff5ef",
-  borderBottomRightRadius: "8px",
+  background: "linear-gradient(135deg, #142653, #321750)",
+  color: "#f4f7ff",
+  border: "1px solid #4f55a2",
+  boxShadow: "0 7px 18px rgba(0, 0, 0, 0.2), 0 0 20px rgba(124, 58, 237, 0.08)",
+  borderBottomRightRadius: "3px",
 };
 
 const assistantBubbleStyle: React.CSSProperties = {
   ...bubbleBaseStyle,
-  background: "rgba(17, 17, 17, 0.52)",
-  color: "#f7f1e8",
-  border: "1px solid rgba(255, 214, 179, 0.12)",
-  borderBottomLeftRadius: "8px",
+  background: "#070b13",
+  color: "#e6ebf5",
+  border: "1px solid #14243a",
+  borderBottomLeftRadius: "3px",
 };
 
 const bubbleMetaStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   gap: "12px",
-  marginBottom: "8px",
-  fontSize: "0.78rem",
+  marginBottom: "6px",
+  color: "#8fa0b8",
+  fontSize: "0.62rem",
+  fontWeight: 700,
   textTransform: "uppercase",
   letterSpacing: "0.1em",
-  opacity: 0.72,
 };
 
 const bubbleMetaLeftStyle: React.CSSProperties = {
   display: "flex",
-  gap: "10px",
+  gap: "8px",
   alignItems: "baseline",
   flexWrap: "wrap",
 };
 
 const bubbleTimestampStyle: React.CSSProperties = {
   fontVariantNumeric: "tabular-nums",
-  letterSpacing: "0.04em",
+  letterSpacing: "0.02em",
   textTransform: "none",
-  opacity: 0.85,
+  color: "#c4b5fd",
 };
 
 const messageTextStyle: React.CSSProperties = {
   margin: 0,
-  lineHeight: 1.6,
+  fontSize: "0.82rem",
+  lineHeight: 1.52,
   whiteSpace: "pre-wrap",
 };
 
 const fileListStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
-  marginTop: "12px",
+  gap: "6px",
+  marginTop: "9px",
 };
 
 const attachmentLabelStyle: React.CSSProperties = {
   width: "100%",
   margin: "0 0 2px",
-  fontSize: "0.72rem",
+  color: "#8fa0b8",
+  fontSize: "0.62rem",
   textTransform: "uppercase",
   letterSpacing: "0.1em",
   opacity: 0.74,
@@ -1778,9 +1995,10 @@ const fileChipStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: "8px",
-  padding: "8px 12px",
-  borderRadius: "999px",
-  background: "rgba(255, 255, 255, 0.1)",
+  padding: "6px 8px",
+  borderRadius: "6px",
+  background: "rgba(34, 211, 238, 0.06)",
+  border: "1px solid rgba(34, 211, 238, 0.18)",
   maxWidth: "100%",
 };
 
@@ -1788,45 +2006,49 @@ const fileIconWrapStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  color: "rgba(255, 248, 240, 0.82)",
+  color: "#a8b4c7",
   flexShrink: 0,
 };
 
 const fileNameStyle: React.CSSProperties = {
+  fontSize: "0.73rem",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
 const composerStyle: React.CSSProperties = {
-  borderTop: "1px solid rgba(255, 214, 179, 0.16)",
-  padding: "22px 24px 24px",
-  background: "rgba(22, 14, 11, 0.74)",
+  borderTop: "1px solid #14243a",
+  padding: "10px 14px 12px",
+  background: "#060a12",
 };
 
 const attachmentToolbarStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
-  gap: "12px",
-  marginBottom: "12px",
+  gap: "8px",
+  marginBottom: "7px",
 };
 
 const attachmentPickerStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "10px 14px",
-  borderRadius: "999px",
-  border: "1px solid rgba(255, 214, 179, 0.16)",
-  background: "rgba(255, 248, 240, 0.06)",
-  color: "#f7f1e8",
+  gap: "6px",
+  padding: "6px 8px",
+  borderRadius: "6px",
+  border: "1px solid #17283e",
+  background: "#080d16",
+  color: "#a8b4c7",
+  fontSize: "0.7rem",
+  fontWeight: 600,
   cursor: "pointer",
 };
 
 const attachmentSummaryStyle: React.CSSProperties = {
-  color: "rgba(247, 241, 232, 0.66)",
-  fontSize: "0.85rem",
+  color: "#718097",
+  fontSize: "0.68rem",
 };
 
 const visuallyHiddenInputStyle: React.CSSProperties = {
@@ -1843,19 +2065,19 @@ const visuallyHiddenInputStyle: React.CSSProperties = {
 
 const selectedFileListStyle: React.CSSProperties = {
   display: "grid",
-  gap: "10px",
-  marginBottom: "14px",
+  gap: "6px",
+  marginBottom: "8px",
 };
 
 const selectedFileChipStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "auto minmax(0, 1fr) auto",
-  gap: "10px",
+  gap: "8px",
   alignItems: "center",
-  padding: "10px 12px",
-  borderRadius: "16px",
-  background: "rgba(255, 248, 240, 0.06)",
-  border: "1px solid rgba(255, 214, 179, 0.12)",
+  padding: "7px 8px",
+  borderRadius: "6px",
+  background: "#080d16",
+  border: "1px solid #17283e",
 };
 
 const selectedFileIconWrapStyle: React.CSSProperties = {
@@ -1864,8 +2086,8 @@ const selectedFileIconWrapStyle: React.CSSProperties = {
   justifyContent: "center",
   width: "28px",
   height: "28px",
-  borderRadius: "8px",
-  background: "rgba(255, 255, 255, 0.08)",
+  borderRadius: "5px",
+  background: "#020408",
   flexShrink: 0,
 };
 
@@ -1882,8 +2104,8 @@ const selectedFileNameStyle: React.CSSProperties = {
 };
 
 const selectedFileSizeStyle: React.CSSProperties = {
-  color: "rgba(247, 241, 232, 0.62)",
-  fontSize: "0.78rem",
+  color: "#718097",
+  fontSize: "0.67rem",
 };
 
 const selectedFileRemoveStyle: React.CSSProperties = {
@@ -1892,53 +2114,66 @@ const selectedFileRemoveStyle: React.CSSProperties = {
   justifyContent: "center",
   width: "28px",
   height: "28px",
-  borderRadius: "999px",
-  border: "1px solid rgba(255, 214, 179, 0.14)",
-  background: "rgba(17, 17, 17, 0.18)",
-  color: "inherit",
+  borderRadius: "5px",
+  border: "1px solid #17283e",
+  background: "#020408",
+  color: "#8fa0b8",
   cursor: "pointer",
 };
 
 const composerLabelStyle: React.CSSProperties = {
   display: "block",
-  marginBottom: "10px",
-  fontSize: "0.8rem",
-  color: "rgba(247, 241, 232, 0.72)",
+  marginBottom: "6px",
+  fontSize: "0.64rem",
+  color: "#8fa0b8",
+  fontWeight: 700,
   textTransform: "uppercase",
   letterSpacing: "0.12em",
 };
 
 const composerRowStyle: React.CSSProperties = {
   display: "grid",
-  gap: "12px",
+  gap: "8px",
   alignItems: "end",
 };
 
 const composerInputStyle: React.CSSProperties = {
   width: "100%",
-  resize: "vertical",
-  minHeight: "84px",
-  padding: "16px",
-  borderRadius: "22px",
-  border: "1px solid rgba(255, 214, 179, 0.14)",
-  background: "rgba(255, 248, 240, 0.08)",
-  color: "#f7f1e8",
+  resize: "none",
+  minHeight: "54px",
+  maxHeight: "132px",
+  padding: "10px 11px",
+  borderRadius: "7px",
+  border: "1px solid #17283e",
+  background: "#020408",
+  color: "#f4f7ff",
+  fontSize: "0.8rem",
+  lineHeight: 1.45,
   outline: "none",
 };
 
 const primaryButtonStyle: React.CSSProperties = {
-  padding: "16px 24px",
-  borderRadius: "999px",
-  border: "none",
-  background: "linear-gradient(135deg, #f0b778, #d46d42)",
-  color: "#22140f",
+  minWidth: "84px",
+  minHeight: "54px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "6px",
+  padding: "10px 14px",
+  borderRadius: "7px",
+  border: "1px solid rgba(103, 232, 249, 0.58)",
+  background: "linear-gradient(135deg, #0891b2 0%, #4f46e5 55%, #a21caf 100%)",
+  color: "#ffffff",
   cursor: "pointer",
-  fontWeight: 700,
+  fontSize: "0.75rem",
+  fontWeight: 650,
+  boxShadow: "0 0 20px rgba(34, 211, 238, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
 };
 
 const composerErrorStyle: React.CSSProperties = {
   margin: "10px 0 0",
-  color: "#ffbeb5",
+  color: "#fca5a5",
+  fontSize: "0.72rem",
 };
 
 const emptyStateStyle: React.CSSProperties = {
@@ -1946,17 +2181,19 @@ const emptyStateStyle: React.CSSProperties = {
   display: "grid",
   placeItems: "center",
   textAlign: "center",
-  padding: "48px 20px",
+  padding: "32px 20px",
 };
 
 const emptyTitleStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: "2rem",
+  color: "#d9e1ef",
+  fontSize: "1.05rem",
 };
 
 const emptyBodyStyle: React.CSSProperties = {
   margin: "12px 0 0",
-  color: "rgba(247, 241, 232, 0.7)",
+  color: "#718097",
+  fontSize: "0.78rem",
   maxWidth: "36ch",
   lineHeight: 1.6,
 };

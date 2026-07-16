@@ -9,7 +9,7 @@ import type { CreateConversationFlow } from "../../application/create-conversati
 import type { DeleteConversationFlow } from "../../application/delete-conversation-flow";
 import type { GetConversationFlow } from "../../application/get-conversation-flow";
 import { type GetMessagesOnConversationFlow } from "../../application/get-messages-on-conversation-flow";
-import type { RequestCompletionFlow } from "../../application/request-completion-flow";
+import type { RequestCompletionFlow, RequestCompletionRequest } from "../../application/request-completion-flow";
 import type { ListConversationsFlow } from "../../application/list-conversations-flow";
 import type { UpdateConvFlow } from "../../application/update-conv-flow";
 import type { AccessIdentityAuthorizer } from "../../domain/contracts/access-identity-authorizer";
@@ -319,10 +319,7 @@ async function parseUpdateConversationRequest(req: Request, conversationId: stri
   };
 }
 
-async function parseRequestCompletionRequest(
-  req: Request,
-  conversationId: string,
-): Promise<TransportResult<{ readonly conversationId: string; readonly messageIds: ReadonlyArray<string> }>> {
+async function parseRequestCompletionRequest(req: Request, conversationId: string): Promise<TransportResult<RequestCompletionRequest>> {
   const contentType = req.headers.get("content-type") ?? "";
 
   if (!contentType.includes("application/json")) {
@@ -349,11 +346,16 @@ async function parseRequestCompletionRequest(
     return transportFailure("messageIds", "messageIds must contain only positive decimal bigint strings.");
   }
 
+  if (typeof body.model !== "string" || body.model.trim().length === 0) {
+    return transportFailure("model", "model must be a non-empty string.");
+  }
+
   return {
     ok: true,
     value: {
       conversationId,
       messageIds: body.messageIds.map((messageId: string) => messageId.trim()),
+      model: body.model.trim(),
     },
   };
 }

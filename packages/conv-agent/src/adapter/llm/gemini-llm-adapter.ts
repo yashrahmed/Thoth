@@ -1,10 +1,10 @@
 import type { LlmConfig } from "../../config/config";
 import type { LlmService } from "../../domain/contracts/llm-service";
 import { LlmError } from "../../domain/objects/errors";
-import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmToolDefinition } from "../../domain/objects/llm";
+import { LLMMessageType, LlmModel, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmToolDefinition } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
-const GEMINI_3_FLASH_MODEL = "gemini-3-flash-preview";
+const GEMINI_3_FLASH_MODEL = LlmModel.GoogleGemini3FlashPreview;
 
 const GEMINI_GENERATE_CONTENT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_REQUEST_TIMEOUT_MS = 25_000;

@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { GeminiLlmAdapter } from "../adapter/llm/gemini-llm-adapter";
 import { OpenAiLlmAdapter } from "../adapter/llm/openai-llm-adapter";
 import type { LlmService } from "../domain/contracts/llm-service";
-import { LLMMessageType, type LlmCompletionMessage } from "../domain/objects/llm";
+import { LLMMessageType, LlmModel, type LlmCompletionMessage } from "../domain/objects/llm";
 import { Message } from "../domain/objects/message-types";
 import { success } from "../domain/objects/result";
 import type { FileAccessDomainService } from "../domain/services/file-access-domain-service";
@@ -53,20 +53,29 @@ const MESSAGES = [
 describe("temporal tool model-adapter system tests", () => {
   test("OpenAI GPT uses a temporal tool instead of message timestamp text", async () => {
     const timingTools = new TimingToolsService(() => FIXED_NOW);
-    const result = await completeWithTrackedTimingTools(new OpenAiLlmAdapter({ apiKey: requireEnv("OPENAI_LLM_API_KEY") }, timingTools.get_description()), timingTools);
+    const result = await completeWithTrackedTimingTools(
+      LlmModel.OpenAiGpt54,
+      new OpenAiLlmAdapter({ apiKey: requireEnv("OPENAI_LLM_API_KEY") }, timingTools.get_description()),
+      timingTools,
+    );
 
     assertTemporalCompletion(result.messages, result.executions);
   });
 
   test("Gemini uses a temporal tool instead of message timestamp text", async () => {
     const timingTools = new TimingToolsService(() => FIXED_NOW);
-    const result = await completeWithTrackedTimingTools(new GeminiLlmAdapter({ apiKey: requireEnv("GOOGLE_LLM_API_KEY") }, timingTools.get_description()), timingTools);
+    const result = await completeWithTrackedTimingTools(
+      LlmModel.GoogleGemini3FlashPreview,
+      new GeminiLlmAdapter({ apiKey: requireEnv("GOOGLE_LLM_API_KEY") }, timingTools.get_description()),
+      timingTools,
+    );
 
     assertTemporalCompletion(result.messages, result.executions);
   });
 });
 
 async function completeWithTrackedTimingTools(
+  model: LlmModel,
   llmService: LlmService,
   timingToolsService: TimingToolsService,
 ): Promise<{ readonly messages: ReadonlyArray<LlmCompletionMessage>; readonly executions: ReadonlyArray<ToolExecution> }> {
@@ -87,13 +96,17 @@ async function completeWithTrackedTimingTools(
     stub<FileAccessDomainService>({
       createSignedFileAccess: async () => success([]),
     }),
-    llmService,
+    {
+      [LlmModel.OpenAiGpt54]: model === LlmModel.OpenAiGpt54 ? llmService : unusedLlmService(),
+      [LlmModel.GoogleGemini3FlashPreview]: model === LlmModel.GoogleGemini3FlashPreview ? llmService : unusedLlmService(),
+    },
     new LlmPromptDomainService(),
     trackingTimingToolsService,
   );
   const result = await service.complete({
     conversationId: CONVERSATION_ID,
     messageIds: MESSAGES.map((message) => message.id),
+    model,
   });
 
   if (!result.ok) {
@@ -101,6 +114,14 @@ async function completeWithTrackedTimingTools(
   }
 
   return { messages: result.value, executions };
+}
+
+function unusedLlmService(): LlmService {
+  return {
+    llmComplete: async () => {
+      throw new Error("The unselected LLM adapter should not be called.");
+    },
+  };
 }
 
 function assertTemporalCompletion(messages: ReadonlyArray<LlmCompletionMessage>, executions: ReadonlyArray<ToolExecution>): void {

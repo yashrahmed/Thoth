@@ -1,6 +1,6 @@
 import type { LlmService } from "../contracts/llm-service";
 import { LlmError, type NotFoundError, type StoreError, type ValidationError } from "../objects/errors";
-import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../objects/llm";
+import { LLMMessageType, type LlmCompletionInputFile, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmModel } from "../objects/llm";
 import { failure, success, type Result } from "../objects/result";
 import type { Message } from "../objects/message-types";
 import type { FileAccessDomainService, SignedFileAccess } from "./file-access-domain-service";
@@ -12,7 +12,10 @@ import type { TimingToolsService } from "./timing-tools-service";
 export interface LlmCompletionRequest {
   readonly conversationId: string;
   readonly messageIds: ReadonlyArray<string>;
+  readonly model: LlmModel;
 }
+
+export type LlmServicesByModel = Readonly<Record<LlmModel, LlmService>>;
 
 const MAX_TOOL_CALL_ROUNDS = 5;
 
@@ -28,7 +31,7 @@ export class LlmCompletionDomainService {
     private readonly messageDomainService: MessageDomainService,
     private readonly fileDomainService: FileDomainService,
     private readonly fileAccessDomainService: FileAccessDomainService,
-    private readonly llmService: LlmService,
+    private readonly llmServicesByModel: LlmServicesByModel,
     private readonly llmPromptDomainService: LlmPromptDomainService,
     private readonly timingToolsService: TimingToolsService,
   ) {}
@@ -57,17 +60,18 @@ export class LlmCompletionDomainService {
       return signedFilesResult;
     }
 
-    return this.completeWithTools(this.buildLlmInputMessages(historyResult.value, signedFilesResult.value), historyResult.value);
+    return this.completeWithTools(this.llmServicesByModel[request.model], this.buildLlmInputMessages(historyResult.value, signedFilesResult.value), historyResult.value);
   }
 
   private async completeWithTools(
+    llmService: LlmService,
     initialMessages: ReadonlyArray<LlmCompletionInputMessage>,
     messageContext: ReadonlyArray<Message>,
   ): Promise<Result<LlmCompletionMessage[], LlmError>> {
     const transcript: Array<LlmCompletionInputMessage | LlmCompletionMessage> = [...initialMessages];
 
     for (let round = 0; ; round += 1) {
-      const llmResult = await this.llmService.llmComplete(transcript);
+      const llmResult = await llmService.llmComplete(transcript);
 
       if (!llmResult.ok) {
         return llmResult;

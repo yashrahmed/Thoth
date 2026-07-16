@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import postgres from "postgres";
+import { LlmModel } from "../domain/objects/llm";
 
 const BASE_URL = process.env.CONV_AGENT_URL ?? "http://127.0.0.1:3001";
 const DATABASE_URL = process.env.SYSTEM_TEST_DATABASE_URL;
@@ -132,6 +133,6 @@ function requestCompletion(conversationId: string, messageIds: ReadonlyArray<str
       ...AUTH_HEADERS,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ messageIds }),
+    body: JSON.stringify({ messageIds, model: LlmModel.GoogleGemini3FlashPreview }),
   });
 }

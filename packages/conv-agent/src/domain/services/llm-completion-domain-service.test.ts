@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 import type { LlmService } from "../contracts/llm-service";
-import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../objects/llm";
+import { LLMMessageType, LlmModel, type LlmCompletionInputMessage, type LlmCompletionMessage } from "../objects/llm";
 import { LlmError } from "../objects/errors";
 import { Message } from "../objects/message-types";
 import { failure, success, type Result } from "../objects/result";
@@ -21,12 +21,13 @@ const CONVERSATION_HISTORY = [
   new Message(MESSAGE_ID, CONVERSATION_ID, LLMMessageType.User, "When was this report released?", NOW, NOW),
 ];
 const MESSAGE_IDS = CONVERSATION_HISTORY.map((message) => message.id);
+const MODEL = LlmModel.GoogleGemini3FlashPreview;
 
 describe("LlmCompletionDomainService", () => {
   test("builds the prompt from the requested messages", async () => {
     const harness = createHarness();
 
-    await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS });
+    await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS, model: MODEL });
 
     expect(harness.findMessagesByIds).toHaveBeenCalledWith({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS });
 
@@ -66,7 +67,7 @@ describe("LlmCompletionDomainService", () => {
       ],
     });
 
-    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS });
+    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS, model: MODEL });
 
     expect(result).toEqual(success([{ type: LLMMessageType.Assistant, content: "65 seconds elapsed." }]));
     expect(harness.runTool).toHaveBeenCalledWith("get_elapsed_time", { before_turn_number: 1, after_turn_number: 2 }, CONVERSATION_HISTORY);
@@ -102,7 +103,7 @@ describe("LlmCompletionDomainService", () => {
       }),
     });
 
-    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS });
+    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS, model: MODEL });
 
     expect(result.ok).toBe(false);
     expect(result.ok ? null : result.error).toEqual(new LlmError("Timing tool cannot be resolved: unknown_tool."));
@@ -112,7 +113,7 @@ describe("LlmCompletionDomainService", () => {
   test("requests files only for messages in the prompt history", async () => {
     const harness = createHarness();
 
-    await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS });
+    await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS, model: MODEL });
 
     expect(harness.getFilesOnMessages).toHaveBeenCalledWith({ messageIds: CONVERSATION_HISTORY.map((message) => message.id) });
   });
@@ -120,7 +121,7 @@ describe("LlmCompletionDomainService", () => {
   test("returns the completion messages without persisting anything", async () => {
     const harness = createHarness({ completionContent: "The report was released in May 2026." });
 
-    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS });
+    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS, model: MODEL });
 
     expect(result.ok).toBe(true);
     expect(result.ok ? result.value : []).toEqual([
@@ -136,11 +137,25 @@ describe("LlmCompletionDomainService", () => {
       llmResult: failure(new LlmError("provider timed out", "timeout")),
     });
 
-    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS });
+    const result = await harness.service.complete({ conversationId: CONVERSATION_ID, messageIds: MESSAGE_IDS, model: MODEL });
 
     expect(result.ok).toBe(false);
     expect(result.ok ? null : result.error).toBeInstanceOf(LlmError);
     expect(result.ok ? null : (result.error as LlmError).code).toBe("timeout");
+  });
+
+  test("routes a completion to the adapter registered for the requested model", async () => {
+    const harness = createHarness({ model: LlmModel.OpenAiGpt54 });
+
+    const result = await harness.service.complete({
+      conversationId: CONVERSATION_ID,
+      messageIds: MESSAGE_IDS,
+      model: LlmModel.OpenAiGpt54,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(harness.llmInputsByModel[LlmModel.OpenAiGpt54]).toHaveLength(1);
+    expect(harness.llmInputsByModel[LlmModel.GoogleGemini3FlashPreview]).toHaveLength(0);
   });
 });
 
@@ -148,14 +163,21 @@ function createHarness(request?: {
   readonly completionContent?: string;
   readonly llmResult?: Result<LlmCompletionMessage, LlmError>;
   readonly llmResults?: ReadonlyArray<Result<LlmCompletionMessage, LlmError>>;
+  readonly model?: LlmModel;
 }): {
   readonly service: LlmCompletionDomainService;
   readonly llmInputs: ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>[];
+  readonly llmInputsByModel: Readonly<Record<LlmModel, ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>[]>>;
   readonly runTool: ReturnType<typeof mock>;
   readonly findMessagesByIds: ReturnType<typeof mock>;
   readonly getFilesOnMessages: ReturnType<typeof mock>;
 } {
-  const llmInputs: ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>[] = [];
+  const selectedModel = request?.model ?? MODEL;
+  const llmInputsByModel: Record<LlmModel, ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>[]> = {
+    [LlmModel.OpenAiGpt54]: [],
+    [LlmModel.GoogleGemini3FlashPreview]: [],
+  };
+  const llmInputs = llmInputsByModel[selectedModel];
   const completionMessage: LlmCompletionMessage = {
     type: LLMMessageType.Assistant,
     content: request?.completionContent ?? "The report was released in May 2026.",
@@ -179,14 +201,10 @@ function createHarness(request?: {
     stub<FileAccessDomainService>({
       createSignedFileAccess: mock(() => Promise.resolve(success([]))),
     }),
-    stub<LlmService>({
-      llmComplete: mock((messages: ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>): Promise<Result<LlmCompletionMessage, LlmError>> => {
-        llmInputs.push([...messages]);
-        const result = request?.llmResults?.[llmCallIndex] ?? request?.llmResult ?? success(completionMessage);
-        llmCallIndex += 1;
-        return Promise.resolve(result);
-      }),
-    }),
+    {
+      [LlmModel.OpenAiGpt54]: createLlmService(LlmModel.OpenAiGpt54),
+      [LlmModel.GoogleGemini3FlashPreview]: createLlmService(LlmModel.GoogleGemini3FlashPreview),
+    },
     new LlmPromptDomainService(),
     stub<TimingToolsService>({ run_tool: runTool }),
   );
@@ -194,10 +212,22 @@ function createHarness(request?: {
   return {
     service,
     llmInputs,
+    llmInputsByModel,
     runTool,
     findMessagesByIds,
     getFilesOnMessages,
   };
+
+  function createLlmService(model: LlmModel): LlmService {
+    return stub<LlmService>({
+      llmComplete: mock((messages: ReadonlyArray<LlmCompletionInputMessage | LlmCompletionMessage>): Promise<Result<LlmCompletionMessage, LlmError>> => {
+        llmInputsByModel[model].push([...messages]);
+        const result = request?.llmResults?.[llmCallIndex] ?? request?.llmResult ?? success(completionMessage);
+        llmCallIndex += 1;
+        return Promise.resolve(result);
+      }),
+    });
+  }
 }
 
 function stub<T>(implementation: Partial<T>): T {

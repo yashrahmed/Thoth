@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, test } from "bun:test";
+import { LlmModel } from "../domain/objects/llm";
 
 const BASE_URL = process.env.CONV_AGENT_URL ?? "http://127.0.0.1:3001";
 const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID;
@@ -349,14 +350,14 @@ describe("conv-agent HTTP system test", () => {
   });
 });
 
-function requestCompletion(conversationId: string, messageIds: ReadonlyArray<string>): Promise<Response> {
+function requestCompletion(conversationId: string, messageIds: ReadonlyArray<string>, model = LlmModel.GoogleGemini3FlashPreview): Promise<Response> {
   return fetch(`${BASE_URL}/conversations/${conversationId}/request-completion`, {
     method: "POST",
     headers: {
       ...AUTH_HEADERS,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ messageIds }),
+    body: JSON.stringify({ messageIds, model }),
   });
 }
 

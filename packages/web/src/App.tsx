@@ -1380,15 +1380,15 @@ function formatUiState(booting: boolean, sending: boolean, refreshing: boolean):
 
 const globalStyles = `
   :root {
-    --void: #02090a;
-    --ink: #061315;
-    --ink-raised: #0a1c1e;
-    --ink-soft: #10282a;
-    --paper: #e9eee8;
-    --paper-dim: #bcc9c4;
-    --muted: #829793;
-    --line: #aec0ba;
-    --line-soft: #3e5b58;
+    --void: #030304;
+    --ink: #090a0c;
+    --ink-raised: #111317;
+    --ink-soft: #191c21;
+    --paper: #e9e9e7;
+    --paper-dim: #bfc0c2;
+    --muted: #85888e;
+    --line: #b8babd;
+    --line-soft: #41444a;
     --cyan: #7fe3cf;
     --yellow: #f4dc3f;
     --orange: #ff8a32;
@@ -1417,11 +1417,11 @@ const globalStyles = `
     min-height: 100%;
     background:
       radial-gradient(circle at 12% 18%, rgba(127, 227, 207, 0.55) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 78% 32%, rgba(233, 238, 232, 0.42) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 78% 32%, rgba(233, 233, 233, 0.42) 0 1px, transparent 1.5px),
       radial-gradient(circle at 38% 78%, rgba(244, 220, 63, 0.28) 0 1px, transparent 1.5px),
       radial-gradient(ellipse at 76% -12%, rgba(255, 138, 50, 0.09), transparent 38%),
-      radial-gradient(ellipse at -8% 112%, rgba(127, 227, 207, 0.1), transparent 42%),
-      linear-gradient(112deg, transparent 0 64%, rgba(127, 227, 207, 0.025) 64% 64.2%, transparent 64.2%),
+      radial-gradient(ellipse at -8% 112%, rgba(255, 255, 255, 0.055), transparent 42%),
+      linear-gradient(112deg, transparent 0 64%, rgba(255, 255, 255, 0.022) 64% 64.2%, transparent 64.2%),
       var(--void);
     background-size: 190px 190px, 260px 260px, 320px 320px, auto, auto, auto, auto;
   }
@@ -1738,7 +1738,7 @@ const globalStyles = `
     min-width: 28px;
     border: 1px solid var(--line-soft);
     color: var(--muted);
-    background: rgba(2, 9, 10, 0.82);
+    background: rgba(3, 3, 4, 0.82);
     font-family: var(--font-mono);
     font-size: 0.58rem;
     writing-mode: vertical-rl;
@@ -1964,7 +1964,7 @@ const sidebarStyle: React.CSSProperties = {
   padding: "14px",
   overflow: "hidden",
   borderRadius: "1px",
-  background: "linear-gradient(168deg, rgba(10, 28, 30, 0.96) 0%, rgba(4, 14, 16, 0.98) 68%)",
+  background: "linear-gradient(168deg, rgba(18, 19, 22, 0.97) 0%, rgba(7, 8, 10, 0.99) 68%)",
   border: "1px solid var(--line-soft)",
   boxShadow: "0 18px 48px rgba(0, 0, 0, 0.38)",
 };
@@ -2024,7 +2024,7 @@ const statusPanelStyle: React.CSSProperties = {
   gap: "8px 12px",
   padding: "9px 10px 10px",
   borderRadius: "1px",
-  background: "rgba(2, 9, 10, 0.72)",
+  background: "rgba(3, 3, 4, 0.72)",
   border: "1px solid var(--line-soft)",
 };
 
@@ -2110,15 +2110,15 @@ const conversationButtonBaseStyle: React.CSSProperties = {
 
 const conversationButtonStyle: React.CSSProperties = {
   ...conversationButtonBaseStyle,
-  border: "1px solid rgba(62, 91, 88, 0.62)",
-  background: "rgba(4, 14, 16, 0.48)",
+  border: "1px solid rgba(65, 68, 74, 0.62)",
+  background: "rgba(9, 10, 12, 0.52)",
   color: "var(--paper-dim)",
 };
 
 const activeConversationButtonStyle: React.CSSProperties = {
   ...conversationButtonBaseStyle,
   border: "1px solid var(--line)",
-  background: "linear-gradient(90deg, rgba(127, 227, 207, 0.13), rgba(6, 19, 21, 0.9))",
+  background: "linear-gradient(90deg, rgba(38, 40, 44, 0.96), rgba(12, 13, 16, 0.94))",
   color: "var(--paper)",
   boxShadow: "inset 4px 0 0 var(--pink), 0 0 20px rgba(127, 227, 207, 0.05)",
 };
@@ -2194,7 +2194,7 @@ const ghostButtonStyle: React.CSSProperties = {
   padding: "7px 9px",
   borderRadius: "1px",
   border: "1px solid var(--line-soft)",
-  background: "rgba(6, 19, 21, 0.82)",
+  background: "rgba(12, 13, 16, 0.86)",
   color: "var(--paper-dim)",
   fontFamily: "var(--font-display)",
   fontSize: "0.68rem",
@@ -2239,7 +2239,7 @@ const chatPanelStyle: React.CSSProperties = {
   minHeight: 0,
   borderRadius: "1px",
   overflow: "hidden",
-  background: "rgba(4, 14, 16, 0.94)",
+  background: "rgba(7, 8, 10, 0.96)",
   border: "1px solid var(--line-soft)",
   boxShadow: "0 20px 58px rgba(0, 0, 0, 0.42)",
 };
@@ -2253,7 +2253,7 @@ const chatHeaderStyle: React.CSSProperties = {
   minHeight: "68px",
   padding: "11px 16px",
   borderBottom: "1px solid var(--line)",
-  background: "linear-gradient(90deg, rgba(16, 40, 42, 0.96), rgba(4, 14, 16, 0.98))",
+  background: "linear-gradient(90deg, rgba(24, 25, 29, 0.97), rgba(8, 9, 11, 0.99))",
 };
 
 const chatHeaderTextStyle: React.CSSProperties = {
@@ -2353,7 +2353,7 @@ const messageListStyle: React.CSSProperties = {
   alignContent: "start",
   gap: "12px",
   background:
-    "linear-gradient(90deg, transparent 0 45px, rgba(127, 227, 207, 0.045) 45px 46px, transparent 46px), radial-gradient(circle at 88% 10%, rgba(244, 220, 63, 0.045), transparent 25%), linear-gradient(180deg, rgba(6, 19, 21, 0.96), rgba(2, 9, 10, 0.99))",
+    "linear-gradient(90deg, transparent 0 45px, rgba(127, 227, 207, 0.045) 45px 46px, transparent 46px), radial-gradient(circle at 88% 10%, rgba(244, 220, 63, 0.045), transparent 25%), linear-gradient(180deg, rgba(13, 14, 17, 0.97), rgba(3, 3, 4, 0.995))",
 };
 
 const userBubbleWrapStyle: React.CSSProperties = {
@@ -2376,7 +2376,7 @@ const bubbleBaseStyle: React.CSSProperties = {
 
 const userBubbleStyle: React.CSSProperties = {
   ...bubbleBaseStyle,
-  background: "linear-gradient(118deg, rgba(31, 35, 33, 0.96), rgba(38, 14, 24, 0.94))",
+  background: "linear-gradient(118deg, rgba(27, 28, 31, 0.97), rgba(38, 14, 24, 0.94))",
   color: "var(--paper)",
   border: "1px solid rgba(255, 53, 109, 0.62)",
   boxShadow: "0 8px 22px rgba(0, 0, 0, 0.2), inset -3px 0 0 var(--pink)",
@@ -2384,7 +2384,7 @@ const userBubbleStyle: React.CSSProperties = {
 
 const assistantBubbleStyle: React.CSSProperties = {
   ...bubbleBaseStyle,
-  background: "linear-gradient(118deg, rgba(10, 28, 30, 0.97), rgba(5, 17, 19, 0.98))",
+  background: "linear-gradient(118deg, rgba(19, 20, 23, 0.98), rgba(9, 10, 12, 0.99))",
   color: "var(--paper)",
   border: "1px solid var(--line-soft)",
   boxShadow: "0 8px 22px rgba(0, 0, 0, 0.16), inset 3px 0 0 rgba(127, 227, 207, 0.55)",
@@ -2464,7 +2464,7 @@ const fileNameStyle: React.CSSProperties = {
 const composerStyle: React.CSSProperties = {
   borderTop: "1px solid var(--line)",
   padding: "9px 13px 11px",
-  background: "linear-gradient(90deg, rgba(10, 28, 30, 0.98), rgba(4, 14, 16, 0.99))",
+  background: "linear-gradient(90deg, rgba(18, 19, 22, 0.99), rgba(8, 9, 11, 0.995))",
 };
 
 const attachmentToolbarStyle: React.CSSProperties = {
@@ -2591,7 +2591,7 @@ const composerInputStyle: React.CSSProperties = {
   padding: "10px 11px",
   borderRadius: "1px",
   border: "1px solid var(--line-soft)",
-  background: "rgba(2, 9, 10, 0.92)",
+  background: "rgba(3, 3, 4, 0.94)",
   color: "var(--paper)",
   fontSize: "0.8rem",
   lineHeight: 1.45,

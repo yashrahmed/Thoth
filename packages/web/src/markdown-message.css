@@ -31,16 +31,18 @@
 .markdown-message h5,
 .markdown-message h6 {
   margin: 1.05rem 0 0.48rem;
-  color: #f4f7ff;
+  color: var(--paper);
+  font-family: var(--font-display);
   font-weight: 680;
   line-height: 1.28;
-  letter-spacing: -0.012em;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
 }
 
 .markdown-message h1,
 .markdown-message h2 {
   padding-bottom: 0.32rem;
-  border-bottom: 1px solid #1b304a;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .markdown-message h1 {
@@ -62,25 +64,25 @@
 }
 
 .markdown-message strong {
-  color: #ffffff;
+  color: var(--paper);
   font-weight: 700;
 }
 
 .markdown-message a {
-  color: #67e8f9;
-  text-decoration-color: rgba(103, 232, 249, 0.48);
+  color: var(--cyan);
+  text-decoration-color: rgba(127, 227, 207, 0.48);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
 .markdown-message a:hover {
-  color: #a5f3fc;
+  color: var(--paper);
   text-decoration-color: currentColor;
 }
 
 .markdown-message a:focus-visible {
-  border-radius: 2px;
-  outline: 2px solid #22d3ee;
+  border-radius: 0;
+  outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }
 
@@ -98,7 +100,7 @@
 }
 
 .markdown-message li::marker {
-  color: #67e8f9;
+  color: var(--yellow);
 }
 
 .markdown-message .contains-task-list {
@@ -118,16 +120,16 @@
   width: 0.85rem;
   height: 0.85rem;
   margin: 0;
-  accent-color: #22d3ee;
+  accent-color: var(--pink);
   opacity: 0.82;
 }
 
 .markdown-message blockquote {
   padding: 0.48rem 0.68rem;
-  border-left: 3px solid #22d3ee;
-  border-radius: 0 5px 5px 0;
-  background: rgba(8, 47, 73, 0.28);
-  color: #b8c5d8;
+  border-left: 3px solid var(--pink);
+  border-radius: 0;
+  background: rgba(255, 53, 109, 0.07);
+  color: var(--paper-dim);
 }
 
 .markdown-message blockquote > :last-child {
@@ -136,10 +138,10 @@
 
 .markdown-message :not(pre) > code {
   padding: 0.12rem 0.3rem;
-  border: 1px solid rgba(217, 70, 239, 0.24);
-  border-radius: 4px;
-  background: rgba(88, 28, 135, 0.22);
-  color: #f0abfc;
+  border: 1px solid rgba(244, 220, 63, 0.32);
+  border-radius: 0;
+  background: rgba(244, 220, 63, 0.08);
+  color: var(--yellow);
   font-size: 0.78rem;
   white-space: break-spaces;
 }
@@ -148,10 +150,10 @@
   max-width: 100%;
   overflow: auto;
   padding: 0.72rem 0.82rem;
-  border: 1px solid #1b304a;
-  border-radius: 6px;
-  background: #010307;
-  box-shadow: inset 3px 0 0 rgba(34, 211, 238, 0.65);
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: var(--void);
+  box-shadow: inset 3px 0 0 var(--cyan);
 }
 
 .markdown-message pre code {
@@ -160,7 +162,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #dbeafe;
+  color: var(--paper);
   font-size: 0.76rem;
   line-height: 1.55;
   overflow-wrap: normal;
@@ -172,8 +174,8 @@
   content: attr(data-language);
   display: block;
   margin-bottom: 0.48rem;
-  color: #67e8f9;
-  font-family: Inter, ui-sans-serif, sans-serif;
+  color: var(--cyan);
+  font-family: var(--font-display);
   font-size: 0.58rem;
   font-weight: 750;
   letter-spacing: 0.11em;
@@ -185,9 +187,9 @@
   width: max-content;
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid #1b304a;
+  border: 1px solid var(--line);
   border-collapse: collapse;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 0.76rem;
 }
 
@@ -195,15 +197,16 @@
 .markdown-message td {
   min-width: 7.5rem;
   padding: 0.42rem 0.55rem;
-  border-right: 1px solid #1b304a;
-  border-bottom: 1px solid #1b304a;
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
   text-align: left;
   vertical-align: top;
 }
 
 .markdown-message th {
-  background: #0a1120;
-  color: #a5f3fc;
+  background: var(--paper);
+  color: var(--void);
+  font-family: var(--font-display);
   font-size: 0.64rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -219,26 +222,26 @@
 }
 
 .markdown-message tr:nth-child(even) td {
-  background: rgba(15, 23, 42, 0.36);
+  background: rgba(127, 227, 207, 0.045);
 }
 
 .markdown-message hr {
   height: 1px;
   border: 0;
-  background: linear-gradient(90deg, #22d3ee, rgba(217, 70, 239, 0.65), transparent);
+  background: linear-gradient(90deg, var(--cyan), var(--pink), transparent);
 }
 
 .markdown-message img {
   display: block;
   max-width: min(100%, 680px);
   max-height: 480px;
-  border: 1px solid #1b304a;
-  border-radius: 6px;
+  border: 1px solid var(--line);
+  border-radius: 0;
   object-fit: contain;
 }
 
 .markdown-message del {
-  color: #8fa0b8;
+  color: var(--muted);
 }
 
 @media (max-width: 520px) {

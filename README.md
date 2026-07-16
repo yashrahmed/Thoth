@@ -29,17 +29,12 @@ as the transactional backstop. A double click or retried request targets the
 same occupied position and fails validation instead of creating a second
 message.
 
-LLM completions follow the same contract. Appending a message never triggers a
-completion; clients request one explicitly via
-`POST /conversations/:id/request-completion` with the parent message id and
-the append position the reply must occupy. The endpoint validates the parent
-(it must be a user message in the conversation), schedules the background run,
-and returns `202`. The run builds its prompt from the ancestor chain of the
-parent message — sibling branches are excluded — and persists the reply at the
-declared position. If the position is occupied by the time the run finishes
-(a duplicate request, or a concurrent append that claimed the slot), the run
-is dropped without side effects, so retrying a completion request is always
-safe.
+Appending a message never triggers an LLM completion. Clients request one
+explicitly via `POST /conversations/:id/request-completion` with a JSON body
+containing the ordered `messageIds` to include and a required `model` code
+(`gpt-5.4` or `gemini-3-flash-preview`). The endpoint returns normalized reply
+messages without persisting them; the client decides whether to append those
+messages to the conversation.
 
 ## Tech Stack
 

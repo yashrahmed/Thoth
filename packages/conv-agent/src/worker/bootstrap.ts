@@ -33,6 +33,8 @@ import { LlmPromptDomainService } from "../domain/services/llm-prompt-domain-ser
 import { MessageContentDomainService } from "../domain/services/message-content-domain-service";
 import { MessageDomainService } from "../domain/services/message-domain-service";
 import { TimingToolsService } from "../domain/services/timing-tools-service";
+import { LlmModel } from "../domain/objects/llm";
+import type { LlmServicesByModel } from "../domain/services/llm-completion-domain-service";
 import type { AccessConfig, AuthConfig, BlobStorageConfig, LlmConfig } from "../config/config";
 
 export interface WorkerEnv {
@@ -110,16 +112,16 @@ export function buildWorkerDeps(env: WorkerEnv): WorkerDeps {
   const timingToolsService = new TimingToolsService();
   const timingToolDefinitions = timingToolsService.get_description();
   const fileAccessDomainService = new FileAccessDomainService(fileSignedUrlGenerator);
-  const llmAdapters = {
-    openAi: new OpenAiLlmAdapter(openAiLlmConfig, timingToolDefinitions),
-    gemini: new GeminiLlmAdapter(googleLlmConfig, timingToolDefinitions),
+  const llmAdapters: LlmServicesByModel = {
+    [LlmModel.OpenAiGpt54]: new OpenAiLlmAdapter(openAiLlmConfig, timingToolDefinitions),
+    [LlmModel.GoogleGemini3FlashPreview]: new GeminiLlmAdapter(googleLlmConfig, timingToolDefinitions),
   };
 
   const llmCompletionDomainService = new LlmCompletionDomainService(
     messageDomainService,
     fileDomainService,
     fileAccessDomainService,
-    llmAdapters.gemini,
+    llmAdapters,
     llmPromptDomainService,
     timingToolsService,
   );

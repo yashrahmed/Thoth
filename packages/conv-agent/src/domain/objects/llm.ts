@@ -7,6 +7,17 @@ export enum LLMMessageType {
 
 export const LLM_MESSAGE_TYPES = Object.values(LLMMessageType);
 
+export enum LlmModel {
+  OpenAiGpt54 = "gpt-5.4",
+  GoogleGemini3FlashPreview = "gemini-3-flash-preview",
+}
+
+export const LLM_MODELS = Object.values(LlmModel);
+
+export function isLlmModel(value: string): value is LlmModel {
+  return LLM_MODELS.includes(value as LlmModel);
+}
+
 export interface LlmCompletionInputFile {
   readonly filename: string;
   readonly mimeType: string;

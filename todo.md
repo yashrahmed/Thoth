@@ -19,6 +19,7 @@
       - Bayesian modeling.
 - Tech Debt
   - [x] Add markdown rendering.
+  - [x] Model picker.
   - [ ] Improve logging (Add structured logs).
   - [ ] Try implementing PKCE + local UI launch.
 
@@ -31,7 +32,6 @@
   - Live video, audio and screenshare input.
   - Integrated calendar view.
   - Web search.
-- Model picker.
 - Deeplink content support.
 - Add support for overlay mode and video/audio inputs.
 - Context compaction support.

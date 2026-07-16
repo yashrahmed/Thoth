@@ -1,13 +1,14 @@
 import type { ConversationDomainService } from "../domain/services/conversation-domain-service";
 import type { GenericValidationService } from "../domain/services/generic-validation-service";
 import type { LlmCompletionDomainService } from "../domain/services/llm-completion-domain-service";
-import type { LlmCompletionMessage } from "../domain/objects/llm";
+import { isLlmModel, LLM_MODELS, type LlmCompletionMessage } from "../domain/objects/llm";
 import { ValidationError, type LlmError, type NotFoundError, type StoreError } from "../domain/objects/errors";
 import { failure, type Result } from "../domain/objects/result";
 
-interface RequestCompletionRequest {
+export interface RequestCompletionRequest {
   readonly conversationId: string;
   readonly messageIds: ReadonlyArray<string>;
+  readonly model: string;
 }
 
 /**
@@ -34,6 +35,12 @@ export class RequestCompletionFlow {
       return failure(new ValidationError("messageIds", "messageIds must contain at least one message id."));
     }
 
+    const model = request.model.trim();
+
+    if (!isLlmModel(model)) {
+      return failure(new ValidationError("model", `model must be one of: ${LLM_MODELS.join(", ")}.`));
+    }
+
     const conversationResult = await this.conversationDomainService.findById(request.conversationId);
 
     if (!conversationResult.ok) {
@@ -43,6 +50,7 @@ export class RequestCompletionFlow {
     return this.llmCompletionDomainService.complete({
       conversationId: request.conversationId,
       messageIds: request.messageIds,
+      model,
     });
   }
 }

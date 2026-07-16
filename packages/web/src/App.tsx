@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  ChevronDown,
+  Cpu,
   FileArchive,
   FileCode,
   FileImage,
@@ -72,6 +74,15 @@ type CompletionResponse = {
     readonly content: string;
   }>;
 };
+
+const COMPLETION_MODEL_OPTIONS = [
+  { code: "gemini-3-flash-preview", label: "Google // Gemini 3 Flash" },
+  { code: "gpt-5.4", label: "OpenAI // GPT-5.4" },
+] as const;
+
+type CompletionModelCode = (typeof COMPLETION_MODEL_OPTIONS)[number]["code"];
+
+const DEFAULT_COMPLETION_MODEL: CompletionModelCode = "gemini-3-flash-preview";
 
 const THOTH_API_URL = import.meta.env.VITE_THOTH_API_URL?.trim() || "/api/v1";
 const THOTH_PROFILE = import.meta.env.VITE_THOTH_PROFILE?.trim() || "local";
@@ -199,6 +210,7 @@ function ConversationApp() {
   const [conversationId, setConversationId] = useState<string>("");
   const [messages, setMessages] = useState<ReadonlyArray<ChatMessage>>([]);
   const [draft, setDraft] = useState("");
+  const [completionModel, setCompletionModel] = useState<CompletionModelCode>(DEFAULT_COMPLETION_MODEL);
   const [selectedFiles, setSelectedFiles] = useState<ReadonlyArray<File>>([]);
   const [booting, setBooting] = useState(true);
   const [loadingConversations, setLoadingConversations] = useState(false);
@@ -523,7 +535,7 @@ function ConversationApp() {
     const completionResponse = await apiFetch(buildConvAgentRequestUrl(`/conversations/${id}/request-completion`), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messageIds }),
+      body: JSON.stringify({ messageIds, model: completionModel }),
     });
 
     if (!completionResponse.ok) {
@@ -621,11 +633,13 @@ function ConversationApp() {
           updatingTitle={updatingTitle}
           messages={messages}
           draft={draft}
+          completionModel={completionModel}
           selectedFiles={selectedFiles}
           titleError={titleError}
           composerError={composerError}
           onUpdateConversationTitle={updateConversationTitle}
           onDraftChange={setDraft}
+          onCompletionModelChange={setCompletionModel}
           onSendMessage={sendMessage}
           onFileSelection={handleFileSelection}
           onRemoveSelectedFile={removeSelectedFile}
@@ -863,11 +877,13 @@ function ChatPanel(props: {
   readonly updatingTitle: boolean;
   readonly messages: ReadonlyArray<ChatMessage>;
   readonly draft: string;
+  readonly completionModel: CompletionModelCode;
   readonly selectedFiles: ReadonlyArray<File>;
   readonly titleError: string;
   readonly composerError: string;
   readonly onUpdateConversationTitle: (conversationId: string, title: string) => Promise<boolean>;
   readonly onDraftChange: (draft: string) => void;
+  readonly onCompletionModelChange: (model: CompletionModelCode) => void;
   readonly onSendMessage: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   readonly onFileSelection: (event: React.ChangeEvent<HTMLInputElement>) => void;
   readonly onRemoveSelectedFile: (index: number) => void;
@@ -960,9 +976,11 @@ function ChatPanel(props: {
         booting={props.booting}
         sending={props.sending}
         draft={props.draft}
+        completionModel={props.completionModel}
         selectedFiles={props.selectedFiles}
         composerError={props.composerError}
         onDraftChange={props.onDraftChange}
+        onCompletionModelChange={props.onCompletionModelChange}
         onSendMessage={props.onSendMessage}
         onFileSelection={props.onFileSelection}
         onRemoveSelectedFile={props.onRemoveSelectedFile}
@@ -1019,9 +1037,11 @@ function Composer(props: {
   readonly booting: boolean;
   readonly sending: boolean;
   readonly draft: string;
+  readonly completionModel: CompletionModelCode;
   readonly selectedFiles: ReadonlyArray<File>;
   readonly composerError: string;
   readonly onDraftChange: (draft: string) => void;
+  readonly onCompletionModelChange: (model: CompletionModelCode) => void;
   readonly onSendMessage: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   readonly onFileSelection: (event: React.ChangeEvent<HTMLInputElement>) => void;
   readonly onRemoveSelectedFile: (index: number) => void;
@@ -1031,18 +1051,47 @@ function Composer(props: {
       <label htmlFor="chat-input" style={composerLabelStyle}>
         Transmit // Message
       </label>
-      <div style={attachmentToolbarStyle}>
-        <label style={attachmentPickerStyle}>
-          <input type="file" multiple onChange={props.onFileSelection} disabled={props.booting || props.sending} style={visuallyHiddenInputStyle} />
-          <Paperclip aria-hidden="true" size={14} strokeWidth={2.1} />
-          Attach Files
-        </label>
-        {props.selectedFiles.length > 0 ? (
-          <span style={attachmentSummaryStyle}>
-            {props.selectedFiles.length} file
-            {props.selectedFiles.length === 1 ? "" : "s"} selected
+      <div className="composer-controls" style={composerControlsStyle}>
+        <div style={attachmentToolbarStyle}>
+          <label style={attachmentPickerStyle}>
+            <input type="file" multiple onChange={props.onFileSelection} disabled={props.booting || props.sending} style={visuallyHiddenInputStyle} />
+            <Paperclip aria-hidden="true" size={14} strokeWidth={2.1} />
+            Attach Files
+          </label>
+          {props.selectedFiles.length > 0 ? (
+            <span style={attachmentSummaryStyle}>
+              {props.selectedFiles.length} file
+              {props.selectedFiles.length === 1 ? "" : "s"} selected
+            </span>
+          ) : null}
+        </div>
+        <label className="model-picker" style={modelPickerStyle}>
+          <span style={modelPickerLabelStyle}>
+            <Cpu aria-hidden="true" size={13} strokeWidth={2.1} />
+            Model //
           </span>
-        ) : null}
+          <span className="model-select-wrap" style={modelSelectWrapStyle}>
+            <select
+              className="model-select"
+              aria-label="Completion model"
+              value={props.completionModel}
+              onChange={(event) => {
+                if (isCompletionModelCode(event.target.value)) {
+                  props.onCompletionModelChange(event.target.value);
+                }
+              }}
+              disabled={props.booting || props.sending}
+              style={modelSelectStyle}
+            >
+              {COMPLETION_MODEL_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown aria-hidden="true" size={13} strokeWidth={2.2} style={modelSelectChevronStyle} />
+          </span>
+        </label>
       </div>
       <SelectedFileList selectedFiles={props.selectedFiles} onRemoveSelectedFile={props.onRemoveSelectedFile} />
       <div className="composer-row" style={composerRowStyle}>
@@ -1271,6 +1320,10 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null;
 }
 
+function isCompletionModelCode(value: string): value is CompletionModelCode {
+  return COMPLETION_MODEL_OPTIONS.some((option) => option.code === value);
+}
+
 function requireMessageId(value: unknown): MessageId {
   if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0) {
     throw new Error("Message response did not contain a valid message id.");
@@ -1456,7 +1509,8 @@ const globalStyles = `
 
   button,
   input,
-  textarea {
+  textarea,
+  select {
     font: inherit;
   }
 
@@ -1482,15 +1536,26 @@ const globalStyles = `
 
   button:disabled,
   textarea:disabled,
-  input:disabled {
+  input:disabled,
+  select:disabled {
     cursor: not-allowed !important;
     opacity: 0.52;
   }
 
   input:focus,
-  textarea:focus {
+  textarea:focus,
+  select:focus {
     border-color: var(--cyan) !important;
     box-shadow: 0 0 0 1px var(--cyan), 0 0 20px rgba(127, 227, 207, 0.1);
+  }
+
+  .model-picker:focus-within {
+    border-color: var(--cyan) !important;
+  }
+
+  .model-select option {
+    background: var(--ink-raised);
+    color: var(--paper);
   }
 
   *::-webkit-scrollbar {
@@ -1878,6 +1943,23 @@ const globalStyles = `
 
     .composer-row {
       grid-template-columns: 1fr;
+    }
+
+    .composer-controls {
+      align-items: stretch !important;
+      flex-direction: column;
+    }
+
+    .model-picker {
+      justify-content: space-between;
+    }
+
+    .model-select-wrap {
+      flex: 1;
+    }
+
+    .model-select {
+      width: 100% !important;
     }
 
     .sidebar-actions {
@@ -2467,12 +2549,20 @@ const composerStyle: React.CSSProperties = {
   background: "linear-gradient(90deg, rgba(18, 19, 22, 0.99), rgba(8, 9, 11, 0.995))",
 };
 
+const composerControlsStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "7px 12px",
+  marginBottom: "7px",
+};
+
 const attachmentToolbarStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
   gap: "8px",
-  marginBottom: "7px",
 };
 
 const attachmentPickerStyle: React.CSSProperties = {
@@ -2494,6 +2584,62 @@ const attachmentPickerStyle: React.CSSProperties = {
 const attachmentSummaryStyle: React.CSSProperties = {
   color: "var(--muted)",
   fontSize: "0.68rem",
+};
+
+const modelPickerStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: "29px",
+  borderRadius: "1px",
+  border: "1px solid var(--line-soft)",
+  background: "var(--void)",
+  overflow: "hidden",
+};
+
+const modelPickerLabelStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "5px",
+  alignSelf: "stretch",
+  padding: "0 8px",
+  borderRight: "1px solid var(--line-soft)",
+  color: "var(--cyan)",
+  fontFamily: "var(--font-display)",
+  fontSize: "0.62rem",
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+};
+
+const modelSelectWrapStyle: React.CSSProperties = {
+  position: "relative",
+  display: "inline-flex",
+  alignItems: "center",
+  minWidth: 0,
+};
+
+const modelSelectStyle: React.CSSProperties = {
+  width: "190px",
+  height: "27px",
+  padding: "0 27px 0 8px",
+  border: 0,
+  borderRadius: 0,
+  outline: "none",
+  appearance: "none",
+  background: "transparent",
+  color: "var(--paper-dim)",
+  colorScheme: "dark",
+  fontFamily: "var(--font-mono)",
+  fontSize: "0.65rem",
+  cursor: "pointer",
+};
+
+const modelSelectChevronStyle: React.CSSProperties = {
+  position: "absolute",
+  right: "8px",
+  color: "var(--yellow)",
+  pointerEvents: "none",
 };
 
 const visuallyHiddenInputStyle: React.CSSProperties = {

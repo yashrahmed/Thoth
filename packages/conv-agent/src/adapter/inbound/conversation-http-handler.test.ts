@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { failure, success } from "../../domain/objects/result";
 import { EntityType, LlmError, StoreError, StoreOperation } from "../../domain/objects/errors";
-import { LLMMessageType } from "../../domain/objects/llm";
+import { LLMMessageType, LlmModel } from "../../domain/objects/llm";
 import { createConversationHttpHandler } from "./conversation-http-handler";
 
 const MESSAGE_ID_1 = "1";
 const MESSAGE_ID_2 = "2";
+const MODEL = LlmModel.GoogleGemini3FlashPreview;
 
 describe("createConversationHttpHandler", () => {
   afterEach(() => {
@@ -70,7 +71,7 @@ describe("createConversationHttpHandler", () => {
       new Request("http://localhost/conversations/conversation-1/request-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messageIds: [MESSAGE_ID_1, MESSAGE_ID_2] }),
+        body: JSON.stringify({ messageIds: [MESSAGE_ID_1, MESSAGE_ID_2], model: MODEL }),
       }),
     );
     const body = await response.json();
@@ -79,7 +80,7 @@ describe("createConversationHttpHandler", () => {
     expect(body).toEqual({
       messages: [{ type: "assistant", content: "Hello there." }],
     });
-    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: [MESSAGE_ID_1, MESSAGE_ID_2] });
+    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: [MESSAGE_ID_1, MESSAGE_ID_2], model: MODEL });
   });
 
   test("rejects a completion request with an empty messageIds list", async () => {
@@ -104,6 +105,28 @@ describe("createConversationHttpHandler", () => {
     });
   });
 
+  test("rejects a completion request without a model", async () => {
+    const handler = createConversationHttpHandler(buildDeps());
+
+    const response = await handler(
+      new Request("http://localhost/conversations/conversation-1/request-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageIds: [MESSAGE_ID_1] }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({
+      error: {
+        kind: "ValidationError",
+        fieldName: "model",
+        message: "model must be a non-empty string.",
+      },
+    });
+  });
+
   test("returns a generic 502 response when the completion fails at the LLM", async () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => undefined);
     const handler = createConversationHttpHandler(
@@ -118,7 +141,7 @@ describe("createConversationHttpHandler", () => {
       new Request("http://localhost/conversations/conversation-1/request-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messageIds: [MESSAGE_ID_1] }),
+        body: JSON.stringify({ messageIds: [MESSAGE_ID_1], model: MODEL }),
       }),
     );
     const body = await response.json();
@@ -144,12 +167,12 @@ describe("createConversationHttpHandler", () => {
       new Request("http://localhost/conversations/conversation-1/request-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messageIds: [messageId] }),
+        body: JSON.stringify({ messageIds: [messageId], model: MODEL }),
       }),
     );
 
     expect(response.status).toBe(200);
-    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: [messageId] });
+    expect(execute).toHaveBeenCalledWith({ conversationId: "conversation-1", messageIds: [messageId], model: MODEL });
   });
 
   test("rejects invalid or out-of-range bigint message IDs", async () => {
@@ -160,7 +183,7 @@ describe("createConversationHttpHandler", () => {
         new Request("http://localhost/conversations/conversation-1/request-completion", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ messageIds: [messageId] }),
+          body: JSON.stringify({ messageIds: [messageId], model: MODEL }),
         }),
       );
 

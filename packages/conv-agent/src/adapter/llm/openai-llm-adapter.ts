@@ -4,10 +4,10 @@ import { ChatOpenAI } from "@langchain/openai";
 import type { LlmConfig } from "../../config/config";
 import type { LlmService } from "../../domain/contracts/llm-service";
 import { LlmError } from "../../domain/objects/errors";
-import { LLMMessageType, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmToolDefinition } from "../../domain/objects/llm";
+import { LLMMessageType, LlmModel, type LlmCompletionInputMessage, type LlmCompletionMessage, type LlmToolDefinition } from "../../domain/objects/llm";
 import { failure, success, type Result } from "../../domain/objects/result";
 
-const OPENAI_LLM_MODEL = "gpt-5.4";
+const OPENAI_LLM_MODEL = LlmModel.OpenAiGpt54;
 const OPENAI_REQUEST_TIMEOUT_MS = 25_000;
 
 // Module-scope cache for the ChatOpenAI client. The dependency graph (and the

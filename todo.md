@@ -7,16 +7,18 @@
     - [x] Let the client shape the inbound message when requesting completion.
     - [x] Change ids to numbers instead of a GUID?
 - [x] Try out time measurement using a tool call instead of prompt tuning.
-- [ ] Build a better UI.
+- [x] Build a cool looking UI.
+- [ ] Learn to design a cool UI.
     - [ ] Complete React Tutorial.
     - [ ] Complete React Native tutorial.
     - [ ] Learn some basic graphic design.
         - Complete [UI Design Bootcamp. Master Typography, Colour & Grids](https://www.udemy.com/course/ui-design-bootcamp-master-typography-colour-grids/).
         - Review [Design Arena leaderboard](https://www.designarena.ai/leaderboard) for UI design agent benchmarks.
-    - [ ] Resdesign the UI to make it appealing.
   - [ ] Run an experiment to build a world model for Thoth
-      - logic program (or somthing similar) and try using it to specify a development goal.
-      - Bayesian modeling.
+      - [ ] Prompt ---> intent modeling (requires a world model) ---> action
+      - [ ] logic program (or somthing similar) and try using it to specify a development goal.
+      - [ ] Bayesian modeling.
+      - [ ] Try different code visualization techniques.
 - Tech Debt
   - [x] Add markdown rendering.
   - [x] Model picker.

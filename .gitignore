@@ -1,72 +1,8 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-out/
-build/
-
-# Bun
-bun.lockb
-
-# Local OpenClaw runtime state
-openclaw-state/
-.openclaw/
-
-# Workspace: ignore everything, include only selected files
-workspace/*
-!workspace/AGENTS.md
-!workspace/HEARTBEAT.md
-!workspace/TOOLS.md
-
-# Environment
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+*.tmp
 .env
-.env.local
-.env.*.local
 .env.*
 !.env.example
-config/*-secrets.env
-!config/*-secrets.env.example
-deployment/local/*-secrets.env
-!deployment/local/*-secrets.env.example
-
-# Local database state
-deployment/local/data/_data/
-deployment/local/data/localstack/
-deployment/local/data/minio/
-
-# Claude Code local settings
-.claude/settings.json
-.claude/settings.local.json
-
-# Editor / OS noise
-.DS_Store
-**/.DS_Store
-*.swp
-*.swo
-*.log
-.idea/
-.vscode/
-*.sublime-*
-
-# TypeScript
-*.tsbuildinfo
-
-# Test coverage
-coverage/
-
-# Common tool caches
-.cache/
-
-# Wrangler / Cloudflare Workers local state
-.wrangler/
-**/.dev.vars
-
-# React Native / Expo
-.expo/
-.expo-shared/
-android/.gradle/
-ios/Pods/
-
-# Test files
-test-files

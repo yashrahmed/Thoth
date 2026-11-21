@@ -5,7 +5,7 @@ description: Log, count, fix, or remove workout sessions in the owner's Google D
 
 # Log Workout
 
-The log is a table (`Date` | `Workout details`) in a Google Doc; it is the source of truth (never move or copy it). The instance's instructions (e.g. `AGENTS.md`) name the doc and any billing rule; if no doc is named, ask and stop. Use the host's Google Docs connector; if none is connected, ask the owner to connect it.
+The log is a table (`Date` | `Workout details`) in the owner's Google Doc titled **Workout Log**; it is the source of truth (never move or copy it). Find it by searching Drive for that title; if none or several match, ask. Use the host's Google Drive/Docs connector; if none is connected, ask the owner to connect it.
 
 ## Entries
 
@@ -15,9 +15,9 @@ The log is a table (`Date` | `Workout details`) in a Google Doc; it is the sourc
 
 ## Count
 
-Each non-blank dated row is one session; skip the header. Report total, attended, and missed-and-paid for the range asked (default: the whole current log), with dates when asked. After every add or change, report the updated counts.
+Each non-blank dated row is one trainer session unless noted; skip the header. Report total, attended, and missed-and-paid for the range asked (default: the whole current log), with dates when asked. After every add or change, report the updated counts.
 
-"When do I pay?" needs the instance's billing rule (e.g. every N sessions, or monthly); without one, give the counts and say no rule is set. Never guess a rule.
+Bring up payment only when the owner asks; then use any rule he states and never guess one.
 
 ## Edit
 

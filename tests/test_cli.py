@@ -112,6 +112,10 @@ class TestThothMemCLI(unittest.TestCase):
         self.assertNotEqual(bad_dur.returncode, 0)
         self.assertIn("mo", bad_dur.stderr)
 
+        bad_root = run_cli(THOTH_ROOT, "topics", check=False)
+        self.assertNotEqual(bad_root.returncode, 0)
+        self.assertIn("Thoth engine directory", bad_root.stderr)
+
     def test_date_ranges_multi_tag_topics_and_source_search(self) -> None:
         rows = [
             {"when": "2026-10-28 09:00:00", "kind": "commitment", "topic": "orders/widget", "title": "Open order", "tags": ["commitment", "open"], "sources": ["https://shop.example.com/order/991"], "body": "Follow up at 12:30"},

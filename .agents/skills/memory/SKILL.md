@@ -11,7 +11,7 @@ Manage persistent episodic memories stored as **1 Markdown + YAML frontmatter fi
 
 ## Invocation
 
-Set `--root <instance-dir>` (or `THOTH_ROOT`, or run from the instance root). If `thoth-mem` is not installed globally on `PATH` (`uv tool install --editable <Thoth>`), invoke it directly with `uv run --directory <Thoth> thoth-mem --root <dir> ...`.
+Always run from the active instance folder (which becomes the default root), or pass `--root <instance-dir>` / set `THOTH_ROOT`. If `thoth-mem` is not on `PATH`, use `uv run --project <Thoth> thoth-mem ...` (**not** `--directory`, which changes CWD into `<Thoth>`). The CLI refuses to read or write inside the Thoth engine directory itself.
 
 ## 1. Recall & Search (Read Path)
 

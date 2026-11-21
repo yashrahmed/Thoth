@@ -90,11 +90,18 @@ def validate_json_keys(payload: Any, allowed: frozenset[str], cmd: str) -> dict[
 
 def resolve_root(root_arg: str | None) -> Path:
     if root_arg:
-        return Path(root_arg).expanduser().resolve()
-    env_root = os.environ.get("THOTH_ROOT")
-    if env_root:
-        return Path(env_root).expanduser().resolve()
-    return Path.cwd().resolve()
+        root = Path(root_arg).expanduser().resolve()
+    elif env_root := os.environ.get("THOTH_ROOT"):
+        root = Path(env_root).expanduser().resolve()
+    else:
+        root = Path.cwd().resolve()
+    if (root / "src" / "thoth_mem" / "cli.py").exists():
+        fail(
+            f"Refusing to use the Thoth engine directory ({root}) as a memory root. "
+            "Run with `uv run --project <thoth> thoth-mem ...` from your instance folder, "
+            "or pass `--root <instance-dir>` / set `THOTH_ROOT`."
+        )
+    return root
 
 
 @contextlib.contextmanager

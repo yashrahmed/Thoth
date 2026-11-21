@@ -13,9 +13,7 @@ Design:
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
-import os
 import re
 import secrets
 import shutil
@@ -23,18 +21,20 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
-    try:
-        import msvcrt
-    except ImportError:
-        msvcrt = None
-else:
-    msvcrt = None
+from thoth_core import (
+    atomic_write,
+    check_secrets,
+    fail,
+    normalize_list,
+    now_local,
+    parse_yaml_value,
+    read_json_stdin,
+    resolve_root,
+    split_frontmatter,
+    yaml_scalar,
+)
+from thoth_core import write_lock as _write_lock
 
 
 VALID_KINDS = ("event", "decision", "action", "feedback", "check", "note", "commitment")
@@ -49,104 +49,9 @@ UPDATE_JSON_KEYS = frozenset({
     "sources", "add_sources", "body", "append", "expected_updated",
 })
 
-SECRET_PATTERNS = (
-    ("private key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
-    ("API key", re.compile(r"\bsk-(?:proj-|ant-|live-|test-)?[A-Za-z0-9_-]{20,}\b")),
-    ("GitHub token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
-    ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
-    ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
-)
 
-
-def now_local() -> datetime:
-    tz_name = os.environ.get("THOTH_TZ")
-    if tz_name:
-        return datetime.now(ZoneInfo(tz_name)).replace(microsecond=0)
-    return datetime.now().astimezone().replace(microsecond=0)
-
-
-def fail(msg: str, code: int = 1) -> None:
-    print(json.dumps({"ok": False, "error": msg}, ensure_ascii=False), file=sys.stderr)
-    sys.exit(code)
-
-
-def check_secrets(text: str, field: str) -> None:
-    if not text:
-        return
-    for kind, pat in SECRET_PATTERNS:
-        if pat.search(text):
-            fail(f"{field} appears to contain a {kind}; redact secrets before saving")
-
-
-def validate_json_keys(payload: Any, allowed: frozenset[str], cmd: str) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        fail(f"{cmd} --json expects a JSON object")
-    unknown = sorted(set(payload.keys()) - allowed)
-    if unknown:
-        fail(f"Unknown JSON key(s) for {cmd}: {', '.join(unknown)}. Allowed keys: {', '.join(sorted(allowed))}")
-    return payload
-
-
-def resolve_root(root_arg: str | None) -> Path:
-    if root_arg:
-        root = Path(root_arg).expanduser().resolve()
-    elif env_root := os.environ.get("THOTH_ROOT"):
-        root = Path(env_root).expanduser().resolve()
-    else:
-        root = Path.cwd().resolve()
-    if (root / "src" / "thoth_mem" / "cli.py").exists():
-        fail(
-            f"Refusing to use the Thoth engine directory ({root}) as a memory root. "
-            "Run with `uv run --project <thoth> thoth-mem ...` from your instance folder, "
-            "or pass `--root <instance-dir>` / set `THOTH_ROOT`."
-        )
-    return root
-
-
-@contextlib.contextmanager
 def write_lock(root: Path):
-    mem_dir = root / "memory"
-    mem_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = mem_dir / ".write.lock"
-    fh = open(lock_path, "a+")
-    try:
-        if fcntl is not None:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-        elif msvcrt is not None:
-            fh.seek(0)
-            msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
-        yield
-    finally:
-        try:
-            if fcntl is not None:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-            elif msvcrt is not None:
-                fh.seek(0)
-                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-        finally:
-            fh.close()
-
-
-def atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.parent / f".{path.name}.{os.getpid()}.{secrets.token_hex(3)}.tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as fh:
-            fh.write(text)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except Exception:
-        with contextlib.suppress(OSError):
-            tmp.unlink()
-        raise
-
-
-def yaml_scalar(val: str) -> str:
-    if not val or any(ch in val for ch in ':#"\'\n\r\t{}[]&*!|>-') or val != val.strip():
-        return json.dumps(val, ensure_ascii=False)
-    return val
+    return _write_lock(root / "memory")
 
 
 def render_episode(meta: dict[str, Any], body: str) -> str:
@@ -169,34 +74,10 @@ def render_episode(meta: dict[str, Any], body: str) -> str:
     return "\n".join(lines)
 
 
-def parse_yaml_value(raw: str) -> Any:
-    raw = raw.strip()
-    if not raw:
-        return ""
-    if raw[0] in ('"', "[", "{"):
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            pass
-    if raw.startswith("'") and raw.endswith("'") and len(raw) >= 2:
-        return raw[1:-1]
-    return raw
-
-
 def parse_episode_file(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        raise ValueError(f"Missing frontmatter in {path}")
-    end = text.find("\n---\n", 4)
-    if end == -1:
-        end = text.find("\n---", 4)
-        if end == -1:
-            raise ValueError(f"Unterminated frontmatter in {path}")
-        body = text[end + 4 :].lstrip("\n")
-    else:
-        body = text[end + 5 :].lstrip("\n")
+    fm_lines, body = split_frontmatter(path.read_text(encoding="utf-8"), path)
     meta: dict[str, Any] = {}
-    for line in text[4:end].splitlines():
+    for line in fm_lines:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         k, sep, v = line.partition(":")
@@ -305,14 +186,6 @@ def find_episode_by_id(root: Path, ep_id: str, include_archived: bool = False) -
     return None
 
 
-def normalize_list(val: Any) -> list[str]:
-    if not val:
-        return []
-    if isinstance(val, list):
-        return [str(x).strip() for x in val if str(x).strip()]
-    return [x.strip() for x in str(val).split(",") if x.strip()]
-
-
 def topic_matches(actual: str, needle: str) -> bool:
     """Match exact topic or path prefix (e.g. 'vehicles' matches 'vehicles' and 'vehicles/foo')."""
     a = actual.lower().strip("/")
@@ -342,13 +215,7 @@ def record_in_range(when_str: str, since_dt: datetime | None, until_dt: datetime
 
 
 def cmd_create(args: argparse.Namespace, root: Path) -> None:
-    payload: dict[str, Any] = {}
-    if args.json:
-        raw = sys.stdin.read()
-        try:
-            payload = validate_json_keys(json.loads(raw), CREATE_JSON_KEYS, "create")
-        except json.JSONDecodeError as e:
-            fail(f"Invalid JSON on stdin: {e}")
+    payload: dict[str, Any] = read_json_stdin(CREATE_JSON_KEYS, "create") if args.json else {}
 
     kind = (args.kind or payload.get("kind") or "note").strip().lower()
     if kind not in VALID_KINDS:
@@ -558,13 +425,7 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
 
 
 def cmd_update(args: argparse.Namespace, root: Path) -> None:
-    payload: dict[str, Any] = {}
-    if args.json:
-        raw = sys.stdin.read()
-        try:
-            payload = validate_json_keys(json.loads(raw), UPDATE_JSON_KEYS, "update")
-        except json.JSONDecodeError as e:
-            fail(f"Invalid JSON on stdin: {e}")
+    payload: dict[str, Any] = read_json_stdin(UPDATE_JSON_KEYS, "update") if args.json else {}
 
     def pick(flag_val, key):
         return flag_val if flag_val is not None else payload.get(key)
@@ -784,7 +645,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    root = resolve_root(args.root)
+    root = resolve_root(args.root, "thoth-mem")
     dispatch = {
         "create": cmd_create,
         "read": cmd_read,

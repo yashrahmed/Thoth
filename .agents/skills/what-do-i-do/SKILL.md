@@ -32,6 +32,12 @@ Paths are relative to the folder you launched from (the instance root); create `
    4. **Dedupe:** batch-check `<name>:<id>` keys with `todo-list list --source …`. A matched key is handled whatever its task's status; never re-add it.
    5. **Decide:** read only unmatched items as deeply as needed. Keep those needing a concrete action by the owner; skip noise and FYIs silently. `create` each with its source key, a one-line action title, `due`/`notes`/`memory_ids` when the source supports them, and `reason: "from <name>"`. If an item clearly continues an existing open/waiting task, attach it with `add_source_keys` instead.
    6. **Advance:** only after the read completed and every write succeeded (including zero-item runs), set `last_read = run_started` and save `state.json` atomically (temp file + rename), keeping other channels' entries. On any failure, keep the old `last_read`.
-3. **Show the list:** run `todo-list list --actionable` and show one plain line per task in CLI order (`t-12 · Pay electric bill · due 11-25`), marking tasks created in this run `(new)`. If empty, say "No actionable tasks." End with one status line, e.g. `+3 new · gmail ✓ · memory ✓ · gcal skipped (no connector)`.
+3. **Show the list:** run `todo-list list --actionable` and show it as a simple Markdown table in CLI order, with no prose before it:
+
+   | ID | Task | Due | Priority |
+   |---|---|---|---|
+   | t-12 | Pay electric bill **(new)** | 11-25 | high |
+
+   Mark tasks created in this run **(new)**; leave empty cells blank. If empty, say "No actionable tasks." End with one status line, e.g. `+3 new · gmail ✓ · memory ✓ · gcal skipped (no connector)`.
 
 The host scheduler decides when scheduled runs fire; this skill never schedules anything.

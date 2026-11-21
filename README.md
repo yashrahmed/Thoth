@@ -7,6 +7,7 @@ Minimal, reusable persistent-agent engine (v2) — clean separation between engi
   - [`memory`](skills/memory/SKILL.md) — episodic CRUD, topic index, and date-range/keyword recall via `thoth-mem`
   - [`todo-list`](skills/todo-list/SKILL.md) — to-do list CRUD, actionable view, and source-key dedupe via `todo-list`
   - [`what-do-i-do`](skills/what-do-i-do/SKILL.md) — refresh the to-do list from an instance's allowlisted channels (`intake/channels.toml`) and show what needs action
+  - [`log-workout`](skills/log-workout/SKILL.md) — log and count workout sessions in an instance's Google Doc log, for trainer billing
   - [`watch-video`](skills/watch-video/SKILL.md) — transcript + timestamped frame capture to local `work-artifacts/` + episode logging
   - [`create-new-thread`](skills/create-new-thread/SKILL.md) — top-level host thread creation with configurable prefix & model routing
 

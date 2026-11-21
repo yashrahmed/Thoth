@@ -10,13 +10,13 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-THOTH_ROOT = Path(__file__).resolve().parents[1]
+ENGINE_DIR = Path(__file__).resolve().parents[1]
 
 
 def run_cli(root: Path, *args: str, stdin_data: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
     env = {**os.environ, "THOTH_TZ": "America/Chicago"}
     proc = subprocess.run(
-        ["uv", "run", "--directory", str(THOTH_ROOT), "thoth-mem", "--root", str(root), *args],
+        ["uv", "run", "--directory", str(ENGINE_DIR), "thoth-mem", "--root", str(root), *args],
         input=stdin_data,
         text=True,
         capture_output=True,
@@ -112,7 +112,7 @@ class TestThothMemCLI(unittest.TestCase):
         self.assertNotEqual(bad_dur.returncode, 0)
         self.assertIn("mo", bad_dur.stderr)
 
-        bad_root = run_cli(THOTH_ROOT, "topics", check=False)
+        bad_root = run_cli(ENGINE_DIR, "topics", check=False)
         self.assertNotEqual(bad_root.returncode, 0)
         self.assertIn("Thoth engine directory", bad_root.stderr)
 

@@ -12,13 +12,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
-THOTH_ROOT = Path(__file__).resolve().parents[1]
+ENGINE_DIR = Path(__file__).resolve().parents[1]
 
 
 def run_cli(root: Path, *args: str, stdin_data: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
     env = {**os.environ, "THOTH_TZ": "America/Chicago"}
     proc = subprocess.run(
-        ["uv", "run", "-q", "--directory", str(THOTH_ROOT), "todo-list", "--root", str(root), *args],
+        ["uv", "run", "-q", "--directory", str(ENGINE_DIR), "todo-list", "--root", str(root), *args],
         input=stdin_data,
         text=True,
         capture_output=True,
@@ -135,7 +135,7 @@ class TestTodoListCLI(unittest.TestCase):
         self.create({"title": "scheduled later", "scheduled": later})
         self.create({"title": "waiting ready", "status": "waiting", "scheduled": past})
         self.create({"title": "waiting not ready", "status": "waiting"})
-        self.create({"title": "finished", "status": "done", "source_keys": ["t3:thread-9"]})
+        self.create({"title": "finished", "status": "done", "source_keys": ["chat:thread-9"]})
 
         titles = [t["title"] for t in j(run_cli(self.root, "list"))["tasks"]]
         self.assertNotIn("finished", titles)
@@ -151,15 +151,15 @@ class TestTodoListCLI(unittest.TestCase):
         self.assertEqual(j(run_cli(self.root, "list", "--status", "all"))["count"], 7)
         self.assertEqual(j(run_cli(self.root, "list", "--priority", "low"))["count"], 1)
 
-        by_source = j(run_cli(self.root, "list", "--source", "t3:thread-9", "--source", "gmail:none"))
-        self.assertEqual(by_source["matched_keys"], {"t3:thread-9": "t-0007"})
+        by_source = j(run_cli(self.root, "list", "--source", "chat:thread-9", "--source", "gmail:none"))
+        self.assertEqual(by_source["matched_keys"], {"chat:thread-9": "t-0007"})
         self.assertEqual(by_source["unmatched_keys"], ["gmail:none"])
 
         # Comma-separated --source values are split, and --limit doesn't hide matches.
         self.create({"title": "second source", "source_keys": ["gmail:m2"]})
-        combo = j(run_cli(self.root, "list", "--source", "t3:thread-9,gmail:m2", "--limit", "1"))
+        combo = j(run_cli(self.root, "list", "--source", "chat:thread-9,gmail:m2", "--limit", "1"))
         self.assertEqual(combo["count"], 1)
-        self.assertEqual(set(combo["matched_keys"]), {"t3:thread-9", "gmail:m2"})
+        self.assertEqual(set(combo["matched_keys"]), {"chat:thread-9", "gmail:m2"})
         self.assertEqual(combo["unmatched_keys"], [])
 
         # Archived tasks are never actionable, even when --source pulls them in.
@@ -250,7 +250,7 @@ class TestTodoListCLI(unittest.TestCase):
 
     def test_refuses_engine_directory(self) -> None:
         proc = subprocess.run(
-            ["uv", "run", "-q", "--directory", str(THOTH_ROOT), "todo-list", "list"],
+            ["uv", "run", "-q", "--directory", str(ENGINE_DIR), "todo-list", "list"],
             text=True, capture_output=True, check=False,
         )
         self.assertNotEqual(proc.returncode, 0)

@@ -2,7 +2,7 @@
 
 - JSON error output and strict `--json` key validation
 - Secret scanning before anything is written
-- Instance-root resolution that refuses the Thoth engine directory
+- Instance root = launch folder; refuses the Thoth engine directory
 - OS file lock (`fcntl.flock` on Unix, `msvcrt.locking` on Windows)
 - Atomic writes (`tmp` -> `fsync` -> `os.replace`)
 - Flat YAML frontmatter (scalars + inline JSON lists) render/parse helpers
@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 try:
     import fcntl
@@ -52,7 +52,10 @@ ENGINE_MARKERS = (
 def now_local() -> datetime:
     tz_name = os.environ.get("THOTH_TZ")
     if tz_name:
-        return datetime.now(ZoneInfo(tz_name)).replace(microsecond=0)
+        try:
+            return datetime.now(ZoneInfo(tz_name)).replace(microsecond=0)
+        except ZoneInfoNotFoundError:
+            fail(f"Unknown time zone THOTH_TZ={tz_name!r}; unset it or install tzdata")
     return datetime.now().astimezone().replace(microsecond=0)
 
 
@@ -88,17 +91,12 @@ def read_json_stdin(allowed: frozenset[str], cmd: str) -> dict[str, Any]:
 
 
 def resolve_root(root_arg: str | None, prog: str) -> Path:
-    if root_arg:
-        root = Path(root_arg).expanduser().resolve()
-    elif env_root := os.environ.get("THOTH_ROOT"):
-        root = Path(env_root).expanduser().resolve()
-    else:
-        root = Path.cwd().resolve()
+    """The instance root is the folder the CLI is launched from (`--root` overrides, mainly for tests)."""
+    root = Path(root_arg).expanduser().resolve() if root_arg else Path.cwd().resolve()
     if any((root / marker).exists() for marker in ENGINE_MARKERS):
         fail(
             f"Refusing to use the Thoth engine directory ({root}) as an instance root. "
-            f"Run with `uv run --project <thoth> {prog} ...` from your instance folder, "
-            "or pass `--root <instance-dir>` / set `THOTH_ROOT`."
+            f"Run `uv run --project <thoth> {prog} ...` from your instance folder."
         )
     return root
 

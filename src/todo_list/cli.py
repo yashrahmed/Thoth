@@ -106,7 +106,7 @@ def next_id(root: Path) -> str:
 
 
 def rel(root: Path, path: Path) -> str:
-    return str(path.relative_to(root))
+    return path.relative_to(root).as_posix()
 
 
 # ---------------------------------------------------------------- validation
@@ -665,7 +665,7 @@ def load_and_check(root: Path, path: Path, archived: bool) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog=PROG, description="Thoth to-do list CRUD CLI")
-    p.add_argument("--root", help="Instance root folder (defaults to THOTH_ROOT or current working directory)")
+    p.add_argument("--root", help="Instance root (default: the current folder; mainly for tests)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create", help="Create a task (prefer --json <<'EOF'); returns the existing task if a source key matches")

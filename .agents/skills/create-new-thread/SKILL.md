@@ -5,23 +5,20 @@ description: Create a separate top-level chat or thread in the active host with 
 
 # Create New Thread
 
-Create a separate top-level conversation with the host's thread-creation tool, discovered at runtime. A subagent, background task, or fork doesn't count. Editing this skill doesn't request a thread.
+Create a separate top-level conversation with the host's thread-creation tool, discovered at runtime. A subagent, background task, or fork doesn't count.
 
 ## Inputs
 
-- **Title:** given, or derived from the task; ask only if neither. If the instance's `AGENTS.md` defines a thread title prefix (e.g. `<Prefix> | <title>`), apply it without duplicating the prefix; otherwise use the plain title.
+- **Title:** given, or derived from the task; ask only if neither. If the instance's instructions (e.g. `AGENTS.md`) define a title prefix (e.g. `<Prefix> | <title>`), apply it once; otherwise use the plain title.
 - **Prompt:** the requested work with enough context to act independently. Title only → a brief purpose and an instruction to wait for the user's task. Don't invent work or copy unrelated history.
 - **Destination:** honor a requested host, provider, project, machine, or workspace (worktree or cloud per host rules). Otherwise use the active host, the current project from context or the project catalog, and the local workspace; go projectless for non-project work. Ask if unresolvable.
 
 ## Model and effort
 
-Read the destination's capabilities first and use its advertised IDs and parameter names.
-
-Defaults when no model is requested: honor any provider/model defaults specified in the instance's `AGENTS.md`, or fall back to the host's configured default (honor an explicit request for the host default).
-
-Resolve shorthand family/version names against the live model catalog, skipping hidden or deprecated entries. Parse effort/thinking level separately and apply only when requested and supported.
-
-Never guess IDs or silently switch provider, family, version, or effort. If a requested model, default, or effort is unavailable or ambiguous, ask before creating.
+- Read the destination's capabilities first; use its advertised IDs and parameter names.
+- No model requested → the instance's default if its instructions define one, else the host's configured default (an explicit request for the host default wins).
+- Resolve shorthand names against the live catalog, skipping hidden/deprecated entries. Apply effort only when requested and supported.
+- Never guess IDs or silently switch provider, family, version, or effort; if anything is unavailable or ambiguous, ask before creating.
 
 ## Create and report
 

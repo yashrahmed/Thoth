@@ -275,7 +275,7 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
         "title": title,
         "tags": tags,
         "body_preview": body[:160] + ("..." if len(body) > 160 else ""),
-        "path": str(path.relative_to(root)),
+        "path": path.relative_to(root).as_posix(),
     }, ensure_ascii=False))
 
 
@@ -287,7 +287,7 @@ def cmd_read(args: argparse.Namespace, root: Path) -> None:
         sys.stdout.write(p.read_text(encoding="utf-8"))
         return
     rec = parse_episode_file(p)
-    rec["path"] = str(p.relative_to(root))
+    rec["path"] = p.relative_to(root).as_posix()
     print(json.dumps({"ok": True, **rec}, ensure_ascii=False, indent=2))
 
 
@@ -319,7 +319,7 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
             "topic": topic_val,
             "title": m.get("title"),
             "tags": m.get("tags", []),
-            "path": str(p.relative_to(root)),
+            "path": p.relative_to(root).as_posix(),
         }
         if m.get("updated"):
             row["updated"] = m["updated"]
@@ -415,7 +415,7 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
             "title": m.get("title"),
             "tags": m.get("tags", []),
             "sources": m.get("sources", []),
-            "path": str(p.relative_to(root)),
+            "path": p.relative_to(root).as_posix(),
             "snippet": rec["body"][:280] + ("..." if len(rec["body"]) > 280 else ""),
         })
     hits.sort(key=lambda h: (h["score"], h.get("when") or ""), reverse=True)
@@ -525,7 +525,7 @@ def cmd_update(args: argparse.Namespace, root: Path) -> None:
         "title": meta["title"],
         "tags": meta["tags"],
         "body_preview": body[:160] + ("..." if len(body) > 160 else ""),
-        "path": str(p.relative_to(root)),
+        "path": p.relative_to(root).as_posix(),
     }, ensure_ascii=False))
 
 
@@ -546,7 +546,7 @@ def cmd_delete(args: argparse.Namespace, root: Path) -> None:
         "ok": True,
         "id": args.id,
         "action": "archived",
-        "path": str(dest.relative_to(root)),
+        "path": dest.relative_to(root).as_posix(),
     }, ensure_ascii=False))
 
 
@@ -567,13 +567,13 @@ def cmd_restore(args: argparse.Namespace, root: Path) -> None:
         "ok": True,
         "id": args.id,
         "action": "restored",
-        "path": str(dest.relative_to(root)),
+        "path": dest.relative_to(root).as_posix(),
     }, ensure_ascii=False))
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="thoth-mem", description="Thoth v2 episodic memory CRUD CLI")
-    p.add_argument("--root", help="Instance root folder (defaults to THOTH_ROOT or current working directory)")
+    p.add_argument("--root", help="Instance root (default: the current folder; mainly for tests)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create", help="Create a new episode (prefer --json <<'EOF' to avoid shell escaping issues)")

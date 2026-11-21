@@ -40,8 +40,14 @@ else:
 VALID_KINDS = ("event", "decision", "action", "feedback", "check", "note", "commitment")
 TOPIC_RE = re.compile(r"^[a-z0-9]+(?:[/-][a-z0-9]+)*$")
 ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-REL_DURATION_RE = re.compile(r"^(\d+)\s*(h|d|w|m)$", re.IGNORECASE)
+REL_DURATION_RE = re.compile(r"^(\d+)\s*(h|d|w|mo|m)$", re.IGNORECASE)
 YM_DIR_RE = re.compile(r"^\d{4}-\d{2}$")
+
+CREATE_JSON_KEYS = frozenset({"id", "when", "kind", "topic", "title", "tags", "sources", "body"})
+UPDATE_JSON_KEYS = frozenset({
+    "title", "topic", "kind", "when", "tags", "add_tags", "remove_tags",
+    "sources", "add_sources", "body", "append", "expected_updated",
+})
 
 SECRET_PATTERNS = (
     ("private key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
@@ -51,20 +57,6 @@ SECRET_PATTERNS = (
     ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
 )
-
-
-def get_tz() -> ZoneInfo:
-    tz_name = os.environ.get("THOTH_TZ")
-    if tz_name:
-        return ZoneInfo(tz_name)
-    # Fall back to local system timezone offset via ZoneInfo or America/Chicago
-    try:
-        local_tz = datetime.now().astimezone().tzinfo
-        if local_tz is not None and hasattr(local_tz, "key"):
-            return ZoneInfo(local_tz.key)
-    except Exception:
-        pass
-    return ZoneInfo("UTC")
 
 
 def now_local() -> datetime:
@@ -85,6 +77,15 @@ def check_secrets(text: str, field: str) -> None:
     for kind, pat in SECRET_PATTERNS:
         if pat.search(text):
             fail(f"{field} appears to contain a {kind}; redact secrets before saving")
+
+
+def validate_json_keys(payload: Any, allowed: frozenset[str], cmd: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        fail(f"{cmd} --json expects a JSON object")
+    unknown = sorted(set(payload.keys()) - allowed)
+    if unknown:
+        fail(f"Unknown JSON key(s) for {cmd}: {', '.join(unknown)}. Allowed keys: {', '.join(sorted(allowed))}")
+    return payload
 
 
 def resolve_root(root_arg: str | None) -> Path:
@@ -211,11 +212,12 @@ def parse_timestamp(raw: str | None, *, default_now: bool = True) -> datetime:
             return cur
         raise ValueError("Timestamp required")
     s = raw.strip()
-    # Relative duration: 24h, 7d, 2w, 1m (30d)
     if m := REL_DURATION_RE.match(s):
         qty = int(m.group(1))
         unit = m.group(2).lower()
-        mult = {"h": timedelta(hours=1), "d": timedelta(days=1), "w": timedelta(weeks=1), "m": timedelta(days=30)}[unit]
+        if unit == "m":
+            fail(f"Ambiguous relative duration {s!r}; use 'mo' for months or 'h'/'d'/'w' for hours/days/weeks")
+        mult = {"h": timedelta(hours=1), "d": timedelta(days=1), "w": timedelta(weeks=1), "mo": timedelta(days=30)}[unit]
         return (cur - mult * qty).replace(microsecond=0)
     for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
@@ -230,7 +232,7 @@ def parse_timestamp(raw: str | None, *, default_now: bool = True) -> datetime:
             dt = dt.astimezone(cur.tzinfo)
         return dt.replace(microsecond=0)
     except ValueError:
-        fail(f"Invalid timestamp {s!r}; use YYYY-MM-DD, 'YYYY-MM-DD HH:MM', ISO-8601, or relative (24h, 7d, 2w, 1m)")
+        fail(f"Invalid timestamp {s!r}; use YYYY-MM-DD, 'YYYY-MM-DD HH:MM', ISO-8601, or relative (24h, 7d, 2w, 1mo)")
         raise
 
 
@@ -239,7 +241,6 @@ def parse_range_bounds(since: str | None, until: str | None) -> tuple[datetime |
     until_dt = None
     if until:
         raw = until.strip()
-        # Date-only --until is inclusive through 23:59:59 of that day
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
             until_dt = parse_timestamp(f"{raw} 23:59:59", default_now=False)
         else:
@@ -305,6 +306,20 @@ def normalize_list(val: Any) -> list[str]:
     return [x.strip() for x in str(val).split(",") if x.strip()]
 
 
+def topic_matches(actual: str, needle: str) -> bool:
+    """Match exact topic or path prefix (e.g. 'vehicles' matches 'vehicles' and 'vehicles/foo')."""
+    a = actual.lower().strip("/")
+    n = needle.lower().strip("/")
+    return a == n or a.startswith(n + "/")
+
+
+def tags_match(actual_tags: list[str], required_tags: list[str]) -> bool:
+    if not required_tags:
+        return True
+    have = {t.lower() for t in actual_tags}
+    return all(req.lower() in have for req in required_tags)
+
+
 def record_in_range(when_str: str, since_dt: datetime | None, until_dt: datetime | None) -> bool:
     if since_dt is None and until_dt is None:
         return True
@@ -324,7 +339,7 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
     if args.json:
         raw = sys.stdin.read()
         try:
-            payload = json.loads(raw)
+            payload = validate_json_keys(json.loads(raw), CREATE_JSON_KEYS, "create")
         except json.JSONDecodeError as e:
             fail(f"Invalid JSON on stdin: {e}")
 
@@ -334,7 +349,7 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
 
     topic = (args.topic or payload.get("topic") or "").strip().lower()
     if not topic or not TOPIC_RE.match(topic):
-        fail(f"Invalid topic {topic!r}; use lowercase slug like 'thoth-v2' or 'orders/refund'")
+        fail(f"Invalid topic {topic!r}; use lowercase slug like 'projects/alpha' or 'media/demo'")
 
     title = (args.title or payload.get("title") or "").strip()
     if not title or "\n" in title:
@@ -404,6 +419,8 @@ def cmd_read(args: argparse.Namespace, root: Path) -> None:
 
 def cmd_list(args: argparse.Namespace, root: Path) -> None:
     since_dt, until_dt = parse_range_bounds(args.since, args.until)
+    req_tags = [t for group in (args.tag or []) for t in normalize_list(group)]
+
     items = []
     for p in iter_episode_files(root, include_archived=args.archived, since_dt=since_dt, until_dt=until_dt):
         try:
@@ -414,17 +431,18 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        if args.topic and args.topic.lower() not in str(m.get("topic", "")).lower():
+        topic_val = str(m.get("topic", ""))
+        if args.topic and not topic_matches(topic_val, args.topic):
             continue
         if args.kind and str(m.get("kind", "")).lower() != args.kind.lower():
             continue
-        if args.tag and args.tag.lower() not in [t.lower() for t in m.get("tags", [])]:
+        if not tags_match(m.get("tags", []), req_tags):
             continue
         row: dict[str, Any] = {
             "id": m.get("id"),
             "when": when_val,
             "kind": m.get("kind"),
-            "topic": m.get("topic"),
+            "topic": topic_val,
             "title": m.get("title"),
             "tags": m.get("tags", []),
             "path": str(p.relative_to(root)),
@@ -475,10 +493,17 @@ def cmd_topics(args: argparse.Namespace, root: Path) -> None:
 
 
 def cmd_search(args: argparse.Namespace, root: Path) -> None:
-    tokens = [t.lower() for t in re.findall(r"[A-Za-z0-9_-]+", args.query) if t]
+    raw_query = args.query.strip()
+    if not raw_query:
+        fail("Search query must not be empty")
+    literal_mode = args.exact or any(ch in raw_query for ch in ("://", "/", ":", "."))
+    tokens = [raw_query.lower()] if literal_mode else [t.lower() for t in re.findall(r"[A-Za-z0-9_-]+", raw_query) if t]
     if not tokens:
-        fail("Search query must contain at least one word")
+        fail("Search query must contain at least one searchable term")
+
     since_dt, until_dt = parse_range_bounds(args.since, args.until)
+    req_tags = [t for group in (args.tag or []) for t in normalize_list(group)]
+
     hits = []
     for p in iter_episode_files(root, since_dt=since_dt, until_dt=until_dt):
         try:
@@ -489,14 +514,16 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        if args.topic and args.topic.lower() not in str(m.get("topic", "")).lower():
+        topic_val = str(m.get("topic", ""))
+        if args.topic and not topic_matches(topic_val, args.topic):
             continue
-        if args.tag and args.tag.lower() not in [t.lower() for t in m.get("tags", [])]:
+        if not tags_match(m.get("tags", []), req_tags):
             continue
         haystack = " ".join([
-            str(m.get("topic", "")),
+            topic_val,
             str(m.get("title", "")),
             " ".join(m.get("tags", [])),
+            " ".join(m.get("sources", [])),
             rec["body"],
         ]).lower()
         score = sum(haystack.count(tok) for tok in tokens)
@@ -510,16 +537,17 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
             "id": m.get("id"),
             "when": when_val,
             "kind": m.get("kind"),
-            "topic": m.get("topic"),
+            "topic": topic_val,
             "title": m.get("title"),
             "tags": m.get("tags", []),
+            "sources": m.get("sources", []),
             "path": str(p.relative_to(root)),
             "snippet": rec["body"][:280] + ("..." if len(rec["body"]) > 280 else ""),
         })
     hits.sort(key=lambda h: (h["score"], h.get("when") or ""), reverse=True)
     if args.limit and args.limit > 0:
         hits = hits[: args.limit]
-    print(json.dumps({"ok": True, "query": args.query, "count": len(hits), "hits": hits}, ensure_ascii=False, indent=2))
+    print(json.dumps({"ok": True, "query": raw_query, "count": len(hits), "hits": hits}, ensure_ascii=False, indent=2))
 
 
 def cmd_update(args: argparse.Namespace, root: Path) -> None:
@@ -527,7 +555,7 @@ def cmd_update(args: argparse.Namespace, root: Path) -> None:
     if args.json:
         raw = sys.stdin.read()
         try:
-            payload = json.loads(raw)
+            payload = validate_json_keys(json.loads(raw), UPDATE_JSON_KEYS, "update")
         except json.JSONDecodeError as e:
             fail(f"Invalid JSON on stdin: {e}")
 
@@ -682,14 +710,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("create", help="Create a new episode (prefer --json <<'EOF' to avoid shell escaping issues)")
     c.add_argument("--kind", choices=VALID_KINDS, default=None)
-    c.add_argument("--topic", help="Lowercase topic slug (e.g. home/office-chair-shopping)")
+    c.add_argument("--topic", help="Lowercase topic slug (e.g. projects/alpha)")
     c.add_argument("--title", help="One-line summary title")
     c.add_argument("--body", help="Markdown body (or pipe via stdin)")
     c.add_argument("--when", help="Timestamp (YYYY-MM-DD, 'YYYY-MM-DD HH:MM', ISO-8601, or relative like 7d)")
     c.add_argument("--tags", help="Comma-separated tags")
     c.add_argument("--sources", help="Comma-separated source URLs/paths")
     c.add_argument("--id", help="Optional explicit ID")
-    c.add_argument("--json", action="store_true", help="Read episode fields from JSON on stdin")
+    c.add_argument("--json", action="store_true", help="Read JSON object on stdin (strictly validates keys)")
 
     r = sub.add_parser("read", help="Read one episode by ID")
     r.add_argument("id")
@@ -697,26 +725,27 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--archived", action="store_true", help="Also look in .archive/")
 
     ls = sub.add_parser("list", help="List episodes chronologically with optional filters and date ranges")
-    ls.add_argument("--topic", help="Substring match on topic")
+    ls.add_argument("--topic", help="Exact topic or path-prefix match (e.g. 'media' matches 'media/...')")
     ls.add_argument("--kind", choices=VALID_KINDS)
-    ls.add_argument("--tag", help="Exact tag match")
-    ls.add_argument("--since", help="Start bound: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1m)")
-    ls.add_argument("--until", help="End bound: YYYY-MM-DD (inclusive), ISO-8601, or relative (5d)")
+    ls.add_argument("--tag", action="append", help="Require tag match (repeatable for AND)")
+    ls.add_argument("--since", help="Inclusive start: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1mo)")
+    ls.add_argument("--until", help="Inclusive end: YYYY-MM-DD, ISO-8601, or relative")
     ls.add_argument("--limit", type=int, default=0)
     ls.add_argument("--newest-first", action="store_true")
     ls.add_argument("--full", action="store_true", help="Include full Markdown body and sources")
     ls.add_argument("--archived", action="store_true")
 
-    tp = sub.add_parser("topics", help="Compact topic index (counts + latest timestamp/title)")
-    tp.add_argument("--since", help="Optional start bound (date or relative like 30d)")
-    tp.add_argument("--until", help="Optional end bound (date or relative)")
+    tp = sub.add_parser("topics", help="Topic index (counts + latest timestamp/title)")
+    tp.add_argument("--since", help="Optional inclusive start bound")
+    tp.add_argument("--until", help="Optional inclusive end bound")
 
-    s = sub.add_parser("search", help="Keyword search across episodes with optional date range")
+    s = sub.add_parser("search", help="Keyword or exact URL/ID search across title, topic, tags, sources, and body")
     s.add_argument("query")
-    s.add_argument("--topic", help="Optional topic substring filter")
-    s.add_argument("--tag", help="Optional exact tag filter")
-    s.add_argument("--since", help="Start bound: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1m)")
-    s.add_argument("--until", help="End bound: YYYY-MM-DD (inclusive), ISO-8601, or relative")
+    s.add_argument("--exact", action="store_true", help="Match exact case-insensitive substring instead of splitting words")
+    s.add_argument("--topic", help="Optional topic or path-prefix filter")
+    s.add_argument("--tag", action="append", help="Require tag match (repeatable for AND)")
+    s.add_argument("--since", help="Inclusive start: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1mo)")
+    s.add_argument("--until", help="Inclusive end: YYYY-MM-DD, ISO-8601, or relative")
     s.add_argument("--all-terms", action="store_true", help="Require all query terms to match")
     s.add_argument("--limit", type=int, default=15)
 
@@ -734,7 +763,7 @@ def build_parser() -> argparse.ArgumentParser:
     u.add_argument("--body", help="Replace Markdown body")
     u.add_argument("--append", help="Append text to Markdown body")
     u.add_argument("--expected-updated", help="Optimistic concurrency check against current 'updated' value")
-    u.add_argument("--json", action="store_true", help="Read update fields from JSON on stdin")
+    u.add_argument("--json", action="store_true", help="Read JSON object on stdin (strictly validates keys)")
 
     d = sub.add_parser("delete", help="Archive (soft-delete) an episode by ID")
     d.add_argument("id")

@@ -10,7 +10,7 @@ Tasks live in `tasks/t-NNNN.md` (archive: `tasks/.archive/`), relative to the fo
 ## Model
 
 - `status`: `open` (actionable) · `waiting` (on someone/something) · `done` · `dropped` (decided not to do). `priority`: `high` · `normal` (default) · `low`.
-- `due`: deadline. `scheduled`: when to work on it (open) or follow up (waiting). Both `YYYY-MM-DD`; `""` clears on update.
+- `due`: deadline. `scheduled`: when to work on it (open) or follow up (waiting). Both stored as local `YYYY-MM-DDTHH:MM`; pass a bare `YYYY-MM-DD` when the time is unknown and it gets `T00:00`. `""` clears on update.
 - `source_keys`: `<channel>:<id>` dedupe keys (lowercase channel, no spaces/commas, e.g. `gmail:<msg-id>`, `memory:<episode-id>`). A key stays reserved even when its task is dropped or archived.
 - `memory_ids`: linked episode IDs. `revision`: bumps on every write. `notes`: Markdown above the CLI-owned `## Log`; `reason` adds a one-line log entry.
 
@@ -19,6 +19,7 @@ Tasks live in `tasks/t-NNNN.md` (archive: `tasks/.archive/`), relative to the fo
 ```sh
 todo-list list                                # open + waiting, by due date then priority
 todo-list list --actionable                   # doable today
+todo-list list --until 2026-11-22T23:59       # earlier of due/scheduled by then (bare date = end of that day); undated always
 todo-list list --status all --full            # everything, with notes and log
 todo-list list --source <key> --source <key>  # batch dedupe check → matched_keys / unmatched_keys
 todo-list search "query, URL, or source key"

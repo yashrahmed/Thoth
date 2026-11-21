@@ -95,6 +95,8 @@ class TestTodoListCLI(unittest.TestCase):
             {"title": "x", "priority": "urgent"},
             {"title": "x", "due": "2026-02-30"},
             {"title": "x", "due": "next week"},
+            {"title": "x", "due": "2026-02-10T25:00"},
+            {"title": "x", "due": "2026-02-10 09:00"},
             {"title": "x", "source_keys": ["no colon"]},
             {"title": "x", "notes": "a\n## Log\nb"},
             {"title": "x", "source_keys": ["gmail:a,b"]},
@@ -148,6 +150,10 @@ class TestTodoListCLI(unittest.TestCase):
         due_by = {t["title"] for t in j(run_cli(self.root, "list", "--due-by", today.isoformat()))["tasks"]}
         self.assertEqual(due_by, {"due soon high"})
 
+        # --until: earlier of due/scheduled at or before the bound; bare dates are start of day; undated pass.
+        until = {t["title"] for t in j(run_cli(self.root, "list", "--until", f"{today.isoformat()}T00:30"))["tasks"]}
+        self.assertEqual(until, {"no due low", "due soon high", "waiting ready", "waiting not ready"})
+
         self.assertEqual(j(run_cli(self.root, "list", "--status", "all"))["count"], 7)
         self.assertEqual(j(run_cli(self.root, "list", "--priority", "low"))["count"], 1)
 
@@ -165,6 +171,18 @@ class TestTodoListCLI(unittest.TestCase):
         # Archived tasks are never actionable, even when --source pulls them in.
         run_cli(self.root, "delete", "t-8")
         self.assertEqual(j(run_cli(self.root, "list", "--actionable", "--source", "gmail:m2"))["count"], 0)
+
+    def test_timed_dates_filter_by_time(self) -> None:
+        self.create({"title": "early", "due": "2026-03-01T09:00"})
+        self.create({"title": "late", "due": "2026-03-01T17:30"})
+        self.create({"title": "day only", "scheduled": "2026-03-01"})
+        self.create({"title": "next day", "due": "2026-03-02T08:00"})
+        titles = lambda *a: [t["title"] for t in j(run_cli(self.root, "list", *a))["tasks"]]
+        self.assertEqual(titles("--until", "2026-03-01T10:00"), ["early", "day only"])
+        self.assertEqual(set(titles("--until", "2026-03-01")), {"early", "late", "day only"})
+        self.assertEqual(titles("--due-by", "2026-03-01"), ["early", "late"])
+        day_only = j(run_cli(self.root, "read", "3"))["task"]
+        self.assertEqual(day_only["scheduled"], "2026-03-01T00:00")  # bare dates get a T00:00 placeholder
 
     def test_search(self) -> None:
         self.create({"title": "Return shelf", "notes": "Amazon refund for https://example.com/order/1"})

@@ -22,7 +22,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +50,7 @@ TASK_ID_RE = re.compile(r"^t-(\d{4,})$")
 LOOSE_ID_RE = re.compile(r"^(?:t-?)?(\d+)$", re.IGNORECASE)
 SOURCE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]*:[^\s,]+$")
 MEMORY_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$")  # local date, optional time
 LOG_HEADING = "## Log"
 
 FIELD_ORDER = (
@@ -127,19 +127,19 @@ def clean_choice(val: Any, choices: tuple[str, ...], field: str) -> str:
 
 
 def clean_date(val: Any, field: str) -> str:
-    """Return a YYYY-MM-DD string, or '' to clear."""
+    """Return a local YYYY-MM-DDTHH:MM string (a bare date gets T00:00), or '' to clear."""
     if val is None:
         return ""
     v = str(val).strip()
     if not v:
         return ""
     if not DATE_RE.match(v):
-        fail(f"Invalid {field} {val!r}; use YYYY-MM-DD")
+        fail(f"Invalid {field} {val!r}; use YYYY-MM-DD or YYYY-MM-DDTHH:MM")
     try:
-        date.fromisoformat(v)
+        datetime.fromisoformat(v)
     except ValueError:
-        fail(f"Invalid {field} {val!r}; not a real calendar date")
-    return v
+        fail(f"Invalid {field} {val!r}; not a real calendar date or time")
+    return v if "T" in v else v + "T00:00"
 
 
 def clean_source_keys(val: Any) -> list[str]:
@@ -228,7 +228,7 @@ def parse_task_file(path: Path, archived: bool) -> dict[str, Any]:
         if v:
             if not DATE_RE.match(v):
                 raise ValueError(f"Invalid {f} {v!r}")
-            date.fromisoformat(v)
+            datetime.fromisoformat(v)
         meta[f] = v
     for f in LIST_FIELDS:
         val = meta.get(f, [])
@@ -427,7 +427,10 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
         statuses = set(ACTIVE_STATUSES)
     if args.actionable:
         statuses &= set(ACTIVE_STATUSES)
-    due_by = clean_date(args.due_by, "due-by") if args.due_by else ""
+    due_by = clean_date(args.due_by, "due-by")[:10] if args.due_by else ""
+    until = clean_date(args.until, "until") if args.until else ""
+    if until and "T" not in args.until:
+        until = until[:10] + "T23:59"  # a bare date means through the end of that day
     today = now_local().date().isoformat()
 
     tasks, warnings = load_tasks(root, include_archived=args.archived or bool(source_filter))
@@ -438,7 +441,10 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
             continue
         if args.priority and m["priority"] != args.priority:
             continue
-        if due_by and not (m["due"] and m["due"] <= due_by):
+        if due_by and not (m["due"] and m["due"][:10] <= due_by):
+            continue
+        dates = [d for d in (m["due"], m["scheduled"]) if d]
+        if until and dates and min(dates) > until:  # undated tasks always pass
             continue
         if source_filter and not set(source_filter) & set(m["source_keys"]):
             continue
@@ -446,6 +452,7 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
             if t["archived"]:
                 continue
             sched = m["scheduled"]
+            sched = sched[:10]
             ready = (not sched or sched <= today) if m["status"] == "open" else bool(sched and sched <= today)
             if not ready:
                 continue
@@ -672,8 +679,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--title")
     c.add_argument("--status", choices=STATUSES)
     c.add_argument("--priority", choices=PRIORITIES)
-    c.add_argument("--due", help="Deadline YYYY-MM-DD")
-    c.add_argument("--scheduled", help="Work-on / follow-up date YYYY-MM-DD")
+    c.add_argument("--due", help="Deadline YYYY-MM-DD[THH:MM]; a bare date is stored as T00:00")
+    c.add_argument("--scheduled", help="Work-on / follow-up date YYYY-MM-DD[THH:MM]")
     c.add_argument("--source-key", help="Comma-separated <channel>:<id> dedupe keys")
     c.add_argument("--memory-id", help="Comma-separated linked memory episode IDs")
     c.add_argument("--notes", help="Markdown notes")
@@ -689,6 +696,7 @@ def build_parser() -> argparse.ArgumentParser:
     ls.add_argument("--priority", choices=PRIORITIES)
     ls.add_argument("--actionable", action="store_true", help="Open tasks not scheduled for later + waiting tasks whose follow-up date has come")
     ls.add_argument("--due-by", help="Only tasks due on or before YYYY-MM-DD")
+    ls.add_argument("--until", help="Only tasks whose earlier of due/scheduled is at or before YYYY-MM-DD[THH:MM] (bare date = end of that day); undated tasks always pass")
     ls.add_argument("--source", action="append", help="Match source keys (repeatable/comma-separated); searches every status incl. archived")
     ls.add_argument("--limit", type=int, default=0)
     ls.add_argument("--full", action="store_true", help="Include notes, log, and timestamps")
@@ -707,8 +715,8 @@ def build_parser() -> argparse.ArgumentParser:
     u.add_argument("--title")
     u.add_argument("--status", choices=STATUSES)
     u.add_argument("--priority", choices=PRIORITIES)
-    u.add_argument("--due", help="Deadline YYYY-MM-DD ('' clears)")
-    u.add_argument("--scheduled", help="Work-on / follow-up date YYYY-MM-DD ('' clears)")
+    u.add_argument("--due", help="Deadline YYYY-MM-DD[THH:MM] ('' clears)")
+    u.add_argument("--scheduled", help="Work-on / follow-up date YYYY-MM-DD[THH:MM] ('' clears)")
     u.add_argument("--add-source-key", help="Comma-separated source keys to attach")
     u.add_argument("--remove-source-key", help="Comma-separated source keys to detach")
     u.add_argument("--add-memory-id", help="Comma-separated memory IDs to link")

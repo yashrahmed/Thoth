@@ -15,7 +15,7 @@ Input: a video URL or file. Collect what is said and shown; don't ask questions 
 ## 2. Topic and folder
 
 - Via the `memory` skill, check topics and search for the URL or title (it's a repeat viewing only if the exact URL is in a hit's `sources`). Reuse one lowercase `<category>/<slug>` topic per video.
-- Save to `work-artifacts/<topic>/<YYYY-MM-DD>/capture/` (`capture-2/`, … for same-day repeats; never overwrite): `capture-log.md`, plus `transcript.<original-ext>` and `screenshots/HH-MM-SS.<ext>` only if obtained. In `capture-log.md`, link siblings relative to it.
+- Save to `work-artifacts/<topic>/<YYYY-MM-DD>/capture/` (`capture-2/`, … for same-day repeats; never overwrite): `capture-log.md`, plus `transcript.<original-ext>` and `screenshots/HH-MM-SS.jpg` only if obtained. In `capture-log.md`, link siblings relative to it.
 
 ## 3. Transcript
 
@@ -27,7 +27,7 @@ Input: a video URL or file. Collect what is said and shown; don't ask questions 
 
 - Turn captions on and keep them visible (prefer the user's language; log if auto-generated or translated).
 - Capture in order at 0s, every 15s, near the end, and at notable changes; keep repeated slides.
-- Per frame: seek, let it render, verify the actual time, capture. Name it `HH-MM-SS.<ext>` from the verified time (suffix on collisions); log precise offsets, deviations, and any thumbnail/storyboard substitutes.
+- Per frame: seek, let it render, verify the actual time, capture. Save it as JPG (quality ~80, at most 1280 px wide), named `HH-MM-SS.jpg` from the verified time (suffix on collisions); log precise offsets, deviations, and any thumbnail/storyboard substitutes.
 - Log frames in order with relative links and literal descriptions. Record gaps; don't infer between frames. If a control fails, try another; if still blocked, save what you have and state the missing coverage.
 
 ## 5. Log and verify
@@ -41,4 +41,4 @@ Every attempt, even partial or blocked, gets one `action` episode via the `memor
 
 Verify every local path in `capture-log.md` and `sources` exists under `work-artifacts/`. Return links to the episode and capture folder, plus transcript status, screenshot count, and gaps.
 
-A later report built from the capture goes to `work-artifacts/<topic>/<Readable report name>.html` (or `.md`), with a new `action` episode citing both report and capture.
+A later report built from the capture goes to `work-artifacts/<topic>/<Readable report name>.html` (or `.md`), with a new `action` episode citing both report and capture. Frames the report shows are copied to `work-artifacts/<topic>/assets/` and linked there, never into `screenshots/`.

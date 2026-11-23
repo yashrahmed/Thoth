@@ -45,3 +45,4 @@ EOF
 
 - Check the returned JSON (`id`, `title`, `tags`, `body_preview`) for mangling.
 - `delete <id>` archives; `restore <id>` brings it back. Never `--hard` unless the user asks for permanent deletion.
+- Commit touched files via the `auto-commit` skill if installed.

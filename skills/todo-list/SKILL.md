@@ -51,4 +51,3 @@ todo-list delete t-42 --reason "created by mistake"   # archive; `restore t-42` 
 - **Read before you write:** pass the `revision` you read as `expected_revision` when an update depends on it; on conflict, re-read and retry.
 - **Tasks vs memory:** tasks are current state, memory is history. Link a commitment's task with `memory_ids` + `source_keys: ["memory:<id>"]`; record durable outcomes via the `memory` skill.
 - **Grounded, no secrets.** Check the returned JSON (`action`, `id`, `status`, `revision`) before reporting success.
-- Commit touched files via the `auto-commit` skill if installed.

@@ -6,7 +6,8 @@ Minimal, reusable persistent-agent engine (v2) — clean separation between engi
 - **Skills** (`skills/<name>/SKILL.md`), a plain library. Each instance links the skills it uses into its own harness folders (e.g. `.agents/skills/`, `.claude/skills/`, `.gemini/skills/`):
   - [`memory`](skills/memory/SKILL.md) — episodic CRUD, topic index, and date-range/keyword recall via `thoth-mem`
   - [`todo-list`](skills/todo-list/SKILL.md) — to-do list CRUD, actionable view, and source-key dedupe via `todo-list`
-  - [`what-do-i-do`](skills/what-do-i-do/SKILL.md) — refresh the to-do list from an instance's allowlisted channels (`intake/channels.toml`) and show what needs action
+  - [`look-around`](skills/look-around/SKILL.md) — objective HTML snapshot of activity in an instance's allowlisted channels (`intake/channels.toml`) since the last look
+  - [`what-do-i-do`](skills/what-do-i-do/SKILL.md) — deprecated, marked for deletion; shows open tasks only
   - [`log-workout`](skills/log-workout/SKILL.md) — log and count workout sessions in an instance's Google Doc log, for trainer billing
   - [`watch-video`](skills/watch-video/SKILL.md) — transcript + timestamped frame capture to local `work-artifacts/` + episode logging
   - [`prune-video-captures`](skills/prune-video-captures/SKILL.md) — delete finished captures' screenshots, keep transcripts, leave a tombstone + episode

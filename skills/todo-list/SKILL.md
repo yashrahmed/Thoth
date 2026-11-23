@@ -1,6 +1,6 @@
 ---
 name: todo-list
-description: Create, read, list, search, update, complete, archive, or restore to-do tasks via the todo-list CLI. Use when adding, checking, or changing items on the owner's to-do list, or when another skill (such as what-do-i-do) needs to add or dedupe tasks.
+description: Create, read, list, search, update, complete, archive, or restore to-do tasks via the todo-list CLI. Use when adding, checking, or changing items on the owner's to-do list, or when another skill needs to add or dedupe tasks.
 ---
 
 # To-Do List (`todo-list`)

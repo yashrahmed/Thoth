@@ -12,11 +12,10 @@ Episodes live in `memory/episodes/YYYY-MM/<id>.md` (archive: `memory/episodes/.a
 Start narrow:
 
 ```sh
-thoth-mem topics --since 30d                       # discover topics first
-thoth-mem list --topic projects/alpha --full       # exact topic or prefix; also --since/--until (YYYY-MM-DD or 24h/7d/2w/1mo), --kind
-thoth-mem list --tag rule --full                   # standing rules
-thoth-mem list --tag commitment --tag open --full  # open commitments (repeated --tag = AND)
-thoth-mem search "query or URL"                    # URLs/IDs match literally; --exact to force; default --limit 15 (0 = all)
+thoth-mem topics --since 30d                          # discover topics first
+thoth-mem list --topic projects/alpha --full          # exact topic or prefix (repeatable for AND); also --since/--until (YYYY-MM-DD or 24h/7d/2w/1mo), --kind
+thoth-mem list --kind rule --full                     # standing rules across all topics
+thoth-mem search "query or URL"                       # URLs/IDs match literally; --exact to force; default --limit 15 (0 = all)
 thoth-mem read <id>
 ```
 
@@ -28,21 +27,22 @@ thoth-mem read <id>
 
 - **One episode = one dated occurrence:** a decision, case update, completed action, commitment, or explicit rule. Skip pure Q&A, routine noise, transient tool errors, guesses about the user, and secrets (redact first).
 - **Grounded only:** what the user said or what happened; put inference under `## Assistant Note`.
-- **Rules need explicit intent** ("always", "from now on", "stop doing X", "remember"); tag them `rule`. Tag open commitments `commitment` + `open`. Reuse an existing lowercase `<category>/<slug>` topic.
-- **`create`** for a new development (keeps history append-only). **`update <id>`** for a correction, missed source, or closing a commitment (keeps `when`, stamps `updated`).
+- **Multi-topic:** `topics` is a non-empty list of lowercase `<category>/<slug>` slugs. Reuse existing topics, and include **every** relevant topic when an occurrence spans subjects (e.g. a combined errand or a scheduling lesson tied to a shopping trip).
+- **Standing rules:** need explicit intent ("always", "from now on", "stop doing X", "remember"); record with `kind: "rule"` on the relevant topic(s) (or `rules/<slug>` for general rules). Open/done state for commitments lives in `todo-list`, not memory.
+- **`create`** for a new development (keeps history append-only). **`update <id>`** for a correction, missed source, or adding/fixing topics (keeps `when`, stamps `updated`).
 - Pass JSON on stdin with `--json` (in a POSIX shell use a quoted heredoc, `<<'EOF'`, so `$` and quotes survive). Unknown keys fail.
-  - `create`: `kind`, `topic`, `title`, `body` (required); `when`, `tags`, `sources`, `id`.
-  - `update`: `title`, `topic`, `kind`, `when`, `tags`, `add_tags`, `remove_tags`, `sources`, `add_sources`, `body`, `append`, `expected_updated`.
-  - `kind`: `event`, `decision`, `action`, `feedback`, `check`, `note`, `commitment`.
+  - `create`: `kind`, `topics`, `title`, `body` (required); `when`, `sources`, `id`.
+  - `update`: `title`, `topics`, `add_topics`, `remove_topics`, `kind`, `when`, `sources`, `add_sources`, `body`, `append`, `expected_updated`.
+  - `kind`: `event`, `decision`, `action`, `feedback`, `check`, `note`, `commitment`, `rule`.
 
 ```sh
 thoth-mem create --json <<'EOF'
-{"kind": "decision", "topic": "gear/desk-setup", "title": "Pick desk mat under $75", "tags": ["decision"], "sources": ["https://example.com/desk-mat"], "body": "Chose wool felt; budget cap $75."}
+{"kind": "decision", "topics": ["gear/desk-setup", "finance/budget"], "title": "Pick desk mat under $75", "sources": ["https://example.com/desk-mat"], "body": "Chose wool felt; budget cap $75."}
 EOF
 thoth-mem update <id> --json <<'EOF'
-{"append": "Ordered wool felt mat for $59.", "add_tags": ["done"], "remove_tags": ["open"]}
+{"append": "Ordered wool felt mat for $59.", "add_topics": ["orders/desk-mat"]}
 EOF
 ```
 
-- Check the returned JSON (`id`, `title`, `tags`, `body_preview`) for mangling.
+- Check the returned JSON (`id`, `title`, `topics`, `body_preview`) for mangling.
 - `delete <id>` archives; `restore <id>` brings it back. Never `--hard` unless the user asks for permanent deletion.

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Thoth v2 episodic memory CRUD CLI.
+"""Thoth episodic memory CRUD CLI.
 
 Design:
 - 1 Markdown file with flat YAML frontmatter per episode:
       <root>/memory/episodes/YYYY-MM/YYYYMMDD-HHMMSS-<4hex>.md
+- Multi-topic: every episode carries a non-empty `topics` list (`<category>/<slug>`).
+- Standing rules use `kind: rule` while staying on their real topic(s).
 - OS file lock (`fcntl.flock` on Unix, `msvcrt.locking` on Windows) on:
       <root>/memory/.write.lock
 - Atomic writes (`tmp` -> `fsync` -> `os.replace`) so readers never see partial files.
@@ -38,15 +40,15 @@ from thoth_core import (
 from thoth_core import write_lock as _write_lock
 
 
-VALID_KINDS = ("event", "decision", "action", "feedback", "check", "note", "commitment")
+VALID_KINDS = ("event", "decision", "action", "feedback", "check", "note", "commitment", "rule")
 TOPIC_RE = re.compile(r"^[a-z0-9]+(?:[/-][a-z0-9]+)*$")
 ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 REL_DURATION_RE = re.compile(r"^(\d+)\s*(h|d|w|mo|m)$", re.IGNORECASE)
 YM_DIR_RE = re.compile(r"^\d{4}-\d{2}$")
 
-CREATE_JSON_KEYS = frozenset({"id", "when", "kind", "topic", "title", "tags", "sources", "body"})
+CREATE_JSON_KEYS = frozenset({"id", "when", "kind", "topics", "title", "sources", "body"})
 UPDATE_JSON_KEYS = frozenset({
-    "title", "topic", "kind", "when", "tags", "add_tags", "remove_tags",
+    "title", "topics", "add_topics", "remove_topics", "kind", "when",
     "sources", "add_sources", "body", "append", "expected_updated",
 })
 
@@ -55,15 +57,27 @@ def write_lock(root: Path):
     return _write_lock(root / "memory")
 
 
+def clean_topics(raw: Any) -> list[str]:
+    out: list[str] = []
+    for t in normalize_list(raw):
+        slug = t.lower().strip("/")
+        if not TOPIC_RE.match(slug):
+            fail(f"Invalid topic {t!r}; use lowercase slug like 'projects/alpha' or 'media/demo'")
+        if slug not in out:
+            out.append(slug)
+    if not out:
+        fail("At least one topic is required in 'topics'")
+    return out
+
+
 def render_episode(meta: dict[str, Any], body: str) -> str:
     lines = [
         "---",
         f"id: {yaml_scalar(meta['id'])}",
         f"when: {yaml_scalar(meta['when'])}",
         f"kind: {yaml_scalar(meta['kind'])}",
-        f"topic: {yaml_scalar(meta['topic'])}",
+        f"topics: {json.dumps(meta['topics'], ensure_ascii=False)}",
         f"title: {yaml_scalar(meta['title'])}",
-        f"tags: {json.dumps(meta.get('tags', []), ensure_ascii=False)}",
         f"sources: {json.dumps(meta.get('sources', []), ensure_ascii=False)}",
     ]
     if meta.get("updated"):
@@ -85,10 +99,17 @@ def parse_episode_file(path: Path) -> dict[str, Any]:
         if not sep:
             continue
         meta[k.strip()] = parse_yaml_value(v)
-    meta.setdefault("tags", [])
+
+    raw_topics = meta.pop("topics", None)
+    legacy_topic = meta.pop("topic", None)
+    meta.pop("tags", None)
+    if raw_topics is None and legacy_topic:
+        raw_topics = [legacy_topic]
+    if isinstance(raw_topics, str):
+        raw_topics = [t.strip() for t in raw_topics.split(",") if t.strip()]
+    meta["topics"] = [str(t).strip() for t in (raw_topics or []) if str(t).strip()]
+
     meta.setdefault("sources", [])
-    if isinstance(meta["tags"], str):
-        meta["tags"] = [t.strip() for t in meta["tags"].split(",") if t.strip()]
     if isinstance(meta["sources"], str):
         meta["sources"] = [s.strip() for s in meta["sources"].split(",") if s.strip()]
     return {"meta": meta, "body": body.rstrip("\n"), "path": str(path)}
@@ -187,18 +208,14 @@ def find_episode_by_id(root: Path, ep_id: str, include_archived: bool = False) -
     return None
 
 
-def topic_matches(actual: str, needle: str) -> bool:
-    """Match exact topic or path prefix (e.g. 'vehicles' matches 'vehicles' and 'vehicles/foo')."""
-    a = actual.lower().strip("/")
+def topic_matches(actual_topics: list[str], needle: str) -> bool:
+    """Match exact topic or path prefix against any topic in `actual_topics`."""
     n = needle.lower().strip("/")
-    return a == n or a.startswith(n + "/")
-
-
-def tags_match(actual_tags: list[str], required_tags: list[str]) -> bool:
-    if not required_tags:
-        return True
-    have = {t.lower() for t in actual_tags}
-    return all(req.lower() in have for req in required_tags)
+    for actual in actual_topics:
+        a = actual.lower().strip("/")
+        if a == n or a.startswith(n + "/"):
+            return True
+    return False
 
 
 def record_in_range(when_str: str, since_dt: datetime | None, until_dt: datetime | None) -> bool:
@@ -222,9 +239,7 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
     if kind not in VALID_KINDS:
         fail(f"Invalid kind {kind!r}; expected one of: {', '.join(VALID_KINDS)}")
 
-    topic = (args.topic or payload.get("topic") or "").strip().lower()
-    if not topic or not TOPIC_RE.match(topic):
-        fail(f"Invalid topic {topic!r}; use lowercase slug like 'projects/alpha' or 'media/demo'")
+    topics = clean_topics(args.topics if args.topics is not None else payload.get("topics"))
 
     title = (args.title or payload.get("title") or "").strip()
     if not title or "\n" in title:
@@ -237,7 +252,6 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
     if not body:
         fail("body is required (use --json <<'EOF', --body, or pipe stdin)")
 
-    tags = normalize_list(args.tags if args.tags is not None else payload.get("tags"))
     sources = normalize_list(args.sources if args.sources is not None else payload.get("sources"))
     when_dt = parse_timestamp(args.when or payload.get("when"), default_now=True)
     when_iso = when_dt.isoformat()
@@ -260,9 +274,8 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
             "id": ep_id,
             "when": when_iso,
             "kind": kind,
-            "topic": topic,
+            "topics": topics,
             "title": title,
-            "tags": tags,
             "sources": sources,
         }
         atomic_write(path, render_episode(meta, body))
@@ -272,9 +285,8 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
         "id": ep_id,
         "when": when_iso,
         "kind": kind,
-        "topic": topic,
+        "topics": topics,
         "title": title,
-        "tags": tags,
         "body_preview": body[:160] + ("..." if len(body) > 160 else ""),
         "path": path.relative_to(root).as_posix(),
     }, ensure_ascii=False))
@@ -294,7 +306,7 @@ def cmd_read(args: argparse.Namespace, root: Path) -> None:
 
 def cmd_list(args: argparse.Namespace, root: Path) -> None:
     since_dt, until_dt = parse_range_bounds(args.since, args.until)
-    req_tags = [t for group in (args.tag or []) for t in normalize_list(group)]
+    req_topics = [t for group in (args.topic or []) for t in normalize_list(group)]
 
     items = []
     for p in iter_episode_files(root, include_archived=args.archived, since_dt=since_dt, until_dt=until_dt):
@@ -306,20 +318,17 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        topic_val = str(m.get("topic", ""))
-        if args.topic and not topic_matches(topic_val, args.topic):
+        ep_topics = m.get("topics", [])
+        if req_topics and not all(topic_matches(ep_topics, needle) for needle in req_topics):
             continue
         if args.kind and str(m.get("kind", "")).lower() != args.kind.lower():
-            continue
-        if not tags_match(m.get("tags", []), req_tags):
             continue
         row: dict[str, Any] = {
             "id": m.get("id"),
             "when": when_val,
             "kind": m.get("kind"),
-            "topic": topic_val,
+            "topics": ep_topics,
             "title": m.get("title"),
-            "tags": m.get("tags", []),
             "path": p.relative_to(root).as_posix(),
         }
         if m.get("updated"):
@@ -346,22 +355,22 @@ def cmd_topics(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        topic = str(m.get("topic", "general"))
-        cur = by_topic.get(topic)
-        if cur is None:
-            by_topic[topic] = {
-                "topic": topic,
-                "count": 1,
-                "latest_when": when_val,
-                "latest_id": m.get("id"),
-                "latest_title": m.get("title"),
-            }
-        else:
-            cur["count"] += 1
-            if when_val >= cur["latest_when"]:
-                cur["latest_when"] = when_val
-                cur["latest_id"] = m.get("id")
-                cur["latest_title"] = m.get("title")
+        for topic in m.get("topics", []) or ["general"]:
+            cur = by_topic.get(topic)
+            if cur is None:
+                by_topic[topic] = {
+                    "topic": topic,
+                    "count": 1,
+                    "latest_when": when_val,
+                    "latest_id": m.get("id"),
+                    "latest_title": m.get("title"),
+                }
+            else:
+                cur["count"] += 1
+                if when_val >= cur["latest_when"]:
+                    cur["latest_when"] = when_val
+                    cur["latest_id"] = m.get("id")
+                    cur["latest_title"] = m.get("title")
     rows = sorted(by_topic.values(), key=lambda r: (r["latest_when"], r["topic"]), reverse=True)
     page, page_meta = paginate(rows, limit=args.limit, offset=args.offset)
     print(json.dumps({"ok": True, **page_meta, "topics": page}, ensure_ascii=False, indent=2))
@@ -377,7 +386,7 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
         fail("Search query must contain at least one searchable term")
 
     since_dt, until_dt = parse_range_bounds(args.since, args.until)
-    req_tags = [t for group in (args.tag or []) for t in normalize_list(group)]
+    req_topics = [t for group in (args.topic or []) for t in normalize_list(group)]
 
     hits = []
     for p in iter_episode_files(root, since_dt=since_dt, until_dt=until_dt):
@@ -389,15 +398,14 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        topic_val = str(m.get("topic", ""))
-        if args.topic and not topic_matches(topic_val, args.topic):
+        ep_topics = m.get("topics", [])
+        if req_topics and not all(topic_matches(ep_topics, needle) for needle in req_topics):
             continue
-        if not tags_match(m.get("tags", []), req_tags):
+        if args.kind and str(m.get("kind", "")).lower() != args.kind.lower():
             continue
         haystack = " ".join([
-            topic_val,
+            " ".join(ep_topics),
             str(m.get("title", "")),
-            " ".join(m.get("tags", [])),
             " ".join(m.get("sources", [])),
             rec["body"],
         ]).lower()
@@ -412,9 +420,8 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
             "id": m.get("id"),
             "when": when_val,
             "kind": m.get("kind"),
-            "topic": topic_val,
+            "topics": ep_topics,
             "title": m.get("title"),
-            "tags": m.get("tags", []),
             "sources": m.get("sources", []),
             "path": p.relative_to(root).as_posix(),
             "snippet": rec["body"][:280] + ("..." if len(rec["body"]) > 280 else ""),
@@ -450,12 +457,18 @@ def cmd_update(args: argparse.Namespace, root: Path) -> None:
             check_secrets(title, "title")
             meta["title"] = title
 
-        topic = pick(args.topic, "topic")
-        if topic is not None:
-            topic = str(topic).strip().lower()
-            if not TOPIC_RE.match(topic):
-                fail(f"Invalid topic {topic!r}")
-            meta["topic"] = topic
+        topics_replace = pick(args.topics, "topics")
+        if topics_replace is not None:
+            meta["topics"] = clean_topics(topics_replace)
+
+        add_topics = pick(args.add_topic, "add_topics")
+        if add_topics:
+            meta["topics"] = clean_topics(list(meta.get("topics", [])) + normalize_list(add_topics))
+
+        remove_topics = pick(args.remove_topic, "remove_topics")
+        if remove_topics:
+            drop = {t.lower().strip("/") for t in normalize_list(remove_topics)}
+            meta["topics"] = clean_topics([t for t in meta.get("topics", []) if t.lower().strip("/") not in drop])
 
         kind = pick(args.kind, "kind")
         if kind is not None:
@@ -467,23 +480,6 @@ def cmd_update(args: argparse.Namespace, root: Path) -> None:
         when_override = pick(args.when, "when")
         if when_override is not None:
             meta["when"] = parse_timestamp(str(when_override), default_now=False).isoformat()
-
-        tags_replace = pick(args.tags, "tags")
-        if tags_replace is not None:
-            meta["tags"] = normalize_list(tags_replace)
-
-        add_tags = pick(args.add_tag, "add_tags")
-        if add_tags:
-            existing = list(meta.get("tags", []))
-            for t in normalize_list(add_tags):
-                if t not in existing:
-                    existing.append(t)
-            meta["tags"] = existing
-
-        remove_tags = pick(args.remove_tag, "remove_tags")
-        if remove_tags:
-            drop = {t.lower() for t in normalize_list(remove_tags)}
-            meta["tags"] = [t for t in meta.get("tags", []) if t.lower() not in drop]
 
         sources_replace = pick(args.sources, "sources")
         if sources_replace is not None:
@@ -522,8 +518,9 @@ def cmd_update(args: argparse.Namespace, root: Path) -> None:
         "id": meta["id"],
         "when": meta["when"],
         "updated": meta["updated"],
+        "kind": meta["kind"],
+        "topics": meta["topics"],
         "title": meta["title"],
-        "tags": meta["tags"],
         "body_preview": body[:160] + ("..." if len(body) > 160 else ""),
         "path": p.relative_to(root).as_posix(),
     }, ensure_ascii=False))
@@ -572,17 +569,16 @@ def cmd_restore(args: argparse.Namespace, root: Path) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="thoth-mem", description="Thoth v2 episodic memory CRUD CLI")
+    p = argparse.ArgumentParser(prog="thoth-mem", description="Thoth episodic memory CRUD CLI")
     p.add_argument("--root", help="Instance root (default: the current folder; mainly for tests)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create", help="Create a new episode (prefer --json <<'EOF' to avoid shell escaping issues)")
     c.add_argument("--kind", choices=VALID_KINDS, default=None)
-    c.add_argument("--topic", help="Lowercase topic slug (e.g. projects/alpha)")
+    c.add_argument("--topics", help="Comma-separated lowercase topic slugs (e.g. projects/alpha,finance/budget)")
     c.add_argument("--title", help="One-line summary title")
     c.add_argument("--body", help="Markdown body (or pipe via stdin)")
     c.add_argument("--when", help="Timestamp (YYYY-MM-DD, 'YYYY-MM-DD HH:MM', ISO-8601, or relative like 7d)")
-    c.add_argument("--tags", help="Comma-separated tags")
     c.add_argument("--sources", help="Comma-separated source URLs/paths")
     c.add_argument("--id", help="Optional explicit ID")
     c.add_argument("--json", action="store_true", help="Read JSON object on stdin (strictly validates keys)")
@@ -593,9 +589,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--archived", action="store_true", help="Also look in .archive/")
 
     ls = sub.add_parser("list", help="List episodes chronologically with optional filters and date ranges")
-    ls.add_argument("--topic", help="Exact topic or path-prefix match (e.g. 'media' matches 'media/...')")
+    ls.add_argument("--topic", action="append", help="Exact topic or path-prefix match (repeatable for AND)")
     ls.add_argument("--kind", choices=VALID_KINDS)
-    ls.add_argument("--tag", action="append", help="Require tag match (repeatable for AND)")
     ls.add_argument("--since", help="Inclusive start: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1mo)")
     ls.add_argument("--until", help="Inclusive end: YYYY-MM-DD, ISO-8601, or relative")
     ls.add_argument("--limit", type=int, default=0, help="Max entries to return (0 = all)")
@@ -610,11 +605,11 @@ def build_parser() -> argparse.ArgumentParser:
     tp.add_argument("--limit", type=int, default=0, help="Max topics to return (0 = all)")
     tp.add_argument("--offset", type=int, default=0, help="Number of topics to skip (for pagination)")
 
-    s = sub.add_parser("search", help="Keyword or exact URL/ID search across title, topic, tags, sources, and body")
+    s = sub.add_parser("search", help="Keyword or exact URL/ID search across topics, title, sources, and body")
     s.add_argument("query")
     s.add_argument("--exact", action="store_true", help="Match exact case-insensitive substring instead of splitting words")
-    s.add_argument("--topic", help="Optional topic or path-prefix filter")
-    s.add_argument("--tag", action="append", help="Require tag match (repeatable for AND)")
+    s.add_argument("--topic", action="append", help="Optional topic or path-prefix filter (repeatable for AND)")
+    s.add_argument("--kind", choices=VALID_KINDS, help="Optional kind filter")
     s.add_argument("--since", help="Inclusive start: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1mo)")
     s.add_argument("--until", help="Inclusive end: YYYY-MM-DD, ISO-8601, or relative")
     s.add_argument("--all-terms", action="store_true", help="Require all query terms to match")
@@ -624,12 +619,11 @@ def build_parser() -> argparse.ArgumentParser:
     u = sub.add_parser("update", help="Update an existing episode by ID (preserves 'when', stamps 'updated')")
     u.add_argument("id")
     u.add_argument("--title")
-    u.add_argument("--topic")
+    u.add_argument("--topics", help="Replace topics (comma-separated)")
+    u.add_argument("--add-topic", help="Append topic(s) (comma-separated)")
+    u.add_argument("--remove-topic", help="Remove topic(s) (comma-separated)")
     u.add_argument("--kind", choices=VALID_KINDS)
     u.add_argument("--when", help="Explicitly fix occurrence timestamp (rare)")
-    u.add_argument("--tags", help="Replace tags (comma-separated)")
-    u.add_argument("--add-tag", help="Append tag(s) (comma-separated)")
-    u.add_argument("--remove-tag", help="Remove tag(s) (comma-separated)")
     u.add_argument("--sources", help="Replace sources (comma-separated)")
     u.add_argument("--add-source", help="Append source(s) (comma-separated)")
     u.add_argument("--body", help="Replace Markdown body")

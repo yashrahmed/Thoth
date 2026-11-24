@@ -34,7 +34,7 @@ Input: a video URL or file. Collect what is said and shown; don't ask questions 
 
 Every attempt, even partial or blocked, gets one `action` episode via the `memory` skill (no summary or analysis):
 
-- `topic`: `<category>/<slug>`; `tags`: `["video", "capture"]`
+- `topics`: `["<category>/<slug>"]` (plus any related topics)
 - `title`: `Watched video: <Title>`, or `Attempted video (blocked): <Title>`
 - `sources`: the video URL (or the local file's name) plus only artifacts actually created, as instance-relative paths
 - `body`: runtime, extent viewed (sampled by seeking / continuous / partial), transcript status, screenshot count, gaps

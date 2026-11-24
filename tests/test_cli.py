@@ -1,4 +1,4 @@
-"""Tests for thoth-mem CLI: CRUD, strict JSON keys, multi-tag AND, URL search, ranges, secrets, flock."""
+"""Tests for thoth-mem CLI: CRUD, multi-topic, kind=rule, strict JSON keys, URL search, pagination, ranges, secrets, flock."""
 
 from __future__ import annotations
 
@@ -39,9 +39,8 @@ class TestThothMemCLI(unittest.TestCase):
     def test_create_json_preserves_dollar_and_crud_lifecycle(self) -> None:
         payload = {
             "kind": "decision",
-            "topic": "gear/desk-mat",
+            "topics": ["gear/desk-mat", "finance/home-budget"],
             "title": "Pick desk mat under $75",
-            "tags": ["gear", "open"],
             "sources": ["https://example.com/desk-mat"],
             "when": "2026-11-15 14:30:00",
             "body": "Budget is $75 max.",
@@ -51,9 +50,11 @@ class TestThothMemCLI(unittest.TestCase):
         ep_id = res["id"]
         self.assertRegex(ep_id, r"^\d{8}-\d{6}-[0-9a-f]{4}$")
         self.assertIn("$75", res["title"])
+        self.assertEqual(res["topics"], ["gear/desk-mat", "finance/home-budget"])
 
         rec = json.loads(run_cli(self.root, "read", ep_id).stdout)
         self.assertNotIn("updated", rec["meta"])
+        self.assertNotIn("tags", rec["meta"])
         orig_when = rec["meta"]["when"]
 
         upd = json.loads(
@@ -62,12 +63,27 @@ class TestThothMemCLI(unittest.TestCase):
                 "update",
                 ep_id,
                 "--json",
-                stdin_data=json.dumps({"append": "Ordered for $59.", "remove_tags": ["open"], "add_tags": ["done"]}),
+                stdin_data=json.dumps({
+                    "append": "Ordered for $59.",
+                    "remove_topics": ["finance/home-budget"],
+                    "add_topics": ["orders/desk-mat"],
+                }),
             ).stdout
         )
         self.assertEqual(upd["when"], orig_when)
         self.assertTrue(upd["updated"])
-        self.assertEqual(upd["tags"], ["gear", "done"])
+        self.assertEqual(upd["topics"], ["gear/desk-mat", "orders/desk-mat"])
+
+        # Removing all topics is rejected.
+        empty_topics = run_cli(
+            self.root,
+            "update",
+            ep_id,
+            "--json",
+            stdin_data=json.dumps({"remove_topics": ["gear/desk-mat", "orders/desk-mat"]}),
+            check=False,
+        )
+        self.assertNotEqual(empty_topics.returncode, 0)
 
         bad = run_cli(self.root, "update", ep_id, "--append", "nope", "--expected-updated", "wrong-ts", check=False)
         self.assertNotEqual(bad.returncode, 0)
@@ -79,22 +95,21 @@ class TestThothMemCLI(unittest.TestCase):
         self.assertEqual(json.loads(run_cli(self.root, "list").stdout)["count"], 1)
 
     def test_unknown_json_keys_and_ambiguous_duration_rejected(self) -> None:
-        bad_create = run_cli(
-            self.root,
-            "create",
-            "--json",
-            stdin_data=json.dumps({"kind": "note", "topic": "test", "title": "T", "body": "B", "tag": ["x"]}),
-            check=False,
-        )
-        self.assertNotEqual(bad_create.returncode, 0)
-        self.assertIn("Unknown JSON key", bad_create.stderr)
+        # Legacy 'tags' and singular 'topic' are rejected on write.
+        for bad_payload in (
+            {"kind": "note", "topics": ["test"], "title": "T", "body": "B", "tags": ["x"]},
+            {"kind": "note", "topic": "test", "title": "T", "body": "B"},
+        ):
+            bad_create = run_cli(self.root, "create", "--json", stdin_data=json.dumps(bad_payload), check=False)
+            self.assertNotEqual(bad_create.returncode, 0)
+            self.assertIn("Unknown JSON key", bad_create.stderr)
 
         ep = json.loads(
             run_cli(
                 self.root,
                 "create",
                 "--json",
-                stdin_data=json.dumps({"kind": "note", "topic": "test", "title": "T", "body": "B"}),
+                stdin_data=json.dumps({"kind": "note", "topics": ["test"], "title": "T", "body": "B"}),
             ).stdout
         )
         bad_upd = run_cli(
@@ -102,7 +117,7 @@ class TestThothMemCLI(unittest.TestCase):
             "update",
             ep["id"],
             "--json",
-            stdin_data=json.dumps({"add_tag": ["done"]}),
+            stdin_data=json.dumps({"add_tags": ["done"]}),
             check=False,
         )
         self.assertNotEqual(bad_upd.returncode, 0)
@@ -116,11 +131,31 @@ class TestThothMemCLI(unittest.TestCase):
         self.assertNotEqual(bad_root.returncode, 0)
         self.assertIn("Thoth engine directory", bad_root.stderr)
 
-    def test_date_ranges_multi_tag_topics_and_source_search(self) -> None:
+    def test_date_ranges_multi_topic_rules_and_source_search(self) -> None:
         rows = [
-            {"when": "2026-10-28 09:00:00", "kind": "commitment", "topic": "orders/widget", "title": "Open order", "tags": ["commitment", "open"], "sources": ["https://shop.example.com/order/991"], "body": "Follow up at 12:30"},
-            {"when": "2026-11-10 10:00:00", "kind": "commitment", "topic": "orders/widget", "title": "Closed order", "tags": ["commitment", "done"], "sources": ["https://other.example.com/item/1"], "body": "Delivered"},
-            {"when": "2026-11-18 18:00:00", "kind": "event", "topic": "planning/thoth", "title": "Thoth design", "tags": ["planning"], "body": "Chose CLI"},
+            {
+                "when": "2026-10-28 09:00:00",
+                "kind": "commitment",
+                "topics": ["orders/widget", "home/office-chair"],
+                "title": "Combined errand",
+                "sources": ["https://shop.example.com/order/991"],
+                "body": "Follow up at 12:30",
+            },
+            {
+                "when": "2026-11-10 10:00:00",
+                "kind": "rule",
+                "topics": ["vehicles/ev-search"],
+                "title": "Require NACS port",
+                "sources": ["https://other.example.com/item/1"],
+                "body": "Always require a physical NACS port.",
+            },
+            {
+                "when": "2026-11-18 18:00:00",
+                "kind": "rule",
+                "topics": ["agent/scheduling", "home/office-chair"],
+                "title": "Combine same-location errands",
+                "body": "Check same-day errands before adding a second trip.",
+            },
         ]
         for r in rows:
             run_cli(self.root, "create", "--json", stdin_data=json.dumps(r))
@@ -128,26 +163,37 @@ class TestThothMemCLI(unittest.TestCase):
         r1 = json.loads(run_cli(self.root, "list", "--since", "2026-10-25", "--until", "2026-11-12").stdout)
         self.assertEqual(r1["count"], 2)
 
-        open_c = json.loads(run_cli(self.root, "list", "--tag", "commitment", "--tag", "open").stdout)
-        self.assertEqual(open_c["count"], 1)
-        self.assertEqual(open_c["episodes"][0]["title"], "Open order")
+        # Multi-topic retrieval: both the order errand and scheduling rule appear under home/office-chair.
+        chair = json.loads(run_cli(self.root, "list", "--topic", "home/office-chair").stdout)
+        self.assertEqual(chair["count"], 2)
+
+        # Repeatable --topic = AND intersection.
+        both = json.loads(run_cli(self.root, "list", "--topic", "home/office-chair", "--topic", "orders").stdout)
+        self.assertEqual(both["count"], 1)
+        self.assertEqual(both["episodes"][0]["title"], "Combined errand")
+
+        # Standing rules queryable across all topics via --kind rule.
+        rules = json.loads(run_cli(self.root, "list", "--kind", "rule").stdout)
+        self.assertEqual(rules["count"], 2)
 
         url_hit = json.loads(run_cli(self.root, "search", "https://shop.example.com/order/991").stdout)
         self.assertEqual(url_hit["count"], 1)
-        self.assertEqual(url_hit["hits"][0]["title"], "Open order")
+        self.assertEqual(url_hit["hits"][0]["title"], "Combined errand")
 
         t_hit = json.loads(run_cli(self.root, "search", "12:30").stdout)
         self.assertEqual(t_hit["count"], 1)
 
+        # Topics index counts each topic independently across multi-topic episodes.
         tp = json.loads(run_cli(self.root, "topics").stdout)
-        self.assertEqual(tp["count"], 2)
+        counts = {row["topic"]: row["count"] for row in tp["topics"]}
+        self.assertEqual(counts, {"orders/widget": 1, "home/office-chair": 2, "vehicles/ev-search": 1, "agent/scheduling": 1})
 
     def test_secret_rejection_and_parallel_flock(self) -> None:
         bad = run_cli(
             self.root,
             "create",
             "--json",
-            stdin_data=json.dumps({"kind": "note", "topic": "sec", "title": "Key", "body": "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ1234"}),
+            stdin_data=json.dumps({"kind": "note", "topics": ["sec"], "title": "Key", "body": "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ1234"}),
             check=False,
         )
         self.assertNotEqual(bad.returncode, 0)
@@ -158,7 +204,7 @@ class TestThothMemCLI(unittest.TestCase):
                 self.root,
                 "create",
                 "--json",
-                stdin_data=json.dumps({"kind": "event", "topic": "concurrency/test", "title": f"Write {i}", "body": f"Payload {i}"}),
+                stdin_data=json.dumps({"kind": "event", "topics": ["concurrency/test"], "title": f"Write {i}", "body": f"Payload {i}"}),
             ).stdout
             return json.loads(out)
 
@@ -173,7 +219,7 @@ class TestThothMemCLI(unittest.TestCase):
             payload = {
                 "when": f"2026-11-{i + 1:02d} 10:00:00",
                 "kind": "note",
-                "topic": topic,
+                "topics": [topic],
                 "title": f"Chair entry {i:02d}",
                 "body": f"Chair research item {i:02d}",
             }

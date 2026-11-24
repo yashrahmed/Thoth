@@ -167,6 +167,64 @@ class TestThothMemCLI(unittest.TestCase):
         self.assertEqual(len({r["id"] for r in results}), 12)
         self.assertEqual(json.loads(run_cli(self.root, "list").stdout)["count"], 12)
 
+    def test_pagination_for_list_search_and_topics(self) -> None:
+        for i in range(18):
+            topic = f"paging/topic-{i % 3}"
+            payload = {
+                "when": f"2026-11-{i + 1:02d} 10:00:00",
+                "kind": "note",
+                "topic": topic,
+                "title": f"Chair entry {i:02d}",
+                "body": f"Chair research item {i:02d}",
+            }
+            run_cli(self.root, "create", "--json", stdin_data=json.dumps(payload))
+
+        # search defaults to --limit 15 and reports total + next_offset
+        s1 = json.loads(run_cli(self.root, "search", "chair").stdout)
+        self.assertEqual(s1["count"], 15)
+        self.assertEqual(s1["total"], 18)
+        self.assertEqual(s1["offset"], 0)
+        self.assertEqual(s1["limit"], 15)
+        self.assertTrue(s1["has_more"])
+        self.assertEqual(s1["next_offset"], 15)
+
+        s2 = json.loads(run_cli(self.root, "search", "chair", "--offset", str(s1["next_offset"])).stdout)
+        self.assertEqual(s2["count"], 3)
+        self.assertEqual(s2["total"], 18)
+        self.assertEqual(s2["offset"], 15)
+        self.assertFalse(s2["has_more"])
+        self.assertNotIn("next_offset", s2)
+        self.assertEqual(len({h["id"] for h in s1["hits"] + s2["hits"]}), 18)
+
+        # --limit 0 returns all hits in one shot
+        s_all = json.loads(run_cli(self.root, "search", "chair", "--limit", "0").stdout)
+        self.assertEqual(s_all["count"], 18)
+        self.assertEqual(s_all["total"], 18)
+        self.assertFalse(s_all["has_more"])
+        self.assertNotIn("limit", s_all)
+
+        # list exact-multiple page boundary (6 items in topic-0, limit 3)
+        l1 = json.loads(run_cli(self.root, "list", "--topic", "paging/topic-0", "--limit", "3").stdout)
+        self.assertEqual((l1["count"], l1["total"], l1["has_more"], l1["next_offset"]), (3, 6, True, 3))
+        l2 = json.loads(run_cli(self.root, "list", "--topic", "paging/topic-0", "--limit", "3", "--offset", "3").stdout)
+        self.assertEqual((l2["count"], l2["total"], l2["has_more"]), (3, 6, False))
+        self.assertNotIn("next_offset", l2)
+
+        # offset past end returns empty page with total preserved
+        past = json.loads(run_cli(self.root, "list", "--offset", "50").stdout)
+        self.assertEqual((past["count"], past["total"], past["offset"], past["has_more"]), (0, 18, 50, False))
+
+        # topics pagination
+        t1 = json.loads(run_cli(self.root, "topics", "--limit", "2").stdout)
+        self.assertEqual((t1["count"], t1["total"], t1["has_more"], t1["next_offset"]), (2, 3, True, 2))
+        t2 = json.loads(run_cli(self.root, "topics", "--limit", "2", "--offset", "2").stdout)
+        self.assertEqual((t2["count"], t2["total"], t2["has_more"]), (1, 3, False))
+
+        # negative limit or offset rejected
+        for bad_args in (("list", "--limit", "-1"), ("list", "--offset", "-1"), ("search", "chair", "--offset", "-2")):
+            proc = run_cli(self.root, *bad_args, check=False)
+            self.assertNotEqual(proc.returncode, 0, bad_args)
+
 
 if __name__ == "__main__":
     unittest.main()

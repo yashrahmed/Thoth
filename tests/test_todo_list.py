@@ -165,6 +165,9 @@ class TestTodoListCLI(unittest.TestCase):
         self.create({"title": "second source", "source_keys": ["gmail:m2"]})
         combo = j(run_cli(self.root, "list", "--source", "chat:thread-9,gmail:m2", "--limit", "1"))
         self.assertEqual(combo["count"], 1)
+        self.assertEqual(combo["total"], 2)
+        self.assertTrue(combo["has_more"])
+        self.assertEqual(combo["next_offset"], 1)
         self.assertEqual(set(combo["matched_keys"]), {"chat:thread-9", "gmail:m2"})
         self.assertEqual(combo["unmatched_keys"], [])
 
@@ -191,7 +194,34 @@ class TestTodoListCLI(unittest.TestCase):
         self.assertEqual([h["id"] for h in hits], ["t-0001"])
         url_hits = j(run_cli(self.root, "search", "https://example.com/order/1"))["hits"]
         self.assertEqual(len(url_hits), 1)
-        self.assertEqual(j(run_cli(self.root, "search", "nothing-here"))["count"], 0)
+        empty = j(run_cli(self.root, "search", "nothing-here"))
+        self.assertEqual((empty["count"], empty["total"], empty["has_more"]), (0, 0, False))
+
+    def test_pagination_for_list_and_search(self) -> None:
+        for i in range(17):
+            self.create({"title": f"Chair task {i:02d}"})
+
+        # list paging
+        p1 = j(run_cli(self.root, "list", "--limit", "6"))
+        self.assertEqual((p1["count"], p1["total"], p1["offset"], p1["has_more"], p1["next_offset"]), (6, 17, 0, True, 6))
+        p2 = j(run_cli(self.root, "list", "--limit", "6", "--offset", "6"))
+        self.assertEqual((p2["count"], p2["total"], p2["offset"], p2["has_more"], p2["next_offset"]), (6, 17, 6, True, 12))
+        p3 = j(run_cli(self.root, "list", "--limit", "6", "--offset", "12"))
+        self.assertEqual((p3["count"], p3["total"], p3["offset"], p3["has_more"]), (5, 17, 12, False))
+        self.assertNotIn("next_offset", p3)
+        self.assertEqual(len({t["id"] for t in p1["tasks"] + p2["tasks"] + p3["tasks"]}), 17)
+
+        # search default limit 15 + --limit 0
+        s1 = j(run_cli(self.root, "search", "chair"))
+        self.assertEqual((s1["count"], s1["total"], s1["has_more"], s1["next_offset"]), (15, 17, True, 15))
+        s2 = j(run_cli(self.root, "search", "chair", "--offset", "15"))
+        self.assertEqual((s2["count"], s2["total"], s2["has_more"]), (2, 17, False))
+        s_all = j(run_cli(self.root, "search", "chair", "--limit", "0"))
+        self.assertEqual((s_all["count"], s_all["total"], s_all["has_more"]), (17, 17, False))
+
+        # negative limit or offset rejected
+        for bad_args in (("list", "--limit", "-1"), ("list", "--offset", "-1"), ("search", "chair", "--limit", "-3")):
+            self.assertNotEqual(run_cli(self.root, *bad_args, check=False).returncode, 0, bad_args)
 
     def test_update_fields_clear_dates_and_stale_revision(self) -> None:
         self.create({"title": "x", "due": "2026-12-01", "memory_ids": ["20261120-090700-aa7c"]})

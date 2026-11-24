@@ -179,3 +179,25 @@ def normalize_list(val: Any) -> list[str]:
     if isinstance(val, list):
         return [str(x).strip() for x in val if str(x).strip()]
     return [x.strip() for x in str(val).split(",") if x.strip()]
+
+
+def paginate(items: list[Any], *, limit: int = 0, offset: int = 0) -> tuple[list[Any], dict[str, Any]]:
+    """Slice `items` by `offset` and `limit` (0 = all) and return `(page, pagination_meta)`."""
+    if offset < 0:
+        fail(f"--offset must be >= 0, got {offset}")
+    if limit < 0:
+        fail(f"--limit must be >= 0, got {limit}")
+    total = len(items)
+    page = items[offset : offset + limit] if limit > 0 else items[offset:]
+    has_more = offset + len(page) < total
+    meta: dict[str, Any] = {
+        "count": len(page),
+        "total": total,
+        "offset": offset,
+        "has_more": has_more,
+    }
+    if limit > 0:
+        meta["limit"] = limit
+    if has_more:
+        meta["next_offset"] = offset + len(page)
+    return page, meta

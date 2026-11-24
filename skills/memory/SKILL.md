@@ -16,10 +16,11 @@ thoth-mem topics --since 30d                       # discover topics first
 thoth-mem list --topic projects/alpha --full       # exact topic or prefix; also --since/--until (YYYY-MM-DD or 24h/7d/2w/1mo), --kind
 thoth-mem list --tag rule --full                   # standing rules
 thoth-mem list --tag commitment --tag open --full  # open commitments (repeated --tag = AND)
-thoth-mem search "query or URL"                    # URLs/IDs match literally; --exact to force
+thoth-mem search "query or URL"                    # URLs/IDs match literally; --exact to force; default --limit 15 (0 = all)
 thoth-mem read <id>
 ```
 
+- `list`, `search`, and `topics` return `count` (in this response), `total` (all matches), `offset`, `has_more`, and `next_offset` when more exist; page with `--offset` / `--limit`.
 - Report the **latest** state: later episodes on a topic supersede earlier ones (compare `when`).
 - Nothing found → say it isn't recorded. Never fabricate. Cite episode IDs for key facts and histories.
 

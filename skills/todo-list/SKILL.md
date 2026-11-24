@@ -22,7 +22,7 @@ todo-list list --actionable                   # doable today
 todo-list list --until 2026-11-22T23:59       # earlier of due/scheduled by then (bare date = end of that day); undated always
 todo-list list --status all --full            # everything, with notes and log
 todo-list list --source <key> --source <key>  # batch dedupe check → matched_keys / unmatched_keys
-todo-list search "query, URL, or source key"
+todo-list search "query, URL, or source key"  # default --limit 15 (0 = all); list/search return count, total, offset, has_more, next_offset
 todo-list read t-42                           # live or archived; --md for the raw file
 ```
 

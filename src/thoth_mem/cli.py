@@ -28,6 +28,7 @@ from thoth_core import (
     fail,
     normalize_list,
     now_local,
+    paginate,
     parse_yaml_value,
     read_json_stdin,
     resolve_root,
@@ -329,9 +330,8 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
         items.append(row)
 
     items.sort(key=lambda r: (r.get("when") or "", r.get("id") or ""), reverse=args.newest_first)
-    if args.limit and args.limit > 0:
-        items = items[: args.limit]
-    print(json.dumps({"ok": True, "count": len(items), "episodes": items}, ensure_ascii=False, indent=2))
+    page, page_meta = paginate(items, limit=args.limit, offset=args.offset)
+    print(json.dumps({"ok": True, **page_meta, "episodes": page}, ensure_ascii=False, indent=2))
 
 
 def cmd_topics(args: argparse.Namespace, root: Path) -> None:
@@ -362,8 +362,9 @@ def cmd_topics(args: argparse.Namespace, root: Path) -> None:
                 cur["latest_when"] = when_val
                 cur["latest_id"] = m.get("id")
                 cur["latest_title"] = m.get("title")
-    rows = sorted(by_topic.values(), key=lambda r: r["latest_when"], reverse=True)
-    print(json.dumps({"ok": True, "count": len(rows), "topics": rows}, ensure_ascii=False, indent=2))
+    rows = sorted(by_topic.values(), key=lambda r: (r["latest_when"], r["topic"]), reverse=True)
+    page, page_meta = paginate(rows, limit=args.limit, offset=args.offset)
+    print(json.dumps({"ok": True, **page_meta, "topics": page}, ensure_ascii=False, indent=2))
 
 
 def cmd_search(args: argparse.Namespace, root: Path) -> None:
@@ -418,10 +419,9 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
             "path": p.relative_to(root).as_posix(),
             "snippet": rec["body"][:280] + ("..." if len(rec["body"]) > 280 else ""),
         })
-    hits.sort(key=lambda h: (h["score"], h.get("when") or ""), reverse=True)
-    if args.limit and args.limit > 0:
-        hits = hits[: args.limit]
-    print(json.dumps({"ok": True, "query": raw_query, "count": len(hits), "hits": hits}, ensure_ascii=False, indent=2))
+    hits.sort(key=lambda h: (h["score"], h.get("when") or "", h.get("id") or ""), reverse=True)
+    page, page_meta = paginate(hits, limit=args.limit, offset=args.offset)
+    print(json.dumps({"ok": True, "query": raw_query, **page_meta, "hits": page}, ensure_ascii=False, indent=2))
 
 
 def cmd_update(args: argparse.Namespace, root: Path) -> None:
@@ -598,7 +598,8 @@ def build_parser() -> argparse.ArgumentParser:
     ls.add_argument("--tag", action="append", help="Require tag match (repeatable for AND)")
     ls.add_argument("--since", help="Inclusive start: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1mo)")
     ls.add_argument("--until", help="Inclusive end: YYYY-MM-DD, ISO-8601, or relative")
-    ls.add_argument("--limit", type=int, default=0)
+    ls.add_argument("--limit", type=int, default=0, help="Max entries to return (0 = all)")
+    ls.add_argument("--offset", type=int, default=0, help="Number of entries to skip (for pagination)")
     ls.add_argument("--newest-first", action="store_true")
     ls.add_argument("--full", action="store_true", help="Include full Markdown body and sources")
     ls.add_argument("--archived", action="store_true")
@@ -606,6 +607,8 @@ def build_parser() -> argparse.ArgumentParser:
     tp = sub.add_parser("topics", help="Topic index (counts + latest timestamp/title)")
     tp.add_argument("--since", help="Optional inclusive start bound")
     tp.add_argument("--until", help="Optional inclusive end bound")
+    tp.add_argument("--limit", type=int, default=0, help="Max topics to return (0 = all)")
+    tp.add_argument("--offset", type=int, default=0, help="Number of topics to skip (for pagination)")
 
     s = sub.add_parser("search", help="Keyword or exact URL/ID search across title, topic, tags, sources, and body")
     s.add_argument("query")
@@ -615,7 +618,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--since", help="Inclusive start: YYYY-MM-DD, ISO-8601, or relative (24h, 7d, 2w, 1mo)")
     s.add_argument("--until", help="Inclusive end: YYYY-MM-DD, ISO-8601, or relative")
     s.add_argument("--all-terms", action="store_true", help="Require all query terms to match")
-    s.add_argument("--limit", type=int, default=15)
+    s.add_argument("--limit", type=int, default=15, help="Max hits to return (default: 15; 0 = all)")
+    s.add_argument("--offset", type=int, default=0, help="Number of hits to skip (for pagination)")
 
     u = sub.add_parser("update", help="Update an existing episode by ID (preserves 'when', stamps 'updated')")
     u.add_argument("id")

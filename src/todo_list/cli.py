@@ -32,6 +32,7 @@ from thoth_core import (
     fail,
     normalize_list,
     now_local,
+    paginate,
     parse_yaml_value,
     read_json_stdin,
     resolve_root,
@@ -458,13 +459,12 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
                 continue
         rows.append(t)
     owners = {k: t["meta"]["id"] for t in rows for k in t["meta"]["source_keys"] if k in source_filter}
-    if args.limit and args.limit > 0:
-        rows = rows[: args.limit]
+    page, page_meta = paginate(rows, limit=args.limit, offset=args.offset)
 
     out: dict[str, Any] = {
         "ok": True,
-        "count": len(rows),
-        "tasks": [task_view(root, t, full=args.full) for t in rows],
+        **page_meta,
+        "tasks": [task_view(root, t, full=args.full) for t in page],
     }
     if source_filter:
         out["matched_keys"] = owners
@@ -503,9 +503,8 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
         row["snippet"] = t["notes"][:200] + ("..." if len(t["notes"]) > 200 else "")
         hits.append(row)
     hits.sort(key=lambda h: (-h["score"], int(h["id"][2:])))
-    if args.limit and args.limit > 0:
-        hits = hits[: args.limit]
-    out: dict[str, Any] = {"ok": True, "query": raw_query, "count": len(hits), "hits": hits}
+    page, page_meta = paginate(hits, limit=args.limit, offset=args.offset)
+    out: dict[str, Any] = {"ok": True, "query": raw_query, **page_meta, "hits": page}
     if warnings:
         out["warnings"] = warnings
     print(json.dumps(out, ensure_ascii=False, indent=2))
@@ -698,7 +697,8 @@ def build_parser() -> argparse.ArgumentParser:
     ls.add_argument("--due-by", help="Only tasks due on or before YYYY-MM-DD")
     ls.add_argument("--until", help="Only tasks whose earlier of due/scheduled is at or before YYYY-MM-DD[THH:MM] (bare date = end of that day); undated tasks always pass")
     ls.add_argument("--source", action="append", help="Match source keys (repeatable/comma-separated); searches every status incl. archived")
-    ls.add_argument("--limit", type=int, default=0)
+    ls.add_argument("--limit", type=int, default=0, help="Max tasks to return (0 = all)")
+    ls.add_argument("--offset", type=int, default=0, help="Number of tasks to skip (for pagination)")
     ls.add_argument("--full", action="store_true", help="Include notes, log, and timestamps")
     ls.add_argument("--archived", action="store_true", help="Also include archived tasks")
 
@@ -708,7 +708,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--status", action="append", choices=STATUSES + ("all",), help="Status filter (default: all)")
     s.add_argument("--all-terms", action="store_true", help="Require all query terms to match")
     s.add_argument("--archived", action="store_true", help="Also search archived tasks")
-    s.add_argument("--limit", type=int, default=15)
+    s.add_argument("--limit", type=int, default=15, help="Max hits to return (default: 15; 0 = all)")
+    s.add_argument("--offset", type=int, default=0, help="Number of hits to skip (for pagination)")
 
     u = sub.add_parser("update", help="Update a task by ID (bumps revision; logs status changes)")
     u.add_argument("id")

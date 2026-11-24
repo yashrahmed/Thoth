@@ -5,7 +5,9 @@ description: Log, count, fix, or remove workout sessions in the owner's Google D
 
 # Log Workout
 
-The log is a table (`Date` | `Workout details`) in the owner's Google Doc titled **Workout Log**; it is the source of truth (never move or copy it). Find it by searching Drive for that title; if none or several match, ask. Use the host's Google Drive/Docs connector; if none is connected, ask the owner to connect it.
+The log is a table (`Date` | `Workout details`) in the owner's Google Doc titled **Workout Log**; it is the source of truth (never move or copy it). Find it by searching Drive for that title; if none or several match, ask. Read it with the host's Google Drive/Docs connector; if none is connected, ask the owner to connect it.
+
+**Writes go to a Codex subagent.** Every add, change, or delete in the doc is delegated to a Codex subagent (the host's cross-provider delegation tool), because the Claude Drive connector can't edit Doc contents. Give it the doc ID, the current table, the exact target table, and the Edit rules below; tell it to edit in place and to stop and report if it can't. When it finishes, read the doc back yourself before reporting.
 
 ## Entries
 

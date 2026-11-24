@@ -31,5 +31,5 @@ Search the topic folder for links into the capture's `screenshots/` (`src=`/`hre
 ## 4. Log and verify
 
 - Confirm every link in the edited reports and tombstones resolves.
-- Log one `action` episode via the `memory` skill: `topics`: `["<category>/<slug>"]` (or `["housekeeping/video-captures"]` for a batch), title `Pruned video captures: <title or count>`, sources = the tombstone paths, body = frames and MB freed per capture.
+- Log one episode via the `memory` skill: `topics`: `{"<category>/<slug>": "Pruned video captures: <title or count>"}` (or `housekeeping/video-captures` for a batch), omit `kind`, sources = the tombstone paths, body = frames and MB freed per capture.
 - Report the space freed. Deleting tracked files doesn't shrink git history; say so if the files were committed.

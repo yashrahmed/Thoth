@@ -32,13 +32,12 @@ Input: a video URL or file. Collect what is said and shown; don't ask questions 
 
 ## 5. Log and verify
 
-Every attempt, even partial or blocked, gets one `action` episode via the `memory` skill (no summary or analysis):
+Every attempt, even partial or blocked, gets one episode via the `memory` skill (no summary or analysis; omit `kind`):
 
-- `topics`: `["<category>/<slug>"]` (plus any related topics)
-- `title`: `Watched video: <Title>`, or `Attempted video (blocked): <Title>`
+- `topics`: `{"<category>/<slug>": "Watched video: <Title>"}` (or `Attempted video (blocked): <Title>`, plus any related topics with topic-specific summaries)
 - `sources`: the video URL (or the local file's name) plus only artifacts actually created, as instance-relative paths
 - `body`: runtime, extent viewed (sampled by seeking / continuous / partial), transcript status, screenshot count, gaps
 
 Verify every local path in `capture-log.md` and `sources` exists under `work-artifacts/`. Return links to the episode and capture folder, plus transcript status, screenshot count, and gaps.
 
-A later report built from the capture goes to `work-artifacts/<topic>/<Readable report name>.html` (or `.md`), with a new `action` episode citing both report and capture. Frames the report shows are copied to `work-artifacts/<topic>/assets/` and linked there, never into `screenshots/`.
+A later report built from the capture goes to `work-artifacts/<topic>/<Readable report name>.html` (or `.md`), with a new episode citing both report and capture. Frames the report shows are copied to `work-artifacts/<topic>/assets/` and linked there, never into `screenshots/`.

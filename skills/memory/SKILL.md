@@ -1,6 +1,6 @@
 ---
 name: memory
-description: Read, search, create, update, or archive episodic memories via the thoth-mem CLI. Use when recalling past events, dates, decisions, rules, or commitments, or when recording new durable facts and updates.
+description: Read, search, create, update, or archive episodic memories via the thoth-mem CLI. Use when recalling past events, dates, decisions, or standing rules, or when recording new durable facts and updates.
 ---
 
 # Episodic Memory (`thoth-mem`)
@@ -12,7 +12,7 @@ Episodes live in `memory/episodes/YYYY-MM/<id>.md` (archive: `memory/episodes/.a
 Start narrow:
 
 ```sh
-thoth-mem topics --since 30d                          # discover topics first
+thoth-mem topics --since 30d                          # discover topics first (counts + latest_summary)
 thoth-mem list --topic projects/alpha --full          # exact topic or prefix (repeatable for AND); also --since/--until (YYYY-MM-DD or 24h/7d/2w/1mo), --kind
 thoth-mem list --kind rule --full                     # standing rules across all topics
 thoth-mem search "query or URL"                       # URLs/IDs match literally; --exact to force; default --limit 15 (0 = all)
@@ -25,24 +25,23 @@ thoth-mem read <id>
 
 ## Write
 
-- **One episode = one dated occurrence:** a decision, case update, completed action, commitment, or explicit rule. Skip pure Q&A, routine noise, transient tool errors, guesses about the user, and secrets (redact first).
+- **One episode = one dated occurrence:** a decision, case update, completed action, or explicit rule. Skip pure Q&A, routine noise, transient tool errors, guesses about the user, and secrets (redact first).
 - **Grounded only:** what the user said or what happened; put inference under `## Assistant Note`.
-- **Multi-topic:** `topics` is a non-empty list of lowercase `<category>/<slug>` slugs. Reuse existing topics, and include **every** relevant topic when an occurrence spans subjects (e.g. a combined errand or a scheduling lesson tied to a shopping trip).
-- **Standing rules:** need explicit intent ("always", "from now on", "stop doing X", "remember"); record with `kind: "rule"` on the relevant topic(s) (or `rules/<slug>` for general rules). Open/done state for commitments lives in `todo-list`, not memory.
+- **Multi-topic `{slug: summary}` map:** `topics` is a non-empty JSON object mapping each canonical lowercase `<category>/<slug>` to a concise one-line summary of what the episode means **for that topic**. Reuse existing topic slugs, and include every relevant topic when an occurrence spans subjects.
+- **Optional `kind`:** leave `kind` out for normal episodes. Only populate `kind` when a tool/skill queries it — currently only `"rule"` (standing rules with explicit user intent: "always", "from now on", "stop doing X", "remember"). Open commitments belong in `todo-list`, not memory.
 - **`create`** for a new development (keeps history append-only). **`update <id>`** for a correction, missed source, or adding/fixing topics (keeps `when`, stamps `updated`).
 - Pass JSON on stdin with `--json` (in a POSIX shell use a quoted heredoc, `<<'EOF'`, so `$` and quotes survive). Unknown keys fail.
-  - `create`: `kind`, `topics`, `title`, `body` (required); `when`, `sources`, `id`.
-  - `update`: `title`, `topics`, `add_topics`, `remove_topics`, `kind`, `when`, `sources`, `add_sources`, `body`, `append`, `expected_updated`.
-  - `kind`: `event`, `decision`, `action`, `feedback`, `check`, `note`, `commitment`, `rule`.
+  - `create`: `topics`, `body` (required); `when`, `kind` (`"rule"` only), `sources`, `id`.
+  - `update`: `topics`, `add_topics`, `remove_topics`, `kind` (`"rule"` or `""` to clear), `when`, `sources`, `add_sources`, `body`, `append`, `expected_updated`.
 
 ```sh
 thoth-mem create --json <<'EOF'
-{"kind": "decision", "topics": ["gear/desk-setup", "finance/budget"], "title": "Pick desk mat under $75", "sources": ["https://example.com/desk-mat"], "body": "Chose wool felt; budget cap $75."}
+{"topics": {"gear/desk-setup": "Picked wool felt desk mat under $75", "finance/budget": "Set $75 cap for desk mat"}, "sources": ["https://example.com/desk-mat"], "body": "Chose wool felt; budget cap $75."}
 EOF
 thoth-mem update <id> --json <<'EOF'
-{"append": "Ordered wool felt mat for $59.", "add_topics": ["orders/desk-mat"]}
+{"append": "Ordered wool felt mat for $59.", "add_topics": {"orders/desk-mat": "Ordered wool felt mat for $59"}}
 EOF
 ```
 
-- Check the returned JSON (`id`, `title`, `topics`, `body_preview`) for mangling.
+- Check the returned JSON (`id`, `topics`, `body_preview`) for mangling.
 - `delete <id>` archives; `restore <id>` brings it back. Never `--hard` unless the user asks for permanent deletion.

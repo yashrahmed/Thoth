@@ -4,8 +4,10 @@
 Design:
 - 1 Markdown file with flat YAML frontmatter per episode:
       <root>/memory/episodes/YYYY-MM/YYYYMMDD-HHMMSS-<4hex>.md
-- Multi-topic: every episode carries a non-empty `topics` list (`<category>/<slug>`).
-- Standing rules use `kind: rule` while staying on their real topic(s).
+- Multi-topic map: every episode carries a non-empty `topics` object mapping
+  each canonical lowercase `<category>/<slug>` to a 1-line summary for that topic.
+- Optional `kind`: omitted by default; restricted to a minimal allowlist of kinds
+  actually queried by tools/skills (`rule`).
 - OS file lock (`fcntl.flock` on Unix, `msvcrt.locking` on Windows) on:
       <root>/memory/.write.lock
 - Atomic writes (`tmp` -> `fsync` -> `os.replace`) so readers never see partial files.
@@ -40,15 +42,15 @@ from thoth_core import (
 from thoth_core import write_lock as _write_lock
 
 
-VALID_KINDS = ("event", "decision", "action", "feedback", "check", "note", "commitment", "rule")
+VALID_KINDS = ("rule",)
 TOPIC_RE = re.compile(r"^[a-z0-9]+(?:[/-][a-z0-9]+)*$")
 ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 REL_DURATION_RE = re.compile(r"^(\d+)\s*(h|d|w|mo|m)$", re.IGNORECASE)
 YM_DIR_RE = re.compile(r"^\d{4}-\d{2}$")
 
-CREATE_JSON_KEYS = frozenset({"id", "when", "kind", "topics", "title", "sources", "body"})
+CREATE_JSON_KEYS = frozenset({"id", "when", "kind", "topics", "sources", "body"})
 UPDATE_JSON_KEYS = frozenset({
-    "title", "topics", "add_topics", "remove_topics", "kind", "when",
+    "topics", "add_topics", "remove_topics", "kind", "when",
     "sources", "add_sources", "body", "append", "expected_updated",
 })
 
@@ -57,17 +59,45 @@ def write_lock(root: Path):
     return _write_lock(root / "memory")
 
 
-def clean_topics(raw: Any) -> list[str]:
-    out: list[str] = []
-    for t in normalize_list(raw):
-        slug = t.lower().strip("/")
-        if not TOPIC_RE.match(slug):
-            fail(f"Invalid topic {t!r}; use lowercase slug like 'projects/alpha' or 'media/demo'")
-        if slug not in out:
-            out.append(slug)
-    if not out:
+def parse_topic_pairs(raw_items: list[str] | None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in raw_items or []:
+        slug, sep, summary = item.partition("=")
+        if not sep:
+            fail(f"Invalid --topic value {item!r}; expected 'slug=one-line summary'")
+        out[slug.strip()] = summary.strip()
+    return out
+
+
+def clean_topics(raw: Any, *, allow_empty: bool = False) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        fail("'topics' must be a JSON object mapping each '<category>/<slug>' to a one-line summary")
+    out: dict[str, str] = {}
+    for k, v in raw.items():
+        slug = str(k).strip().lower().strip("/")
+        if not slug or not TOPIC_RE.match(slug):
+            fail(f"Invalid topic {k!r}; use lowercase slug like 'projects/alpha' or 'media/demo'")
+        if not isinstance(v, str):
+            fail(f"Summary for topic {slug!r} must be a single-line string")
+        summary = v.strip()
+        if not summary or "\n" in summary or "\r" in summary:
+            fail(f"Summary for topic {slug!r} is required and must be a single line")
+        check_secrets(summary, f"topics[{slug}]")
+        out[slug] = summary
+    if not out and not allow_empty:
         fail("At least one topic is required in 'topics'")
     return out
+
+
+def clean_kind(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    val = str(raw).strip().lower()
+    if not val:
+        return None
+    if val not in VALID_KINDS:
+        fail(f"Invalid kind {raw!r}; expected one of: {', '.join(VALID_KINDS)} (or omit kind)")
+    return val
 
 
 def render_episode(meta: dict[str, Any], body: str) -> str:
@@ -75,11 +105,11 @@ def render_episode(meta: dict[str, Any], body: str) -> str:
         "---",
         f"id: {yaml_scalar(meta['id'])}",
         f"when: {yaml_scalar(meta['when'])}",
-        f"kind: {yaml_scalar(meta['kind'])}",
-        f"topics: {json.dumps(meta['topics'], ensure_ascii=False)}",
-        f"title: {yaml_scalar(meta['title'])}",
-        f"sources: {json.dumps(meta.get('sources', []), ensure_ascii=False)}",
     ]
+    if meta.get("kind"):
+        lines.append(f"kind: {yaml_scalar(meta['kind'])}")
+    lines.append(f"topics: {json.dumps(meta['topics'], ensure_ascii=False)}")
+    lines.append(f"sources: {json.dumps(meta.get('sources', []), ensure_ascii=False)}")
     if meta.get("updated"):
         lines.append(f"updated: {yaml_scalar(meta['updated'])}")
     lines.append("---")
@@ -102,12 +132,36 @@ def parse_episode_file(path: Path) -> dict[str, Any]:
 
     raw_topics = meta.pop("topics", None)
     legacy_topic = meta.pop("topic", None)
+    legacy_title = str(meta.pop("title", "") or "").strip()
     meta.pop("tags", None)
-    if raw_topics is None and legacy_topic:
-        raw_topics = [legacy_topic]
-    if isinstance(raw_topics, str):
-        raw_topics = [t.strip() for t in raw_topics.split(",") if t.strip()]
-    meta["topics"] = [str(t).strip() for t in (raw_topics or []) if str(t).strip()]
+
+    topics_map: dict[str, str] = {}
+    if isinstance(raw_topics, dict):
+        for k, v in raw_topics.items():
+            slug = str(k).strip()
+            if slug:
+                topics_map[slug] = str(v or "").strip()
+    else:
+        if raw_topics is None and legacy_topic:
+            raw_list = [legacy_topic]
+        elif isinstance(raw_topics, list):
+            raw_list = raw_topics
+        elif isinstance(raw_topics, str):
+            raw_list = [t.strip() for t in raw_topics.split(",") if t.strip()]
+        else:
+            raw_list = []
+        fallback = legacy_title or " ".join(body.split())[:120]
+        for t in raw_list:
+            slug = str(t).strip()
+            if slug:
+                topics_map[slug] = fallback
+    meta["topics"] = topics_map
+
+    kind_val = str(meta.get("kind") or "").strip().lower()
+    if kind_val:
+        meta["kind"] = kind_val
+    else:
+        meta.pop("kind", None)
 
     meta.setdefault("sources", [])
     if isinstance(meta["sources"], str):
@@ -208,8 +262,8 @@ def find_episode_by_id(root: Path, ep_id: str, include_archived: bool = False) -
     return None
 
 
-def topic_matches(actual_topics: list[str], needle: str) -> bool:
-    """Match exact topic or path prefix against any topic in `actual_topics`."""
+def topic_matches(actual_topics: dict[str, str], needle: str) -> bool:
+    """Match exact topic or path prefix against any topic key in `actual_topics`."""
     n = needle.lower().strip("/")
     for actual in actual_topics:
         a = actual.lower().strip("/")
@@ -235,15 +289,10 @@ def record_in_range(when_str: str, since_dt: datetime | None, until_dt: datetime
 def cmd_create(args: argparse.Namespace, root: Path) -> None:
     payload: dict[str, Any] = read_json_stdin(CREATE_JSON_KEYS, "create") if args.json else {}
 
-    kind = (args.kind or payload.get("kind") or "note").strip().lower()
-    if kind not in VALID_KINDS:
-        fail(f"Invalid kind {kind!r}; expected one of: {', '.join(VALID_KINDS)}")
+    kind = clean_kind(args.kind if args.kind is not None else payload.get("kind"))
 
-    topics = clean_topics(args.topics if args.topics is not None else payload.get("topics"))
-
-    title = (args.title or payload.get("title") or "").strip()
-    if not title or "\n" in title:
-        fail("title is required and must be a single line")
+    raw_topics = parse_topic_pairs(args.topic) if args.topic else payload.get("topics")
+    topics = clean_topics(raw_topics)
 
     body = args.body if args.body is not None else payload.get("body")
     if body is None and not args.json and not sys.stdin.isatty():
@@ -258,7 +307,6 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
     ym = when_dt.strftime("%Y-%m")
     stamp = when_dt.strftime("%Y%m%d-%H%M%S")
 
-    check_secrets(title, "title")
     check_secrets(body, "body")
     for s in sources:
         check_secrets(s, "sources")
@@ -270,26 +318,27 @@ def cmd_create(args: argparse.Namespace, root: Path) -> None:
         if find_episode_by_id(root, ep_id, include_archived=True) is not None:
             fail(f"Episode with id {ep_id!r} already exists")
         path = root / "memory" / "episodes" / ym / f"{ep_id}.md"
-        meta = {
+        meta: dict[str, Any] = {
             "id": ep_id,
             "when": when_iso,
-            "kind": kind,
             "topics": topics,
-            "title": title,
             "sources": sources,
         }
+        if kind:
+            meta["kind"] = kind
         atomic_write(path, render_episode(meta, body))
 
-    print(json.dumps({
+    out: dict[str, Any] = {
         "ok": True,
         "id": ep_id,
         "when": when_iso,
-        "kind": kind,
         "topics": topics,
-        "title": title,
         "body_preview": body[:160] + ("..." if len(body) > 160 else ""),
         "path": path.relative_to(root).as_posix(),
-    }, ensure_ascii=False))
+    }
+    if kind:
+        out["kind"] = kind
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def cmd_read(args: argparse.Namespace, root: Path) -> None:
@@ -318,7 +367,7 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        ep_topics = m.get("topics", [])
+        ep_topics: dict[str, str] = m.get("topics", {})
         if req_topics and not all(topic_matches(ep_topics, needle) for needle in req_topics):
             continue
         if args.kind and str(m.get("kind", "")).lower() != args.kind.lower():
@@ -326,11 +375,11 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
         row: dict[str, Any] = {
             "id": m.get("id"),
             "when": when_val,
-            "kind": m.get("kind"),
-            "topics": ep_topics,
-            "title": m.get("title"),
-            "path": p.relative_to(root).as_posix(),
         }
+        if m.get("kind"):
+            row["kind"] = m["kind"]
+        row["topics"] = ep_topics
+        row["path"] = p.relative_to(root).as_posix()
         if m.get("updated"):
             row["updated"] = m["updated"]
         if args.full:
@@ -355,7 +404,8 @@ def cmd_topics(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        for topic in m.get("topics", []) or ["general"]:
+        ep_topics: dict[str, str] = m.get("topics", {}) or {"general": ""}
+        for topic, summary in ep_topics.items():
             cur = by_topic.get(topic)
             if cur is None:
                 by_topic[topic] = {
@@ -363,14 +413,14 @@ def cmd_topics(args: argparse.Namespace, root: Path) -> None:
                     "count": 1,
                     "latest_when": when_val,
                     "latest_id": m.get("id"),
-                    "latest_title": m.get("title"),
+                    "latest_summary": summary,
                 }
             else:
                 cur["count"] += 1
                 if when_val >= cur["latest_when"]:
                     cur["latest_when"] = when_val
                     cur["latest_id"] = m.get("id")
-                    cur["latest_title"] = m.get("title")
+                    cur["latest_summary"] = summary
     rows = sorted(by_topic.values(), key=lambda r: (r["latest_when"], r["topic"]), reverse=True)
     page, page_meta = paginate(rows, limit=args.limit, offset=args.offset)
     print(json.dumps({"ok": True, **page_meta, "topics": page}, ensure_ascii=False, indent=2))
@@ -398,14 +448,14 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
         when_val = str(m.get("when", ""))
         if not record_in_range(when_val, since_dt, until_dt):
             continue
-        ep_topics = m.get("topics", [])
+        ep_topics: dict[str, str] = m.get("topics", {})
         if req_topics and not all(topic_matches(ep_topics, needle) for needle in req_topics):
             continue
         if args.kind and str(m.get("kind", "")).lower() != args.kind.lower():
             continue
         haystack = " ".join([
-            " ".join(ep_topics),
-            str(m.get("title", "")),
+            " ".join(ep_topics.keys()),
+            " ".join(ep_topics.values()),
             " ".join(m.get("sources", [])),
             rec["body"],
         ]).lower()
@@ -415,17 +465,18 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
             continue
         if args.all_terms and matched_tokens < len(tokens):
             continue
-        hits.append({
+        hit: dict[str, Any] = {
             "score": matched_tokens * 100 + min(score, 99),
             "id": m.get("id"),
             "when": when_val,
-            "kind": m.get("kind"),
-            "topics": ep_topics,
-            "title": m.get("title"),
-            "sources": m.get("sources", []),
-            "path": p.relative_to(root).as_posix(),
-            "snippet": rec["body"][:280] + ("..." if len(rec["body"]) > 280 else ""),
-        })
+        }
+        if m.get("kind"):
+            hit["kind"] = m["kind"]
+        hit["topics"] = ep_topics
+        hit["sources"] = m.get("sources", [])
+        hit["path"] = p.relative_to(root).as_posix()
+        hit["snippet"] = rec["body"][:280] + ("..." if len(rec["body"]) > 280 else "")
+        hits.append(hit)
     hits.sort(key=lambda h: (h["score"], h.get("when") or "", h.get("id") or ""), reverse=True)
     page, page_meta = paginate(hits, limit=args.limit, offset=args.offset)
     print(json.dumps({"ok": True, "query": raw_query, **page_meta, "hits": page}, ensure_ascii=False, indent=2))
@@ -449,33 +500,30 @@ def cmd_update(args: argparse.Namespace, root: Path) -> None:
         if expected_updated is not None and (meta.get("updated") or "") != expected_updated:
             fail(f"Conflict: expected updated={expected_updated!r}, found {meta.get('updated')!r}")
 
-        title = pick(args.title, "title")
-        if title is not None:
-            title = str(title).strip()
-            if not title or "\n" in title:
-                fail("title must be a non-empty single line")
-            check_secrets(title, "title")
-            meta["title"] = title
-
-        topics_replace = pick(args.topics, "topics")
+        topics_replace = parse_topic_pairs(args.topic) if args.topic else payload.get("topics")
         if topics_replace is not None:
             meta["topics"] = clean_topics(topics_replace)
 
-        add_topics = pick(args.add_topic, "add_topics")
-        if add_topics:
-            meta["topics"] = clean_topics(list(meta.get("topics", [])) + normalize_list(add_topics))
+        add_topics = parse_topic_pairs(args.add_topic) if args.add_topic else payload.get("add_topics")
+        if add_topics is not None:
+            merged = dict(meta.get("topics", {}))
+            merged.update(clean_topics(add_topics, allow_empty=True))
+            meta["topics"] = clean_topics(merged)
 
         remove_topics = pick(args.remove_topic, "remove_topics")
         if remove_topics:
             drop = {t.lower().strip("/") for t in normalize_list(remove_topics)}
-            meta["topics"] = clean_topics([t for t in meta.get("topics", []) if t.lower().strip("/") not in drop])
+            remaining = {k: v for k, v in meta.get("topics", {}).items() if k.lower().strip("/") not in drop}
+            meta["topics"] = clean_topics(remaining)
 
-        kind = pick(args.kind, "kind")
-        if kind is not None:
-            kind = str(kind).strip().lower()
-            if kind not in VALID_KINDS:
-                fail(f"Invalid kind {kind!r}")
-            meta["kind"] = kind
+        has_kind_arg = args.kind is not None or "kind" in payload
+        if has_kind_arg:
+            kind_raw = args.kind if args.kind is not None else payload.get("kind")
+            kind = clean_kind(kind_raw)
+            if kind:
+                meta["kind"] = kind
+            else:
+                meta.pop("kind", None)
 
         when_override = pick(args.when, "when")
         if when_override is not None:
@@ -513,17 +561,18 @@ def cmd_update(args: argparse.Namespace, root: Path) -> None:
         meta["updated"] = now_local().isoformat()
         atomic_write(p, render_episode(meta, body))
 
-    print(json.dumps({
+    out: dict[str, Any] = {
         "ok": True,
         "id": meta["id"],
         "when": meta["when"],
         "updated": meta["updated"],
-        "kind": meta["kind"],
         "topics": meta["topics"],
-        "title": meta["title"],
         "body_preview": body[:160] + ("..." if len(body) > 160 else ""),
         "path": p.relative_to(root).as_posix(),
-    }, ensure_ascii=False))
+    }
+    if meta.get("kind"):
+        out["kind"] = meta["kind"]
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def cmd_delete(args: argparse.Namespace, root: Path) -> None:
@@ -574,9 +623,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create", help="Create a new episode (prefer --json <<'EOF' to avoid shell escaping issues)")
-    c.add_argument("--kind", choices=VALID_KINDS, default=None)
-    c.add_argument("--topics", help="Comma-separated lowercase topic slugs (e.g. projects/alpha,finance/budget)")
-    c.add_argument("--title", help="One-line summary title")
+    c.add_argument("--kind", choices=VALID_KINDS, default=None, help="Optional special kind (only for tools/skills that query it)")
+    c.add_argument("--topic", action="append", help="Repeatable 'slug=one-line summary' entry (or pass 'topics' object via --json)")
     c.add_argument("--body", help="Markdown body (or pipe via stdin)")
     c.add_argument("--when", help="Timestamp (YYYY-MM-DD, 'YYYY-MM-DD HH:MM', ISO-8601, or relative like 7d)")
     c.add_argument("--sources", help="Comma-separated source URLs/paths")
@@ -599,13 +647,13 @@ def build_parser() -> argparse.ArgumentParser:
     ls.add_argument("--full", action="store_true", help="Include full Markdown body and sources")
     ls.add_argument("--archived", action="store_true")
 
-    tp = sub.add_parser("topics", help="Topic index (counts + latest timestamp/title)")
+    tp = sub.add_parser("topics", help="Topic index (counts + latest timestamp/summary)")
     tp.add_argument("--since", help="Optional inclusive start bound")
     tp.add_argument("--until", help="Optional inclusive end bound")
     tp.add_argument("--limit", type=int, default=0, help="Max topics to return (0 = all)")
     tp.add_argument("--offset", type=int, default=0, help="Number of topics to skip (for pagination)")
 
-    s = sub.add_parser("search", help="Keyword or exact URL/ID search across topics, title, sources, and body")
+    s = sub.add_parser("search", help="Keyword or exact URL/ID search across topics, summaries, sources, and body")
     s.add_argument("query")
     s.add_argument("--exact", action="store_true", help="Match exact case-insensitive substring instead of splitting words")
     s.add_argument("--topic", action="append", help="Optional topic or path-prefix filter (repeatable for AND)")
@@ -618,11 +666,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     u = sub.add_parser("update", help="Update an existing episode by ID (preserves 'when', stamps 'updated')")
     u.add_argument("id")
-    u.add_argument("--title")
-    u.add_argument("--topics", help="Replace topics (comma-separated)")
-    u.add_argument("--add-topic", help="Append topic(s) (comma-separated)")
-    u.add_argument("--remove-topic", help="Remove topic(s) (comma-separated)")
-    u.add_argument("--kind", choices=VALID_KINDS)
+    u.add_argument("--topic", action="append", help="Replace topics (repeatable 'slug=summary')")
+    u.add_argument("--add-topic", action="append", help="Add/update topic(s) (repeatable 'slug=summary')")
+    u.add_argument("--remove-topic", help="Remove topic slug(s) (comma-separated)")
+    u.add_argument("--kind", help=f"Optional kind ({', '.join(VALID_KINDS)}, or '' to clear)")
     u.add_argument("--when", help="Explicitly fix occurrence timestamp (rare)")
     u.add_argument("--sources", help="Replace sources (comma-separated)")
     u.add_argument("--add-source", help="Append source(s) (comma-separated)")

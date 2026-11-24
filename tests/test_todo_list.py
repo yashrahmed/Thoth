@@ -189,11 +189,14 @@ class TestTodoListCLI(unittest.TestCase):
 
     def test_search(self) -> None:
         self.create({"title": "Return shelf", "notes": "Amazon refund for https://example.com/order/1"})
-        self.create({"title": "Call uncle"})
+        self.create({"title": "Call uncle", "notes": "Check reconciliation spreadsheet"})
+        self.create({"title": "Try DPS Recon chair", "notes": "At Costco"})
         hits = j(run_cli(self.root, "search", "refund"))["hits"]
         self.assertEqual([h["id"] for h in hits], ["t-0001"])
         url_hits = j(run_cli(self.root, "search", "https://example.com/order/1"))["hits"]
         self.assertEqual(len(url_hits), 1)
+        recon_hits = j(run_cli(self.root, "search", "Recon"))["hits"]
+        self.assertEqual([h["id"] for h in recon_hits], ["t-0003"])
         empty = j(run_cli(self.root, "search", "nothing-here"))
         self.assertEqual((empty["count"], empty["total"], empty["has_more"]), (0, 0, False))
 

@@ -29,6 +29,7 @@ from typing import Any
 from thoth_core import (
     atomic_write,
     check_secrets,
+    compile_search_terms,
     fail,
     normalize_list,
     now_local,
@@ -36,6 +37,7 @@ from thoth_core import (
     parse_yaml_value,
     read_json_stdin,
     resolve_root,
+    score_search_fields,
     split_frontmatter,
     write_lock,
     yaml_scalar,
@@ -476,12 +478,7 @@ def cmd_list(args: argparse.Namespace, root: Path) -> None:
 
 def cmd_search(args: argparse.Namespace, root: Path) -> None:
     raw_query = args.query.strip()
-    if not raw_query:
-        fail("Search query must not be empty")
-    literal = args.exact or any(ch in raw_query for ch in ("://", "/", ":", "."))
-    tokens = [raw_query.lower()] if literal else [t.lower() for t in re.findall(r"[A-Za-z0-9_-]+", raw_query)]
-    if not tokens:
-        fail("Search query must contain at least one searchable term")
+    literal, tokens, patterns = compile_search_terms(raw_query, exact=args.exact)
     statuses = set(STATUSES) if not args.status or "all" in args.status else set(args.status)
 
     tasks, warnings = load_tasks(root, include_archived=args.archived)
@@ -490,14 +487,20 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
         m = t["meta"]
         if m["status"] not in statuses:
             continue
-        haystack = " ".join([
-            m["title"], t["notes"], " ".join(t["log"]),
-            " ".join(m["source_keys"]), " ".join(m["memory_ids"]),
-        ]).lower()
-        matched = sum(1 for tok in tokens if tok in haystack)
-        if matched == 0 or (args.all_terms and matched < len(tokens)):
+        score = score_search_fields(
+            [
+                (m["title"], 25),
+                (" ".join(m["source_keys"] + m["memory_ids"]), 15),
+                (t["notes"], 6),
+                (" ".join(t["log"]), 2),
+            ],
+            literal,
+            tokens,
+            patterns,
+            all_terms=args.all_terms,
+        )
+        if score == 0:
             continue
-        score = matched * 100 + min(sum(haystack.count(tok) for tok in tokens), 99)
         row = task_view(root, t)
         row["score"] = score
         row["snippet"] = t["notes"][:200] + ("..." if len(t["notes"]) > 200 else "")

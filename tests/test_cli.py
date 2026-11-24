@@ -264,6 +264,44 @@ class TestThothMemCLI(unittest.TestCase):
             proc = run_cli(self.root, *bad_args, check=False)
             self.assertNotEqual(proc.returncode, 0, bad_args)
 
+    def test_search_word_boundaries_and_field_ranking(self) -> None:
+        rows = [
+            {
+                "when": "2026-11-10 10:00:00",
+                "topics": {"planning/bot": "Reconciliation skill idea"},
+                "body": "Experiment with reconciliation across memories and tasks.",
+            },
+            {
+                "when": "2026-11-11 10:00:00",
+                "topics": {"orders/other": "Side mention"},
+                "body": "Mentioned Recon once in passing, and chairs once.",
+            },
+            {
+                "when": "2026-11-12 10:00:00",
+                "topics": {"home/office-chair-shopping": "Costco DPS Recon try-out"},
+                "body": "Sat in the DPS Recon chair at Costco.",
+            },
+        ]
+        for r in rows:
+            run_cli(self.root, "create", "--json", stdin_data=json.dumps(r))
+
+        # Word boundary: "Recon" must NOT match "reconciliation"
+        recon = json.loads(run_cli(self.root, "search", "Recon").stdout)
+        self.assertEqual(recon["total"], 2)
+        # Topic summary match ranks strictly ahead of body-only mention
+        self.assertIn("home/office-chair-shopping", recon["hits"][0]["topics"])
+        self.assertGreater(recon["hits"][0]["score"], recon["hits"][1]["score"])
+
+        # Plural tolerance: "chair" matches "chairs" in body and "office-chair-shopping" in slug
+        chair = json.loads(run_cli(self.root, "search", "chair").stdout)
+        self.assertEqual(chair["total"], 2)
+        self.assertIn("home/office-chair-shopping", chair["hits"][0]["topics"])
+        self.assertGreater(chair["hits"][0]["score"], chair["hits"][1]["score"])
+
+        # --exact still allows substring search when explicitly requested
+        sub = json.loads(run_cli(self.root, "search", "recon", "--exact").stdout)
+        self.assertEqual(sub["total"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

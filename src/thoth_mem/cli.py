@@ -29,6 +29,7 @@ from typing import Any
 from thoth_core import (
     atomic_write,
     check_secrets,
+    compile_search_terms,
     fail,
     normalize_list,
     now_local,
@@ -36,6 +37,7 @@ from thoth_core import (
     parse_yaml_value,
     read_json_stdin,
     resolve_root,
+    score_search_fields,
     split_frontmatter,
     yaml_scalar,
 )
@@ -428,12 +430,7 @@ def cmd_topics(args: argparse.Namespace, root: Path) -> None:
 
 def cmd_search(args: argparse.Namespace, root: Path) -> None:
     raw_query = args.query.strip()
-    if not raw_query:
-        fail("Search query must not be empty")
-    literal_mode = args.exact or any(ch in raw_query for ch in ("://", "/", ":", "."))
-    tokens = [raw_query.lower()] if literal_mode else [t.lower() for t in re.findall(r"[A-Za-z0-9_-]+", raw_query) if t]
-    if not tokens:
-        fail("Search query must contain at least one searchable term")
+    literal_mode, tokens, patterns = compile_search_terms(raw_query, exact=args.exact)
 
     since_dt, until_dt = parse_range_bounds(args.since, args.until)
     req_topics = [t for group in (args.topic or []) for t in normalize_list(group)]
@@ -453,20 +450,22 @@ def cmd_search(args: argparse.Namespace, root: Path) -> None:
             continue
         if args.kind and str(m.get("kind", "")).lower() != args.kind.lower():
             continue
-        haystack = " ".join([
-            " ".join(ep_topics.keys()),
-            " ".join(ep_topics.values()),
-            " ".join(m.get("sources", [])),
-            rec["body"],
-        ]).lower()
-        score = sum(haystack.count(tok) for tok in tokens)
-        matched_tokens = sum(1 for tok in tokens if tok in haystack)
-        if matched_tokens == 0:
-            continue
-        if args.all_terms and matched_tokens < len(tokens):
+        score = score_search_fields(
+            [
+                (" ".join(ep_topics.keys()), 25),
+                (" ".join(ep_topics.values()), 20),
+                (" ".join(m.get("sources", [])), 12),
+                (rec["body"], 3),
+            ],
+            literal_mode,
+            tokens,
+            patterns,
+            all_terms=args.all_terms,
+        )
+        if score == 0:
             continue
         hit: dict[str, Any] = {
-            "score": matched_tokens * 100 + min(score, 99),
+            "score": score,
             "id": m.get("id"),
             "when": when_val,
         }

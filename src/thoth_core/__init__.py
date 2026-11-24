@@ -201,3 +201,49 @@ def paginate(items: list[Any], *, limit: int = 0, offset: int = 0) -> tuple[list
     if has_more:
         meta["next_offset"] = offset + len(page)
     return page, meta
+
+
+def compile_search_terms(raw_query: str, *, exact: bool = False) -> tuple[bool, list[str], list[re.Pattern[str]]]:
+    """Return `(literal_mode, tokens, compiled_patterns)` for keyword or literal search."""
+    q = raw_query.strip()
+    if not q:
+        fail("Search query must not be empty")
+    literal = exact or any(ch in q for ch in ("://", "/", ":", "."))
+    if literal:
+        tok = q.lower()
+        return True, [tok], []
+    tokens = [t.lower() for t in re.findall(r"[A-Za-z0-9_-]+", q) if t]
+    if not tokens:
+        fail("Search query must contain at least one searchable term")
+    patterns: list[re.Pattern[str]] = []
+    for tok in tokens:
+        plural = "(?:e?s)?" if len(tok) >= 3 and tok.isalpha() and not tok.endswith("s") else ""
+        patterns.append(re.compile(rf"(?<![a-z0-9]){re.escape(tok)}{plural}(?![a-z0-9])"))
+    return False, tokens, patterns
+
+
+def score_search_fields(
+    fields: list[tuple[str, int]],
+    literal: bool,
+    tokens: list[str],
+    patterns: list[re.Pattern[str]],
+    *,
+    all_terms: bool = False,
+) -> int:
+    """Score weighted `(text, weight)` fields; returns 0 when no match."""
+    lowered = [(text.lower(), weight) for text, weight in fields if text]
+    matched_tokens = 0
+    weighted_score = 0
+    for idx, tok in enumerate(tokens):
+        tok_matched = False
+        pat = None if literal else patterns[idx]
+        for text, weight in lowered:
+            cnt = text.count(tok) if literal else len(pat.findall(text))  # type: ignore[union-attr]
+            if cnt > 0:
+                tok_matched = True
+                weighted_score += weight + min(cnt - 1, 5)
+        if tok_matched:
+            matched_tokens += 1
+    if matched_tokens == 0 or (all_terms and matched_tokens < len(tokens)):
+        return 0
+    return matched_tokens * 100 + weighted_score

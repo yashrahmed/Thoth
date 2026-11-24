@@ -5,9 +5,7 @@ description: Log, count, fix, or remove workout sessions in the owner's Google D
 
 # Log Workout
 
-The log is a table (`Date` | `Workout details`) in the owner's Google Doc titled **Workout Log**; it is the source of truth (never move or copy it). Find it by searching Drive for that title; if none or several match, ask. Read it with the host's Google Drive/Docs connector; if none is connected, ask the owner to connect it.
-
-**Writes go to a Codex subagent.** Every add, change, or delete in the doc is delegated to a Codex subagent (the host's cross-provider delegation tool), because the Claude Drive connector can't edit Doc contents. Give it the doc ID, the current table, the exact target table, and the Edit rules below; tell it to edit in place and to stop and report if it can't. When it finishes, read the doc back yourself before reporting.
+The log is a table (`Date` | `Workout details`) in the owner's Google Doc titled **Workout Log**; it is the source of truth (never move or copy it). Find it by searching Drive for that title; if none or several match, ask. Use the host's Google Drive/Docs connector; if none is connected, ask the owner to connect it.
 
 ## Entries
 
@@ -23,7 +21,8 @@ Bring up payment only when the owner asks; then use any rule he states and never
 
 ## Edit
 
-1. **Read first** (with the doc's revision) and find the affected rows. Adding an existing date: same content → report it, no write; a new status → update that row. If a request matches several rows, ask.
+1. **Read first** (with the doc's revision, if exposed) and find the affected rows. Adding an existing date: same content → report it, no write; a new status → update that row. If a request matches several rows, ask.
 2. **Guarded write:** require the revision you read; on conflict or an uncertain result, re-read before retrying. Insert rows in date order, change only the selected cells, delete rows bottom-up, and keep the header and any extra columns.
+   - **Read-only connector → Codex subagent.** If the host's connector can't edit Doc contents, delegate the write to a Codex subagent: pass the doc ID, the expected current table, the exact row change(s), and these rules. It must fetch the live doc and revision, abort if the table differs from expected, and stop if it can't edit in place. If no Codex subagent can be started, stop and tell the owner.
 3. **Clear all rows only on explicit request**, keeping the header.
-4. **Verify:** read the table back; finish a blank or half-filled new row instead of adding another. Report only verified results.
+4. **Verify:** read the table back yourself; finish a blank or half-filled new row instead of adding another. Report only verified results.

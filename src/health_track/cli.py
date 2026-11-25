@@ -41,6 +41,17 @@ from thoth_core import (
     write_lock,
 )
 from health_track.report import render_weekly_html
+from health_track.sync import (
+    build_sync_plan,
+    extract_remote_rows,
+    load_sync_state,
+    normalize_row,
+    row_key,
+    row_to_entry_payload,
+    row_to_staple_payload,
+    save_sync_state,
+    sync_state_path,
+)
 
 PROG = "health-track"
 
@@ -1375,8 +1386,12 @@ def cmd_workouts(args: argparse.Namespace, root: Path) -> None:
     print(json.dumps(out, ensure_ascii=False, indent=2))
 
 
-def cmd_export_sheets(args: argparse.Namespace, root: Path) -> None:
-    since_dt, until_dt = parse_range_bounds(args.since, args.until)
+def build_local_sheets_rows(
+    root: Path,
+    *,
+    since_dt: datetime | None = None,
+    until_dt: datetime | None = None,
+) -> tuple[dict[str, list[list[Any]]], list[str]]:
     since_ym = since_dt.strftime("%Y-%m") if since_dt else None
     until_ym = until_dt.strftime("%Y-%m") if until_dt else None
     records, warnings = load_entries(root, include_archived=False, since_ym=since_ym, until_ym=until_ym)
@@ -1405,7 +1420,12 @@ def cmd_export_sheets(args: argparse.Namespace, root: Path) -> None:
             ", ".join(info.get("aliases", [])),
             info.get("notes", ""),
         ])
+    return rows_by_tab, warnings
 
+
+def cmd_export_sheets(args: argparse.Namespace, root: Path) -> None:
+    since_dt, until_dt = parse_range_bounds(args.since, args.until)
+    rows_by_tab, warnings = build_local_sheets_rows(root, since_dt=since_dt, until_dt=until_dt)
     cfg = load_config(root)
     tabs = {
         tab: {"headers": SHEET_HEADERS[tab], "rows": rows_by_tab[tab]}
@@ -1419,6 +1439,258 @@ def cmd_export_sheets(args: argparse.Namespace, root: Path) -> None:
     if warnings:
         out["warnings"] = warnings
     print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+def read_remote_tabs_stdin(cmd: str) -> dict[str, Any]:
+    raw_text = sys.stdin.read()
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        fail(f"Invalid JSON on stdin for {cmd}: {e}")
+    if not isinstance(parsed, dict):
+        fail(f"{cmd} --json expects a JSON object")
+    if "tabs" in parsed:
+        tabs = parsed["tabs"]
+        if not isinstance(tabs, dict):
+            fail(f"{cmd}: 'tabs' must be a JSON object")
+        return tabs
+    return parsed
+
+
+def cmd_sync_plan(args: argparse.Namespace, root: Path) -> None:
+    raw_remote = read_remote_tabs_stdin("sync-plan")
+    remote_tabs = extract_remote_rows(raw_remote, SHEET_HEADERS)
+    local_tabs, warnings = build_local_sheets_rows(root)
+    all_records, arch_warnings = load_entries(root, include_archived=True)
+    archived_ids = {r["entry"]["id"] for r in all_records if r["archived"]}
+    base_state = load_sync_state(root)
+    plan = build_sync_plan(
+        local_tabs=local_tabs,
+        archived_ids=archived_ids,
+        remote_tabs=remote_tabs,
+        base_tabs=base_state.get("tabs") or {},
+        headers_map=SHEET_HEADERS,
+        prefer=args.prefer,
+    )
+    out: dict[str, Any] = {
+        "ok": True,
+        "last_synced_at": base_state.get("synced_at"),
+        **plan,
+    }
+    all_warn = sorted(set(warnings + arch_warnings))
+    if all_warn:
+        out["warnings"] = all_warn
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+def cmd_sync_apply(args: argparse.Namespace, root: Path) -> None:
+    raw_remote = read_remote_tabs_stdin("sync-apply")
+    remote_tabs = extract_remote_rows(raw_remote, SHEET_HEADERS)
+    with write_lock(health_dir(root)):
+        all_records = load_entries_for_write(root, include_archived=True)
+        local_tabs, _ = build_local_sheets_rows(root)
+        archived_ids = {r["entry"]["id"] for r in all_records if r["archived"]}
+        base_state = load_sync_state(root)
+        plan = build_sync_plan(
+            local_tabs=local_tabs,
+            archived_ids=archived_ids,
+            remote_tabs=remote_tabs,
+            base_tabs=base_state.get("tabs") or {},
+            headers_map=SHEET_HEADERS,
+            prefer=args.prefer,
+        )
+        if plan["conflicts"]:
+            fail(
+                f"Sync has {len(plan['conflicts'])} conflict(s); resolve with --prefer local|remote "
+                "or fix one side before running sync-apply"
+            )
+
+        staples_doc = load_staples(root)
+        staples_map = staples_doc["staples"]
+        staples_dirty = False
+        existing_ids = {r["entry"]["id"] for r in all_records}
+        live_by_id: dict[str, dict[str, Any]] = {
+            r["entry"]["id"]: dict(r["entry"]) for r in all_records if not r["archived"]
+        }
+        arch_by_id: dict[str, dict[str, Any]] = {
+            r["entry"]["id"]: dict(r["entry"]) for r in all_records if r["archived"]
+        }
+        dirty_months: set[str] = set()
+        dirty_arch_months: set[str] = set()
+
+        applied: dict[str, list[dict[str, Any]]] = {
+            "pulled_added": [],
+            "pulled_updated": [],
+            "deleted_local": [],
+        }
+        id_writebacks: list[dict[str, Any]] = []
+        ts = now_local().isoformat()
+
+        # 1. pull_add (manual or remote-only rows -> local JSONL or staples.json)
+        for item in plan["pull_add"]:
+            tab = item["tab"]
+            row = item["row"]
+            if tab == "Staples":
+                slug_res = row_to_staple_payload(row)
+                if slug_res[0] is None:
+                    continue
+                slug, payload = slug_res
+                slug = clean_slug(slug)
+                staples_map[slug] = payload
+                staples_dirty = True
+                applied["pulled_added"].append({"tab": tab, "id": slug})
+                continue
+
+            etype_res = row_to_entry_payload(tab, row)
+            if etype_res[0] is None:
+                continue
+            etype, payload = etype_res
+            when_dt = parse_timestamp(payload.pop("when", None), default_now=False)
+            notes = clean_text(payload.pop("notes", ""), "notes")
+            typed_fields = validate_entry_fields(etype, payload, staples_map)
+            cand_id = str(item.get("id") or "").strip()
+            if cand_id and ID_RE.match(cand_id) and cand_id not in live_by_id:
+                entry_id = cand_id
+                if entry_id in arch_by_id:
+                    old_arch = arch_by_id.pop(entry_id)
+                    dirty_arch_months.add(str(old_arch["date"])[:7])
+            else:
+                entry_id = allocate_id(when_dt, existing_ids)
+                existing_ids.add(entry_id)
+
+            entry: dict[str, Any] = {
+                "id": entry_id,
+                "type": etype,
+                "when": when_dt.isoformat(),
+                "date": when_dt.date().isoformat(),
+                **typed_fields,
+                "created": ts,
+                "revision": 1,
+            }
+            if notes:
+                entry["notes"] = notes
+            live_by_id[entry_id] = entry
+            dirty_months.add(when_dt.strftime("%Y-%m"))
+            applied["pulled_added"].append({"tab": tab, "id": entry_id})
+            if not item.get("has_id") or entry_id != cand_id:
+                _, canonical_row = entry_to_sheet_row(entry)
+                id_writebacks.append({
+                    "tab": tab,
+                    "id": entry_id,
+                    "remote_row_index": item["remote_row_index"],
+                    "row": canonical_row,
+                })
+
+        # 2. pull_update (remote-edited rows -> update local entry or staple)
+        for item in plan["pull_update"]:
+            tab = item["tab"]
+            row = item["row"]
+            key = item["id"]
+            if tab == "Staples":
+                slug_res = row_to_staple_payload(row)
+                if slug_res[0] is None:
+                    continue
+                _, payload = slug_res
+                staples_map[key] = payload
+                staples_dirty = True
+                applied["pulled_updated"].append({"tab": tab, "id": key})
+                continue
+
+            old = live_by_id.get(key)
+            if old is None:
+                continue
+            etype_res = row_to_entry_payload(tab, row)
+            if etype_res[0] is None:
+                continue
+            etype, payload = etype_res
+            when_dt = parse_timestamp(payload.pop("when", old["when"]), default_now=False)
+            notes = clean_text(payload.pop("notes", ""), "notes")
+            typed_fields = validate_entry_fields(etype, payload, staples_map)
+            old_ym = str(old["date"])[:7]
+            new_ym = when_dt.strftime("%Y-%m")
+            new_entry: dict[str, Any] = {
+                "id": old["id"],
+                "type": etype,
+                "when": when_dt.isoformat(),
+                "date": when_dt.date().isoformat(),
+                **typed_fields,
+                "created": old.get("created", old["when"]),
+                "updated": ts,
+                "revision": old.get("revision", 1) + 1,
+            }
+            if notes:
+                new_entry["notes"] = notes
+            live_by_id[key] = new_entry
+            dirty_months.add(old_ym)
+            dirty_months.add(new_ym)
+            applied["pulled_updated"].append({"tab": tab, "id": key})
+
+        # 3. delete_local (rows deleted in Sheet -> soft-archive locally or delete staple)
+        for item in plan["delete_local"]:
+            tab = item["tab"]
+            key = item["id"]
+            if tab == "Staples":
+                if key in staples_map:
+                    del staples_map[key]
+                    staples_dirty = True
+                    applied["deleted_local"].append({"tab": tab, "id": key})
+                continue
+            old = live_by_id.pop(key, None)
+            if old is None:
+                continue
+            ym = str(old["date"])[:7]
+            old["revision"] = old.get("revision", 1) + 1
+            old["updated"] = ts
+            arch_by_id[key] = old
+            dirty_months.add(ym)
+            dirty_arch_months.add(ym)
+            applied["deleted_local"].append({"tab": tab, "id": key})
+
+        # Flush modified files atomically
+        for ym in sorted(dirty_months):
+            ents = [e for e in live_by_id.values() if str(e["date"])[:7] == ym]
+            write_jsonl_file(logs_dir(root) / f"{ym}.jsonl", ents)
+        for ym in sorted(dirty_arch_months):
+            ents = [e for e in arch_by_id.values() if str(e["date"])[:7] == ym]
+            write_jsonl_file(archive_dir(root) / f"{ym}.jsonl", ents)
+        if staples_dirty:
+            save_staples(root, staples_doc)
+
+    print(json.dumps({
+        "ok": True,
+        "applied": applied,
+        "sheet_actions": {
+            "push_append": plan["push_append"],
+            "push_update": plan["push_update"] + id_writebacks,
+            "remote_delete": plan["remote_delete"],
+        },
+        "invalid_remote_rows": plan["invalid_remote_rows"],
+    }, ensure_ascii=False, indent=2))
+
+
+def cmd_sync_mark(args: argparse.Namespace, root: Path) -> None:
+    with write_lock(health_dir(root)):
+        load_entries_for_write(root, include_archived=True)
+        local_tabs, _ = build_local_sheets_rows(root)
+        snapshot: dict[str, dict[str, list[Any]]] = {}
+        for tab, headers in SHEET_HEADERS.items():
+            width = len(headers)
+            tab_map: dict[str, list[Any]] = {}
+            for row in local_tabs.get(tab, []):
+                nr = normalize_row(tab, row, width)
+                k = row_key(tab, nr)
+                if k:
+                    tab_map[k] = nr
+            snapshot[tab] = tab_map
+        ts = now_local().isoformat()
+        state = {"version": 1, "synced_at": ts, "tabs": snapshot}
+        save_sync_state(root, state)
+    print(json.dumps({
+        "ok": True,
+        "synced_at": ts,
+        "counts": {tab: len(rows) for tab, rows in snapshot.items()},
+        "path": rel(root, sync_state_path(root)),
+    }, ensure_ascii=False))
 
 
 def cmd_summary(args: argparse.Namespace, root: Path) -> None:
@@ -1776,6 +2048,16 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--since", help="Optional inclusive start date/timestamp")
     ex.add_argument("--until", help="Optional inclusive end date/timestamp")
 
+    sp = sub.add_parser("sync-plan", help="3-way diff between live Google Sheet tabs (on stdin) and local health/ logs")
+    sp.add_argument("--prefer", choices=("local", "remote"), help="Optional tie-breaker for conflicts")
+    sp.add_argument("--json", action="store_true", help="Read remote tabs JSON on stdin")
+
+    sa = sub.add_parser("sync-apply", help="Apply Sheet-originated pulls/deletes locally and output exact Sheet write actions")
+    sa.add_argument("--prefer", choices=("local", "remote"), help="Optional tie-breaker for conflicts")
+    sa.add_argument("--json", action="store_true", help="Read remote tabs JSON on stdin")
+
+    sub.add_parser("sync-mark", help="Record current local state as last-synced baseline (health/.sync-state.json)")
+
     sm = sub.add_parser("summary", help="JSON weekly/range summary (missing days are null/unknown, never zero)")
     sm.add_argument("--since", help="Start date YYYY-MM-DD (default: until - (days - 1))")
     sm.add_argument("--until", help="End date YYYY-MM-DD (default: today)")
@@ -1844,6 +2126,9 @@ def main() -> None:
         "restore": cmd_restore,
         "workouts": cmd_workouts,
         "export-sheets": cmd_export_sheets,
+        "sync-plan": cmd_sync_plan,
+        "sync-apply": cmd_sync_apply,
+        "sync-mark": cmd_sync_mark,
         "summary": cmd_summary,
         "report": cmd_report,
         "staples": cmd_staples,

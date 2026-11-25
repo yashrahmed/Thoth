@@ -54,14 +54,27 @@ health-track delete h-20261125-085000-a1b2       # archive; `restore <id>` undoe
 
 Check the returned JSON (`id`, `revision`, and `day_totals` / `workout_counts`) before confirming to the owner.
 
-## Google Sheet Mirror
+## Google Sheet Mirror (Graceful Offline Fallback)
 
 When `health/config.json` configures `sheets.spreadsheet_id`, mirror every local write to the matching worksheet tab in that spreadsheet:
 
 - **Tabs:** `Workouts`, `Meals`, `Weight`, `CPAP`, `Meds`, `Slips`, `Staples`.
-- **Stable ID matching:** every log tab stores the entry `ID` in its last column. On `add`, append the formatted row (from `health-track export-sheets` format); on `fix`, update the row matching that `ID`; on `delete`, remove the row matching that `ID` (clear all rows in a tab only on explicit request, keeping the header). On `staples` changes, update the matching `Slug` row in `Staples`.
-- **Full export:** `health-track export-sheets` prints exact headers and rows for all 7 tabs to initialize or resync the sheet deterministically.
-- **Write path:** write locally first via `health-track`, then update the Sheet. If the active host's Google connector can't edit Sheets in place, delegate the Sheet write to a **Codex subagent** (passing `spreadsheet_id`, tab name, exact row change(s), and `ID`), require it to read back the affected range to verify, and report only verified results. If no Sheets writer is available, keep the local entry and tell the owner the Sheet wasn't synced yet.
+- **Stable ID matching:** every log tab stores the entry `ID` in its last column (`Slug` in column A for `Staples`). On `add`, append `sheet_row.row`; on `fix`, update the row matching that `ID`; on `delete`, remove the row matching that `ID` (clear all rows in a tab only on explicit request, keeping the header).
+- **Local first, never block on Google:** always write locally via `health-track` first. Then attempt to mirror to Google Sheets (delegating the Sheet write to a **Codex subagent** if the active host lacks native Sheets write tools, and verifying by readback). After a verified mirror write, run `health-track sync-mark` if the Sheet was already in sync.
+- **Fail gracefully:** if Google connectivity is down, auth fails, or the current harness has neither Sheets write tools nor a Codex subagent available, **keep the local entry intact** — do not roll it back or error out. Report the saved local `ID` (and `day_totals` / `workout_counts`), explicitly state that the Google Sheet wasn't updated because Google access isn't available right now, and remind the owner they can run **sync** later.
+
+## Sync (Two-Way Reconciliation)
+
+Use when the owner asks to sync health data (e.g. "sync health", "sync the health log") after offline logging or manual edits in Google Sheets:
+
+1. **Read** `health/config.json` (`sheets.spreadsheet_id`) and fetch all 7 tabs (`Workouts`, `Meals`, `Weight`, `CPAP`, `Meds`, `Slips`, `Staples`) from Google Sheets (directly or via Codex subagent). If Google Sheets is unreachable or unsupported in this harness, stop cleanly and report that sync requires Google Sheets connectivity.
+2. **Plan (3-way diff):** pipe the live Sheet rows JSON (`{"tabs": {"Workouts": [...], ...}}`) into `health-track sync-plan --json`.
+   - Compares local logs/staples, live Sheet rows, and the last-synced baseline (`health/.sync-state.json`).
+   - If `clean: true`, report everything is already in sync and stop.
+   - If `conflicts` or `invalid_remote_rows` are non-empty, show both sides to the owner and ask whether to keep local or remote (re-run with `--prefer local` or `--prefer remote`), rather than silently overwriting.
+3. **Apply local pulls:** run `health-track sync-apply --json` with the same Sheet rows JSON (and `--prefer` if chosen). This imports manual/remote-added Sheet rows into local JSONL (assigning stable IDs if blank), applies remote edits, archives remote-deleted rows, and outputs exact `sheet_actions` (`push_append`, `push_update`, `remote_delete`, plus ID writebacks for manual Sheet rows).
+4. **Apply Sheet pushes:** execute `sheet_actions` on the Google Sheet (delete rows bottom-up by `remote_row_index`, update changed/ID-writeback rows in place, append new rows), via native Sheets connector or Codex subagent. Read back affected tabs to verify.
+5. **Mark synced:** once verified, run `health-track sync-mark` to update `health/.sync-state.json`, and report exact counts (pushed, pulled, deleted, verified).
 
 ## Weekly Check-In View
 

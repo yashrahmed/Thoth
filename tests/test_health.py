@@ -271,6 +271,78 @@ class TestHealthTrackCLI(unittest.TestCase):
         self.assertNotEqual(eng.returncode, 0)
         self.assertIn("Refusing to use the Thoth engine directory", eng.stderr)
 
+    def test_three_way_sync_plan_apply_and_mark(self) -> None:
+        # Initial synced state: 1 weight, 1 meal, 1 workout, 1 staple
+        run_cli(
+            self.root, "staples", "add", "egg-large",
+            "--name", "Large egg", "--unit", "egg", "--kcal", "72", "--protein", "6.3",
+        )
+        w1 = j(self.add_json("weight", {"when": "2026-10-10 07:00", "weight_kg": 95.0, "waist_in": 40.0}))["entry"]
+        m1 = j(self.add_json("meal", {"when": "2026-10-10 08:30", "slot": "breakfast", "description": "Eggs", "kcal": 300, "protein_g": 25}))["entry"]
+        wk1 = j(self.add_json("workout", {"when": "2026-10-10 06:00", "kind": "trainer", "status": "attended"}))["entry"]
+        exp0 = j(run_cli(self.root, "export-sheets"))
+        mark = j(run_cli(self.root, "sync-mark"))
+        self.assertTrue(mark["ok"])
+
+        # Same rows (even with string numbers from Sheets) => clean
+        remote_clean = {
+            "tabs": {
+                tab: [spec["headers"], *[[str(c) for c in row] for row in spec["rows"]]]
+                for tab, spec in exp0["tabs"].items()
+            }
+        }
+        plan0 = j(run_cli(self.root, "sync-plan", "--json", stdin_data=json.dumps(remote_clean)))
+        self.assertTrue(plan0["clean"])
+        self.assertEqual(plan0["counts"]["in_sync"], 4)
+
+        # Simulate offline local changes + manual remote Sheet changes:
+        # - Local: add cpap (offline), fix m1 kcal -> 350, delete wk1
+        # - Remote: edit w1 weight_kg 95.0 -> 94.5, add manual meal with blank ID
+        c_new = j(self.add_json("cpap", {"when": "2026-10-11 07:00", "hours": 6.5, "ahi": 1.2}))["entry"]
+        run_cli(self.root, "fix", m1["id"], "--kcal", "350")
+        run_cli(self.root, "delete", wk1["id"])
+
+        remote_changed = json.loads(json.dumps(remote_clean))
+        remote_changed["tabs"]["Weight"][1][2] = "94.5"  # edited in Sheet
+        remote_changed["tabs"]["Meals"].append(["2026-10-11", "12:30", "lunch", "Manual Sheet salad", "450", "38", "from phone", ""])
+
+        plan1 = j(run_cli(self.root, "sync-plan", "--json", stdin_data=json.dumps(remote_changed)))
+        self.assertFalse(plan1["clean"])
+        self.assertEqual(plan1["counts"]["push_append"], 1)    # c_new
+        self.assertEqual(plan1["counts"]["push_update"], 1)    # m1
+        self.assertEqual(plan1["counts"]["remote_delete"], 1)  # wk1 archived locally
+        self.assertEqual(plan1["counts"]["pull_update"], 1)    # w1 edited in Sheet
+        self.assertEqual(plan1["counts"]["pull_add"], 1)       # manual Sheet meal
+        self.assertEqual(plan1["counts"]["conflicts"], 0)
+        self.assertEqual(plan1["push_append"][0]["id"], c_new["id"])
+
+        applied = j(run_cli(self.root, "sync-apply", "--json", stdin_data=json.dumps(remote_changed)))
+        self.assertEqual(len(applied["applied"]["pulled_added"]), 1)
+        self.assertEqual(len(applied["applied"]["pulled_updated"]), 1)
+        # w1 updated locally to 94.5
+        self.assertEqual(j(run_cli(self.root, "read", w1["id"]))["entry"]["weight_kg"], 94.5)
+        # push_update includes both m1 update and ID writeback for the manual Sheet meal
+        self.assertEqual(len(applied["sheet_actions"]["push_update"]), 2)
+        self.assertEqual(len(applied["sheet_actions"]["push_append"]), 1)
+        self.assertEqual(len(applied["sheet_actions"]["remote_delete"]), 1)
+
+        # True conflict: both local and remote edit w1 differently after mark
+        run_cli(self.root, "sync-mark")
+        run_cli(self.root, "fix", w1["id"], "--weight-kg", "94.2")
+        exp1 = j(run_cli(self.root, "export-sheets"))
+        remote_conflict = {"tabs": {tab: [spec["headers"], *spec["rows"]] for tab, spec in exp1["tabs"].items()}}
+        remote_conflict["tabs"]["Weight"][1][2] = 93.9
+        cplan = j(run_cli(self.root, "sync-plan", "--json", stdin_data=json.dumps(remote_conflict)))
+        self.assertEqual(cplan["counts"]["conflicts"], 1)
+        # sync-apply refuses unresolved conflict
+        blocked = run_cli(self.root, "sync-apply", "--json", stdin_data=json.dumps(remote_conflict), check=False)
+        self.assertNotEqual(blocked.returncode, 0)
+        self.assertIn("conflict", blocked.stderr.lower())
+        # --prefer local resolves in favor of push_update
+        resolved = j(run_cli(self.root, "sync-plan", "--prefer", "local", "--json", stdin_data=json.dumps(remote_conflict)))
+        self.assertEqual(resolved["counts"]["conflicts"], 0)
+        self.assertEqual(resolved["counts"]["push_update"], 1)
+
     def test_parallel_adds_flock(self) -> None:
         def worker(i: int) -> dict:
             return j(self.add_json("weight", {"when": "2026-10-15 08:00:00", "weight_kg": 90.0 + i * 0.1}))

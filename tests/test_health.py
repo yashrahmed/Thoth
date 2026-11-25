@@ -146,11 +146,26 @@ class TestHealthTrackCLI(unittest.TestCase):
 
     def test_trainer_workout_counts_and_export_sheets(self) -> None:
         run_cli(
-            self.root, "config", "set",
-            "--spreadsheet-id", "sheet-abc-123",
-            "--sheet-title", "Health Log",
-            "--sheet-url", "https://docs.google.com/spreadsheets/d/sheet-abc-123/edit",
+            self.root, "config", "set", "--json",
+            stdin_data=json.dumps({
+                "sheets": {
+                    "spreadsheet_id": "sheet-abc-123",
+                    "title": "Health Log",
+                    "url": "https://docs.google.com/spreadsheets/d/sheet-abc-123/edit",
+                    "permission_rule_id": "20261001-090000-abcd",
+                    "writer": {"provider": "worker-a", "model": "model-1", "options": {"effort": "medium"}},
+                }
+            }),
         )
+        cfg = j(run_cli(self.root, "config", "show"))["config"]
+        self.assertEqual(cfg["sheets"]["permission_rule_id"], "20261001-090000-abcd")
+        self.assertEqual(cfg["sheets"]["writer"]["provider"], "worker-a")
+        bad_writer = run_cli(
+            self.root, "config", "set", "--json",
+            stdin_data=json.dumps({"sheets": {"writer": {"bogus": 1}}}),
+            check=False,
+        )
+        self.assertNotEqual(bad_writer.returncode, 0)
         run_cli(
             self.root, "staples", "add", "egg-large",
             "--name", "Large egg", "--unit", "egg", "--kcal", "72", "--protein", "6.3",

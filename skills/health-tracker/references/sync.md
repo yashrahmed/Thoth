@@ -1,10 +1,17 @@
 # Health Tracker — Two-Way Google Sheet Sync & Setup
 
-Run this procedure when the owner asks to sync health data (e.g. `"sync health"`, `"sync the health log"`) after offline logging or manual edits in Google Sheets.
+Run this procedure only when the owner asks to sync health data (e.g. `"sync health"`, `"sync the health log"`) or during a scheduled sync — never on routine single-entry recording.
+
+## Sheet Access & Delegation
+
+- Read `sheets` from `health-track config show` (`spreadsheet_id`, optional `writer`, optional `permission_rule_id`).
+- If the active harness has native Google Sheets read/write tools, use them directly.
+- Otherwise, delegate the Sheet read/write to `sheets.writer` (if configured in `health/config.json`, using its `provider`, `model`, and `options`) or another available subagent/harness with Sheets write access. Always pass `sheets.permission_rule_id` (if set) and instruct the delegate to verify that rule on disk first before deciding authorization, skip unrelated workspace/profile context reads, and confirm writes by readback.
+- If no Sheets-capable harness or connectivity is available, stop cleanly without modifying local logs and tell the owner sync requires Google Sheets access.
 
 ## Two-Way Sync
 
-1. **Read live Sheet:** read `sheets.spreadsheet_id` from `health-track config show` and fetch all 7 tabs (`Workouts`, `Meals`, `Weight`, `CPAP`, `Meds`, `Slips`, `Staples`) from Google Sheets using the Sheet write path (native Sheets connector, or a subagent/harness with Google Sheets access). If Google Sheets is unreachable or unsupported in this harness, stop cleanly and report that sync requires Google connectivity.
+1. **Read live Sheet:** fetch all 7 tabs (`Workouts`, `Meals`, `Weight`, `CPAP`, `Meds`, `Slips`, `Staples`) from `sheets.spreadsheet_id`.
 2. **Plan (3-way diff):** pipe the fetched rows (`{"tabs": {"Workouts": [...], ...}}`) into:
    ```sh
    health-track sync-plan --json
@@ -13,7 +20,7 @@ Run this procedure when the owner asks to sync health data (e.g. `"sync health"`
    - If `clean: true`, report everything is in sync and stop.
    - If `conflicts` or `invalid_remote_rows` are non-empty, show both sides to the owner and ask whether to keep local or remote (re-run with `--prefer local` or `--prefer remote`); never silently overwrite.
 3. **Apply local pulls:** run `health-track sync-apply --json` (with `--prefer` if chosen) using the same Sheet JSON. This imports manual/remote-added Sheet rows into local JSONL (assigning stable IDs if blank), applies remote edits, archives remote-deleted rows, and outputs exact `sheet_actions` (`push_append`, `push_update` including ID writebacks, and `remote_delete`).
-4. **Apply Sheet pushes:** execute `sheet_actions` on Google Sheets (via native Sheets connector, or a subagent/harness with Sheets write access—passing any active standing permission rule ID so it can verify authorization on disk):
+4. **Apply Sheet pushes:** execute `sheet_actions` on Google Sheets:
    - Delete `remote_delete` rows **bottom-up** by `remote_row_index`.
    - Update `push_update` rows in place by `remote_row_index`.
    - Append `push_append` rows.
@@ -22,14 +29,16 @@ Run this procedure when the owner asks to sync health data (e.g. `"sync health"`
    ```sh
    health-track sync-mark
    ```
-   Report verified counts (pushed, pulled, deleted, in sync).
+   Commit any pulled local `health/` changes via `auto-commit` (if tracked) and report verified counts (pushed, pulled, deleted, in sync).
 
 ## Initial Sheet Setup (New Instance)
 
 1. Run `health-track export-sheets` to get exact headers and rows for all 7 tabs.
-2. Create a Google Sheet titled **Health Log** (via native Sheets connector, or a subagent/harness with Sheets write access), create the 7 tabs in order with a bold frozen header row, write initial rows, and verify by readback.
-3. Save the spreadsheet metadata:
+2. Create a Google Sheet titled **Health Log**, create the 7 tabs in order with a bold frozen header row, write initial rows, and verify by readback.
+3. Save spreadsheet metadata (and optional `writer` / `permission_rule_id`) in `health/config.json`:
    ```sh
-   health-track config set --spreadsheet-id "<id>" --sheet-title "Health Log" --sheet-url "<url>"
+   health-track config set --json <<'EOF'
+   {"sheets": {"spreadsheet_id": "<id>", "title": "Health Log", "url": "<url>"}}
+   EOF
    health-track sync-mark
    ```

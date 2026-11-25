@@ -87,7 +87,8 @@ CONFIG_KEYS = frozenset({"baseline", "targets", "sheets"})
 BASELINE_KEYS = frozenset({"weight_kg", "waist_in", "date"})
 TARGET_KEYS = frozenset({"protein_g_min", "kcal_max", "cpap_hours_min", "cpap_ahi_max", "meds"})
 MED_TARGET_KEYS = frozenset({"name", "dose", "expected_per_day"})
-SHEETS_KEYS = frozenset({"spreadsheet_id", "title", "url"})
+SHEETS_KEYS = frozenset({"spreadsheet_id", "title", "url", "permission_rule_id", "writer"})
+SHEETS_WRITER_KEYS = frozenset({"provider", "model", "options"})
 
 SHEET_HEADERS: dict[str, list[str]] = {
     "Workouts": ["Date", "Kind", "Status", "Duration (min)", "Exercises", "Fasted", "Notes", "ID"],
@@ -1918,13 +1919,39 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
             if not isinstance(sh, dict):
                 fail("config sheets must be a JSON object")
             validate_json_keys(sh, SHEETS_KEYS, "config.sheets")
-            for k in ("spreadsheet_id", "title", "url"):
+            for k in ("spreadsheet_id", "title", "url", "permission_rule_id"):
                 if k in sh:
                     v = clean_text(sh[k], f"sheets.{k}", single_line=True)
                     if v:
                         sheets[k] = v
                     else:
                         sheets.pop(k, None)
+            if "writer" in sh:
+                wr = sh["writer"]
+                if wr is None or wr == {}:
+                    sheets.pop("writer", None)
+                else:
+                    if not isinstance(wr, dict):
+                        fail("sheets.writer must be a JSON object")
+                    validate_json_keys(wr, SHEETS_WRITER_KEYS, "config.sheets.writer")
+                    wr_clean: dict[str, Any] = {}
+                    for wk in ("provider", "model"):
+                        if wk in wr and wr[wk] is not None:
+                            val = clean_text(wr[wk], f"sheets.writer.{wk}", single_line=True)
+                            if val:
+                                wr_clean[wk] = val
+                    if "options" in wr and wr["options"] is not None:
+                        if not isinstance(wr["options"], dict):
+                            fail("sheets.writer.options must be a JSON object")
+                        for ok, ov in wr["options"].items():
+                            check_secrets(str(ok), "sheets.writer.options")
+                            check_secrets(str(ov), "sheets.writer.options")
+                        if wr["options"]:
+                            wr_clean["options"] = wr["options"]
+                    if wr_clean:
+                        sheets["writer"] = wr_clean
+                    else:
+                        sheets.pop("writer", None)
 
         if args.baseline_weight is not None:
             baseline["weight_kg"] = round1(num_or_none(args.baseline_weight, "--baseline-weight", min_val=20, max_val=400))  # type: ignore[arg-type]

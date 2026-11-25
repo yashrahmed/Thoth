@@ -1,6 +1,6 @@
 ---
 name: health-tracker
-description: Log, count, fix, sync, or summarize daily health and workout entries (trainer & solo workouts, meals, weight/waist, CPAP, meds, diet slips) via health-track, mirrored to the owner's Google Sheet. Use for any workout/trainer session count, food, body, sleep, med, or slip report, "sync health", or a weekly check-in.
+description: Log, count, fix, sync, or summarize daily health and workout entries (trainer & solo workouts, meals, weight/waist, CPAP, meds, diet slips) via health-track, with separate two-way sync to the owner's Google Sheet. Use for any workout/trainer session count, food, body, sleep, med, or slip report, "sync health", or a weekly check-in.
 ---
 
 # Health Tracker (`health-track`)
@@ -9,8 +9,9 @@ Data lives in `health/` relative to the instance root: `health/logs/YYYY-MM.json
 
 ## Rules
 
-- **Personal-only & no medical advice:** never send health data to external nutrition APIs, third-party clouds, or work instances — only mirror to the owner's configured personal Google Sheet (`health/config.json` → `sheets.spreadsheet_id`). Flag concerning trends for the owner's doctor; never advise starting, stopping, or changing medication doses.
-- **No per-entry memories:** daily logs stay in `health-track` (and the Sheet), not `thoth-mem`. Write **one** summary episode via `memory` at each weekly check-in.
+- **Personal-only & no medical advice:** never send health data to external nutrition APIs, third-party clouds, or work instances — the only external write allowed is syncing to the owner's configured personal Google Sheet (`health/config.json` → `sheets.spreadsheet_id`). Flag concerning trends for the owner's doctor; never advise starting, stopping, or changing medication doses.
+- **No per-entry memories:** daily logs stay in `health-track` (and sync to the Sheet separately), not `thoth-mem`. Write **one** summary episode via `memory` at each weekly check-in.
+- **Record locally, sync separately:** normal `add`, `fix`, `delete`, `restore`, and `staples` operations write **locally only** (fast, offline-safe, no Sheet calls during chat). Only touch Google Sheets when the owner asks to sync (e.g. `"sync health"`) or in a scheduled sync run.
 - **Missing days are Unknown, never zero** in summaries and weekly views. Nutrition figures are always labeled as estimates (`est.`).
 
 ## Log, Read, Fix, Delete
@@ -34,18 +35,9 @@ health-track fix <id> --json <<< '{"ahi": 1.4, "expected_revision": 1}'
 health-track delete <id>                                  # archive; `restore <id>` undoes it; --hard only on request
 ```
 
-Manage staples (`staples add|fix|delete`) and baseline/targets/sheet config (`config show|set`) via `--help`.
+Manage staples (`staples add|fix|delete`) and baseline/targets/sheet config (`config show|set`) via `--help`. Commit touched `health/` files via `auto-commit` if tracked in git.
 
-## Google Sheet Mirror
+## Sync & Weekly Check-In
 
-When `health/config.json` sets `sheets.spreadsheet_id`, mirror every local write to that spreadsheet's tabs (`Workouts`, `Meals`, `Weight`, `CPAP`, `Meds`, `Slips`, `Staples`):
-
-- **Sheet write path:** write locally first via `health-track`, then mirror (`add` → append `sheet_row.row`; `fix` → update row matching `ID` in last column, or `Slug` in col A for `Staples`; `delete` → remove matching row; clear a tab only on explicit request, keeping the header). If the active harness lacks native Sheets write tools, delegate the Sheet write to a subagent/harness with Sheets write access—passing the local entry `ID` and any active standing permission rule ID so it can verify authorization on disk—and confirm by readback. Do **not** run `sync-mark` on single-entry mirrors.
-- **Fail gracefully:** if Google Sheets is unreachable or unsupported in this harness, keep the local entry intact, report its `id` and totals, state the Sheet wasn't updated, and suggest running **sync** later.
-- **Two-way sync (`"sync health"`) or Sheet setup:** follow `references/sync.md`.
-
-## Weekly Check-In
-
-Run `health-track summary --days 7` and `health-track report --days 7 --out /tmp/health-weekly.html` (transient temp file), then show the HTML with the host's inline HTML view (`html_preview` then `html_render`), or give the path. After reviewing with the owner, write the single weekly summary episode via `thoth-mem`.
-
-If the instance tracks `health/` in git (not gitignored), commit touched files via `auto-commit`.
+- **Two-way Google Sheet sync (`"sync health"`) or Sheet setup:** follow `references/sync.md`.
+- **Weekly check-in:** run `health-track summary --days 7` and `health-track report --days 7 --out /tmp/health-weekly.html` (transient temp file), then show the HTML with the host's inline HTML view (`html_preview` then `html_render`), or give the path. After reviewing with the owner, write the single weekly summary episode via `thoth-mem`.

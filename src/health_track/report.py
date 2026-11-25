@@ -1,4 +1,4 @@
-"""Self-contained HTML weekly check-in renderer for `thoth-health`.
+"""Self-contained HTML weekly check-in renderer for `health-track`.
 
 - Zero external requests, scripts, or fonts.
 - Uses host theme CSS variables (with light/dark standalone fallbacks).

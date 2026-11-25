@@ -1,4 +1,4 @@
-"""Tests for thoth-health CLI: typed entries, staples, monthly JSONL, summary/unknowns, HTML report, secrets, flock."""
+"""Tests for health-track CLI: typed entries, staples, trainer billing counts, Google Sheets export, monthly JSONL, HTML report, secrets, flock."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ ENGINE_DIR = Path(__file__).resolve().parents[1]
 def run_cli(root: Path, *args: str, stdin_data: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
     env = {**os.environ, "THOTH_TZ": "America/Chicago"}
     proc = subprocess.run(
-        ["uv", "run", "-q", "--directory", str(ENGINE_DIR), "thoth-health", "--root", str(root), *args],
+        ["uv", "run", "-q", "--directory", str(ENGINE_DIR), "health-track", "--root", str(root), *args],
         input=stdin_data,
         text=True,
         capture_output=True,
@@ -32,7 +32,7 @@ def j(proc: subprocess.CompletedProcess) -> dict:
     return json.loads(proc.stdout)
 
 
-class TestThothHealthCLI(unittest.TestCase):
+class TestHealthTrackCLI(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
@@ -74,6 +74,8 @@ class TestThothHealthCLI(unittest.TestCase):
         self.assertEqual(m1["entry"]["protein_g"], m2["entry"]["protein_g"])
         self.assertTrue(m1["entry"]["estimated"])
         self.assertEqual(m1["day_totals"]["protein_g"], 41.2)
+        self.assertEqual(m1["sheet_row"]["tab"], "Meals")
+        self.assertEqual(m1["sheet_row"]["row"][-1], m1["entry"]["id"])
 
         # Updating staple doesn't mutate already-logged historical meal
         run_cli(self.root, "staples", "fix", "turkey-sausage", "--kcal", "100", "--protein", "9")
@@ -98,6 +100,8 @@ class TestThothHealthCLI(unittest.TestCase):
         self.assertEqual(md["entry"]["name"], "metformin")
         self.assertEqual(sl["entry"]["trigger"], "work-escape")
         self.assertEqual(ml["path"], "health/logs/2026-10.jsonl")
+        self.assertEqual(wk["workout_counts"]["billable"], 1)
+        self.assertEqual(wk["sheet_row"]["tab"], "Workouts")
 
         listed = j(run_cli(self.root, "list", "--date", "2026-10-31"))
         self.assertEqual(listed["count"], 6)
@@ -111,6 +115,7 @@ class TestThothHealthCLI(unittest.TestCase):
         self.assertEqual(fixed["entry"]["revision"], 2)
         self.assertEqual(fixed["entry"]["ahi"], 1.2)
         self.assertEqual(fixed["path"], "health/logs/2026-11.jsonl")
+        self.assertEqual(fixed["sheet_row"]["tab"], "CPAP")
         self.assertTrue((self.root / "health" / "logs" / "2026-11.jsonl").exists())
 
         # Stale revision rejected
@@ -138,6 +143,38 @@ class TestThothHealthCLI(unittest.TestCase):
         hard = j(run_cli(self.root, "delete", wk["entry"]["id"], "--hard"))
         self.assertEqual(hard["action"], "hard_deleted")
         self.assertNotEqual(run_cli(self.root, "read", wk["entry"]["id"], check=False).returncode, 0)
+
+    def test_trainer_workout_counts_and_export_sheets(self) -> None:
+        run_cli(
+            self.root, "config", "set",
+            "--spreadsheet-id", "sheet-abc-123",
+            "--sheet-title", "Health Log",
+            "--sheet-url", "https://docs.google.com/spreadsheets/d/sheet-abc-123/edit",
+        )
+        run_cli(
+            self.root, "staples", "add", "egg-large",
+            "--name", "Large egg", "--unit", "egg", "--kcal", "72", "--protein", "6.3",
+        )
+        run_cli(self.root, "add", "workout", "--when", "2026-10-02", "--kind", "trainer", "--status", "attended")
+        w2 = j(run_cli(self.root, "add", "workout", "--when", "2026-10-04", "--kind", "trainer", "--status", "missed_and_paid"))
+        run_cli(self.root, "add", "workout", "--when", "2026-10-05", "--kind", "solo", "--status", "attended")
+        run_cli(self.root, "add", "workout", "--when", "2026-10-06", "--kind", "trainer", "--status", "missed")
+
+        self.assertEqual(w2["workout_counts"]["billable"], 2)
+        self.assertEqual(w2["workout_counts"]["attended"], 1)
+        self.assertEqual(w2["workout_counts"]["missed_and_paid"], 1)
+
+        tr = j(run_cli(self.root, "workouts", "--kind", "trainer"))
+        self.assertEqual((tr["total"], tr["attended"], tr["missed_and_paid"], tr["missed"], tr["billable"]), (3, 1, 1, 1, 2))
+
+        all_w = j(run_cli(self.root, "workouts", "--kind", "all"))
+        self.assertEqual(all_w["total"], 4)
+
+        exp = j(run_cli(self.root, "export-sheets"))
+        self.assertEqual(exp["sheets"]["spreadsheet_id"], "sheet-abc-123")
+        self.assertEqual(set(exp["tabs"].keys()), {"Workouts", "Meals", "Weight", "CPAP", "Meds", "Slips", "Staples"})
+        self.assertEqual(len(exp["tabs"]["Workouts"]["rows"]), 4)
+        self.assertEqual(len(exp["tabs"]["Staples"]["rows"]), 1)
 
     def test_summary_and_weekly_html_keep_missing_days_unknown(self) -> None:
         run_cli(
@@ -228,7 +265,7 @@ class TestThothHealthCLI(unittest.TestCase):
 
         # Refuse engine directory
         eng = subprocess.run(
-            ["uv", "run", "-q", "--directory", str(ENGINE_DIR), "thoth-health", "list"],
+            ["uv", "run", "-q", "--directory", str(ENGINE_DIR), "health-track", "list"],
             text=True, capture_output=True, check=False,
         )
         self.assertNotEqual(eng.returncode, 0)

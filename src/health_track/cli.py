@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thoth health-tracker CLI (`thoth-health`).
+"""Thoth health-tracker CLI (`health-track`).
 
 Design:
 - Monthly append-friendly JSONL logs:
@@ -8,7 +8,7 @@ Design:
       <root>/health/logs/.archive/YYYY-MM.jsonl
 - Recurring foods catalog (fixed estimated kcal/protein):
       <root>/health/staples.json
-- Instance baseline & targets (zero PII in engine):
+- Instance baseline, targets, and optional Google Sheet mirror metadata (zero PII in engine):
       <root>/health/config.json
 - Typed entries (`meal`, `weight`, `cpap`, `med`, `workout`, `slip`) with
   stable IDs (`h-YYYYMMDD-HHMMSS-<4hex>`), revisions, and strict `--json`
@@ -40,9 +40,9 @@ from thoth_core import (
     validate_json_keys,
     write_lock,
 )
-from thoth_health.report import render_weekly_html
+from health_track.report import render_weekly_html
 
-PROG = "thoth-health"
+PROG = "health-track"
 
 ENTRY_TYPES = ("meal", "weight", "cpap", "med", "workout", "slip")
 MEAL_SLOTS = ("breakfast", "lunch", "dinner", "snack", "drink")
@@ -72,10 +72,21 @@ TYPE_KEYS: dict[str, frozenset[str]] = {
 MEAL_ITEM_KEYS = frozenset({"staple", "name", "unit", "qty", "kcal", "protein_g", "estimated"})
 STAPLE_ADD_KEYS = frozenset({"slug", "name", "unit", "kcal", "protein_g", "estimated", "aliases", "notes"})
 STAPLE_FIX_KEYS = frozenset({"name", "unit", "kcal", "protein_g", "estimated", "aliases", "notes"})
-CONFIG_KEYS = frozenset({"baseline", "targets"})
+CONFIG_KEYS = frozenset({"baseline", "targets", "sheets"})
 BASELINE_KEYS = frozenset({"weight_kg", "waist_in", "date"})
 TARGET_KEYS = frozenset({"protein_g_min", "kcal_max", "cpap_hours_min", "cpap_ahi_max", "meds"})
 MED_TARGET_KEYS = frozenset({"name", "dose", "expected_per_day"})
+SHEETS_KEYS = frozenset({"spreadsheet_id", "title", "url"})
+
+SHEET_HEADERS: dict[str, list[str]] = {
+    "Workouts": ["Date", "Kind", "Status", "Duration (min)", "Exercises", "Fasted", "Notes", "ID"],
+    "Meals": ["Date", "Time", "Slot", "Description", "Kcal (est)", "Protein g (est)", "Notes", "ID"],
+    "Weight": ["Date", "Time", "Weight (kg)", "Waist (in)", "Context", "Notes", "ID"],
+    "CPAP": ["Date", "Hours", "AHI", "Mask-offs", "Refreshed", "Notes", "ID"],
+    "Meds": ["Date", "Time", "Name", "Dose", "Status", "Timing", "Notes", "ID"],
+    "Slips": ["Date", "Time", "What", "Trigger", "Kcal (est)", "Notes", "ID"],
+    "Staples": ["Slug", "Name", "Unit", "Kcal (est)", "Protein g (est)", "Aliases", "Notes"],
+}
 
 
 # ---------------------------------------------------------------- paths
@@ -805,6 +816,111 @@ def build_summary(root: Path, since_date: date, until_date: date) -> dict[str, A
     return summary
 
 
+def entry_to_sheet_row(entry: dict[str, Any]) -> tuple[str, list[Any]]:
+    etype = entry["type"]
+    t_part = str(entry["when"])[11:16] if len(str(entry["when"])) >= 16 else ""
+    notes = entry.get("notes", "")
+    eid = entry["id"]
+    if etype == "workout":
+        fasted = entry.get("fasted")
+        fasted_s = "Yes" if fasted is True else ("No" if fasted is False else "")
+        return "Workouts", [
+            entry["date"],
+            entry["kind"],
+            entry["status"],
+            entry.get("duration_min", ""),
+            entry.get("exercises", ""),
+            fasted_s,
+            notes,
+            eid,
+        ]
+    if etype == "meal":
+        return "Meals", [
+            entry["date"],
+            t_part,
+            entry.get("slot", ""),
+            entry.get("description", ""),
+            entry["kcal"],
+            entry["protein_g"],
+            notes,
+            eid,
+        ]
+    if etype == "weight":
+        return "Weight", [
+            entry["date"],
+            t_part,
+            entry.get("weight_kg", ""),
+            entry.get("waist_in", ""),
+            entry.get("context", ""),
+            notes,
+            eid,
+        ]
+    if etype == "cpap":
+        return "CPAP", [
+            entry["date"],
+            entry["hours"],
+            entry.get("ahi", ""),
+            entry.get("mask_offs", ""),
+            entry.get("refreshed", ""),
+            notes,
+            eid,
+        ]
+    if etype == "med":
+        return "Meds", [
+            entry["date"],
+            t_part,
+            entry["name"],
+            entry.get("dose", ""),
+            entry["status"],
+            entry.get("timing", ""),
+            notes,
+            eid,
+        ]
+    if etype == "slip":
+        return "Slips", [
+            entry["date"],
+            t_part,
+            entry["what"],
+            entry["trigger"],
+            entry.get("kcal_est", ""),
+            notes,
+            eid,
+        ]
+    fail(f"Unsupported entry type for sheet row: {etype!r}")
+    raise RuntimeError
+
+
+def compute_workout_counts(entries: list[dict[str, Any]], *, kind: str = "trainer") -> dict[str, Any]:
+    workouts = [
+        e for e in entries
+        if e["type"] == "workout" and (kind == "all" or e["kind"] == kind)
+    ]
+    workouts.sort(key=lambda e: (e["date"], e["when"], e["id"]))
+    attended = sum(1 for w in workouts if w["status"] == "attended")
+    missed_and_paid = sum(1 for w in workouts if w["status"] == "missed_and_paid")
+    missed = sum(1 for w in workouts if w["status"] == "missed")
+    return {
+        "kind": kind,
+        "total": len(workouts),
+        "attended": attended,
+        "missed_and_paid": missed_and_paid,
+        "missed": missed,
+        "billable": attended + missed_and_paid,
+        "sessions": [
+            {
+                "id": w["id"],
+                "date": w["date"],
+                "kind": w["kind"],
+                "status": w["status"],
+                **({"duration_min": w["duration_min"]} if "duration_min" in w else {}),
+                **({"exercises": w["exercises"]} if "exercises" in w else {}),
+                **({"notes": w["notes"]} if w.get("notes") else {}),
+            }
+            for w in workouts
+        ],
+    }
+
+
 # ---------------------------------------------------------------- entry commands
 
 def cmd_add(args: argparse.Namespace, root: Path) -> None:
@@ -915,14 +1031,23 @@ def cmd_add(args: argparse.Namespace, root: Path) -> None:
                 "estimated": any(m.get("estimated", True) for m in day_meals),
             }
 
+        workout_counts = None
+        if entry_type == "workout":
+            live_entries = [r["entry"] for r in all_records if not r["archived"]] + [entry]
+            workout_counts = compute_workout_counts(live_entries, kind=entry["kind"])
+
+    tab_name, row_vals = entry_to_sheet_row(entry)
     out: dict[str, Any] = {
         "ok": True,
         "action": "added",
         "entry": entry,
         "path": rel(root, target_path),
+        "sheet_row": {"tab": tab_name, "headers": SHEET_HEADERS[tab_name], "row": row_vals},
     }
     if day_totals is not None:
         out["day_totals"] = day_totals
+    if workout_counts is not None:
+        out["workout_counts"] = workout_counts
     print(json.dumps(out, ensure_ascii=False))
 
 
@@ -1136,11 +1261,13 @@ def cmd_fix(args: argparse.Namespace, root: Path) -> None:
             write_jsonl_file(new_path, new_month)
             write_jsonl_file(old_path, old_month)
 
+    tab_name, row_vals = entry_to_sheet_row(new_entry)
     print(json.dumps({
         "ok": True,
         "action": "fixed",
         "entry": new_entry,
         "path": rel(root, new_path),
+        "sheet_row": {"tab": tab_name, "headers": SHEET_HEADERS[tab_name], "row": row_vals},
     }, ensure_ascii=False))
 
 
@@ -1223,6 +1350,75 @@ def resolve_window_dates(since: str | None, until: str | None, days: int) -> tup
     if since_d > until_d:
         fail(f"--since ({since_d.isoformat()}) must be on or before --until ({until_d.isoformat()})")
     return since_d, until_d
+
+
+def cmd_workouts(args: argparse.Namespace, root: Path) -> None:
+    since_dt, until_dt = parse_range_bounds(args.since, args.until)
+    since_ym = since_dt.strftime("%Y-%m") if since_dt else None
+    until_ym = until_dt.strftime("%Y-%m") if until_dt else None
+    records, warnings = load_entries(root, include_archived=False, since_ym=since_ym, until_ym=until_ym)
+    filtered: list[dict[str, Any]] = []
+    for r in records:
+        e = r["entry"]
+        if e["type"] != "workout":
+            continue
+        dt = parse_timestamp(e["when"], default_now=False)
+        if since_dt is not None and dt < since_dt:
+            continue
+        if until_dt is not None and dt > until_dt:
+            continue
+        filtered.append(e)
+    counts = compute_workout_counts(filtered, kind=args.kind)
+    out: dict[str, Any] = {"ok": True, **counts}
+    if warnings:
+        out["warnings"] = warnings
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+def cmd_export_sheets(args: argparse.Namespace, root: Path) -> None:
+    since_dt, until_dt = parse_range_bounds(args.since, args.until)
+    since_ym = since_dt.strftime("%Y-%m") if since_dt else None
+    until_ym = until_dt.strftime("%Y-%m") if until_dt else None
+    records, warnings = load_entries(root, include_archived=False, since_ym=since_ym, until_ym=until_ym)
+    rows_by_tab: dict[str, list[list[Any]]] = {tab: [] for tab in SHEET_HEADERS}
+
+    live = [r["entry"] for r in records]
+    live.sort(key=lambda e: (e["when"], e["id"]))
+    for e in live:
+        dt = parse_timestamp(e["when"], default_now=False)
+        if since_dt is not None and dt < since_dt:
+            continue
+        if until_dt is not None and dt > until_dt:
+            continue
+        tab_name, row_vals = entry_to_sheet_row(e)
+        rows_by_tab[tab_name].append(row_vals)
+
+    staples_data = load_staples(root).get("staples", {})
+    for slug in sorted(staples_data):
+        info = staples_data[slug]
+        rows_by_tab["Staples"].append([
+            slug,
+            info.get("name", ""),
+            info.get("unit", ""),
+            info.get("kcal", ""),
+            info.get("protein_g", ""),
+            ", ".join(info.get("aliases", [])),
+            info.get("notes", ""),
+        ])
+
+    cfg = load_config(root)
+    tabs = {
+        tab: {"headers": SHEET_HEADERS[tab], "rows": rows_by_tab[tab]}
+        for tab in SHEET_HEADERS
+    }
+    out: dict[str, Any] = {
+        "ok": True,
+        "sheets": cfg.get("sheets") or {},
+        "tabs": tabs,
+    }
+    if warnings:
+        out["warnings"] = warnings
+    print(json.dumps(out, ensure_ascii=False, indent=2))
 
 
 def cmd_summary(args: argparse.Namespace, root: Path) -> None:
@@ -1386,6 +1582,7 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
         cfg = load_config(root)
         baseline = dict(cfg.get("baseline") or {})
         targets = dict(cfg.get("targets") or {})
+        sheets = dict(cfg.get("sheets") or {})
 
         if "baseline" in payload:
             b = payload["baseline"]
@@ -1444,6 +1641,19 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
                     meds_clean.append(rec)
                 targets["meds"] = meds_clean
 
+        if "sheets" in payload:
+            sh = payload["sheets"]
+            if not isinstance(sh, dict):
+                fail("config sheets must be a JSON object")
+            validate_json_keys(sh, SHEETS_KEYS, "config.sheets")
+            for k in ("spreadsheet_id", "title", "url"):
+                if k in sh:
+                    v = clean_text(sh[k], f"sheets.{k}", single_line=True)
+                    if v:
+                        sheets[k] = v
+                    else:
+                        sheets.pop(k, None)
+
         if args.baseline_weight is not None:
             baseline["weight_kg"] = round1(num_or_none(args.baseline_weight, "--baseline-weight", min_val=20, max_val=400))  # type: ignore[arg-type]
         if args.baseline_waist is not None:
@@ -1454,8 +1664,28 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
             targets["protein_g_min"] = round1(num_or_none(args.protein_min, "--protein-min", min_val=1, max_val=500))  # type: ignore[arg-type]
         if args.kcal_max is not None:
             targets["kcal_max"] = round1(num_or_none(args.kcal_max, "--kcal-max", min_val=500, max_val=10000))  # type: ignore[arg-type]
+        if args.spreadsheet_id is not None:
+            v = clean_text(args.spreadsheet_id, "--spreadsheet-id", single_line=True)
+            if v:
+                sheets["spreadsheet_id"] = v
+            else:
+                sheets.pop("spreadsheet_id", None)
+        if args.sheet_title is not None:
+            v = clean_text(args.sheet_title, "--sheet-title", single_line=True)
+            if v:
+                sheets["title"] = v
+            else:
+                sheets.pop("title", None)
+        if args.sheet_url is not None:
+            v = clean_text(args.sheet_url, "--sheet-url", single_line=True)
+            if v:
+                sheets["url"] = v
+            else:
+                sheets.pop("url", None)
 
         cfg = {"version": 1, "baseline": baseline, "targets": targets}
+        if sheets:
+            cfg["sheets"] = sheets
         save_config(root, cfg)
 
     print(json.dumps({"ok": True, "action": "updated", "config": cfg, "path": rel(root, config_path(root))}, ensure_ascii=False))
@@ -1537,6 +1767,15 @@ def build_parser() -> argparse.ArgumentParser:
     rs = sub.add_parser("restore", help="Restore an archived entry by ID")
     rs.add_argument("id")
 
+    wk = sub.add_parser("workouts", help="Count workout sessions (trainer billing or solo) with dates")
+    wk.add_argument("--kind", choices=("trainer", "solo", "all"), default="trainer", help="Filter by kind (default: trainer)")
+    wk.add_argument("--since", help="Optional inclusive start date/timestamp")
+    wk.add_argument("--until", help="Optional inclusive end date/timestamp")
+
+    ex = sub.add_parser("export-sheets", help="Export tabular headers and rows per Google Sheet worksheet tab")
+    ex.add_argument("--since", help="Optional inclusive start date/timestamp")
+    ex.add_argument("--until", help="Optional inclusive end date/timestamp")
+
     sm = sub.add_parser("summary", help="JSON weekly/range summary (missing days are null/unknown, never zero)")
     sm.add_argument("--since", help="Start date YYYY-MM-DD (default: until - (days - 1))")
     sm.add_argument("--until", help="End date YYYY-MM-DD (default: today)")
@@ -1586,6 +1825,9 @@ def build_parser() -> argparse.ArgumentParser:
     cf_set.add_argument("--baseline-date")
     cf_set.add_argument("--protein-min", type=float)
     cf_set.add_argument("--kcal-max", type=float)
+    cf_set.add_argument("--spreadsheet-id", help="Google Sheet ID for mirroring")
+    cf_set.add_argument("--sheet-title", help="Google Sheet title")
+    cf_set.add_argument("--sheet-url", help="Google Sheet URL")
     cf_set.add_argument("--json", action="store_true")
     return p
 
@@ -1600,6 +1842,8 @@ def main() -> None:
         "fix": cmd_fix,
         "delete": cmd_delete,
         "restore": cmd_restore,
+        "workouts": cmd_workouts,
+        "export-sheets": cmd_export_sheets,
         "summary": cmd_summary,
         "report": cmd_report,
         "staples": cmd_staples,

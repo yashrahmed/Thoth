@@ -40,7 +40,7 @@ Manage staples (`staples add|fix|delete`) and baseline/targets/sheet config (`co
 
 When `health/config.json` sets `sheets.spreadsheet_id`, mirror every local write to that spreadsheet's tabs (`Workouts`, `Meals`, `Weight`, `CPAP`, `Meds`, `Slips`, `Staples`):
 
-- **Sheet write path:** write locally first via `health-track`, then mirror (`add` → append `sheet_row.row`; `fix` → update row matching `ID` in last column, or `Slug` in col A for `Staples`; `delete` → remove matching row; clear a tab only on explicit request, keeping the header). If the active host lacks native Sheets write tools, delegate the Sheet write to a **Codex subagent** and verify by readback. Do **not** run `sync-mark` on single-entry mirrors.
+- **Sheet write path:** write locally first via `health-track`, then mirror (`add` → append `sheet_row.row`; `fix` → update row matching `ID` in last column, or `Slug` in col A for `Staples`; `delete` → remove matching row; clear a tab only on explicit request, keeping the header). If the active harness lacks native Sheets write tools, delegate the Sheet write to a subagent/harness with Sheets write access—passing the local entry `ID` and any active standing permission rule ID so it can verify authorization on disk—and confirm by readback. Do **not** run `sync-mark` on single-entry mirrors.
 - **Fail gracefully:** if Google Sheets is unreachable or unsupported in this harness, keep the local entry intact, report its `id` and totals, state the Sheet wasn't updated, and suggest running **sync** later.
 - **Two-way sync (`"sync health"`) or Sheet setup:** follow `references/sync.md`.
 

@@ -11,7 +11,7 @@ Minimal, reusable persistent-agent engine (v2) — clean separation between engi
   - [`what-do-i-do`](skills/what-do-i-do/SKILL.md) — deprecated, marked for deletion; shows open tasks only
   - [`watch-video`](skills/watch-video/SKILL.md) — transcript + timestamped frame capture to local `work-artifacts/` + episode logging
   - [`prune-video-captures`](skills/prune-video-captures/SKILL.md) — delete finished captures' screenshots, keep transcripts, leave a tombstone + episode
-  - [`auto-commit`](skills/auto-commit/SKILL.md) — batch and locally commit touched instance state (`memory/episodes/`, `tasks/`, `work-artifacts/`) at turn end
+  - [`auto-commit`](skills/auto-commit/SKILL.md) — batch and locally commit touched instance state (`memory/episodes/`, `tasks/`, `health/`, `work-artifacts/`) at turn end
   - [`create-new-thread`](skills/create-new-thread/SKILL.md) — top-level host thread creation with configurable prefix & model routing
 
 > **Archive:** The previous Cloudflare Workers chat application (v1) is preserved at git tag [`v1-cloudflare-chat`](../../tree/v1-cloudflare-chat).

@@ -1,11 +1,11 @@
 ---
 name: auto-commit
-description: Batch and locally commit instance state files (memory/episodes/, tasks/, work-artifacts/) at the end of any turn that wrote them. Use whenever a turn creates, updates, archives, restores, or deletes those files.
+description: Batch and locally commit instance state files (memory/episodes/, tasks/, health/, work-artifacts/) at the end of any turn that wrote them. Use whenever a turn creates, updates, archives, restores, or deletes those files.
 ---
 
 # Auto-Commit
 
-When a turn writes to `memory/episodes/`, `tasks/`, or `work-artifacts/`, batch every file touched in that turn into **one local commit** right before replying.
+When a turn writes to `memory/episodes/`, `tasks/`, `health/`, or `work-artifacts/`, batch every file touched in that turn into **one local commit** right before replying.
 
 ## Rules
 

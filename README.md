@@ -8,7 +8,6 @@ Minimal, reusable persistent-agent engine (v2) — clean separation between engi
   - [`todo-list`](skills/todo-list/SKILL.md) — to-do list CRUD, actionable view, and source-key dedupe via `todo-list`
   - [`health-tracker`](skills/health-tracker/SKILL.md) — typed local health & workout log (meals, weight/waist, CPAP, meds, trainer/solo workouts, slips), staples catalog, weekly HTML check-in, and separate two-way Google Sheet sync via `health-track`
   - [`look-around`](skills/look-around/SKILL.md) — objective HTML snapshot of activity in an instance's allowlisted channels (`intake/channels.toml`) since the last look
-  - [`what-do-i-do`](skills/what-do-i-do/SKILL.md) — deprecated, marked for deletion; shows open tasks only
   - [`watch-video`](skills/watch-video/SKILL.md) — transcript + timestamped frame capture to local `work-artifacts/` + episode logging
   - [`prune-video-captures`](skills/prune-video-captures/SKILL.md) — delete finished captures' screenshots, keep transcripts, leave a tombstone + episode
   - [`auto-commit`](skills/auto-commit/SKILL.md) — batch and locally commit touched instance state (`memory/episodes/`, `tasks/`, `health/`, `work-artifacts/`) at turn end

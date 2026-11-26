@@ -10,7 +10,7 @@ Read `HARNESSES.md` in the instance root (if present). A row's **Boundary** and 
 ## Route selection
 
 1. **No `HARNESSES.md` or unlisted capability:** use the file's default line if given, else run natively if capable (obeying all gates) or stop and report.
-2. **Primary:** run natively if the current harness matches the primary's provider and pinned model (pinned options apply when delegating) — or if a row note says to stay native. Otherwise delegate to primary using IDs verified against live host capabilities; treat a missing pinned model as unavailable.
+2. **Primary:** run natively if the current harness matches the primary's provider and pinned model (pinned options apply when delegating) — or if a row note says to stay native. Otherwise **spawn a subagent (`delegate_task` / host delegation) yourself** to the primary using IDs verified against live host capabilities; treat a missing pinned model as unavailable. Only skip delegation if your own prompt explicitly assigned you a route to run natively (a top-level thread — even one launched by another agent — is not a route-assigned delegate).
 3. **Fallback:** use the listed fallback only when primary is unavailable (including hosts that cannot delegate) or fails (tool absent, auth or connector error — not an empty result), and only for directions it allows. Fallback matches on provider alone; when delegating, apply the same live-ID rule.
 4. **No permitted route works:** stop and report the blocker. Never improvise an unlisted harness.
 5. **Write safety:** verify every write (native or delegated) by readback. Never retry or switch routes after an uncertain write failure until readback confirms it did not apply; if still unknown, stop and report.

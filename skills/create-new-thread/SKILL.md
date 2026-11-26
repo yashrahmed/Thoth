@@ -10,7 +10,7 @@ Create a separate top-level conversation with the host's thread-creation tool, d
 ## Inputs
 
 - **Title:** given, or derived from the task; ask only if neither. If the instance's instructions (e.g. `AGENTS.md`) define a title prefix (e.g. `<Prefix> | <title>`), apply it once; otherwise use the plain title.
-- **Prompt:** the requested work with enough context to act independently. Title only → a brief purpose and an instruction to wait for the user's task. Don't invent work or copy unrelated history.
+- **Prompt:** the requested work with enough context to act independently (frame agent-launched threads as standalone top-level threads, not child delegates, so they may delegate when needed). Title only → a brief purpose and an instruction to wait for the user's task. Don't invent work or copy unrelated history.
 - **Destination:** honor a requested host, provider, project, machine, or workspace (worktree or cloud per host rules). Otherwise use the active host, the current project from context or the project catalog, and the local workspace; go projectless for non-project work. Ask if unresolvable.
 
 ## Model and effort

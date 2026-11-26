@@ -4,9 +4,9 @@ Run this procedure only when the owner asks to sync health data (e.g. `"sync hea
 
 ## Sheet Access & Delegation
 
-- Read `sheets` from `health-track config show` (`spreadsheet_id`, optional `writer`, optional `permission_rule_id`).
-- If the active harness has native Google Sheets read/write tools, use them directly.
-- Otherwise, delegate the Sheet read/write to `sheets.writer` (if configured in `health/config.json`, using its `provider`, `model`, and `options`) or another available subagent/harness with Sheets write access. Always pass `sheets.permission_rule_id` (if set) and instruct the delegate to verify that rule on disk first before deciding authorization, skip unrelated workspace/profile context reads, and confirm writes by readback.
+- Read `sheets` from `health-track config show` (`spreadsheet_id`, optional `permission_rule_id`, optional `writer`).
+- Use the `harness-selection` skill (Google Drive / Sheets) for all Sheet reads and writes, passing `sheets.permission_rule_id` (if set) for writes so the delegate verifies authorization on disk, skips unrelated workspace/profile reads, and confirms writes by readback.
+- If the instance does not use `harness-selection`, use native Google Sheets tools if available or delegate to `sheets.writer` (if configured in `health/config.json`).
 - If no Sheets-capable harness or connectivity is available, stop cleanly without modifying local logs and tell the owner sync requires Google Sheets access.
 
 ## Two-Way Sync

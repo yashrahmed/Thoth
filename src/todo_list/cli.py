@@ -675,6 +675,7 @@ def load_and_check(root: Path, path: Path, archived: bool) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog=PROG, description="Thoth to-do list CRUD CLI")
     p.add_argument("--root", help="Instance root (default: the current folder; mainly for tests)")
+    p.add_argument("--allow-worktree", action="store_true", help="Allow running inside a linked git worktree")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create", help="Create a task (prefer --json <<'EOF'); returns the existing task if a source key matches")
@@ -748,7 +749,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    root = resolve_root(args.root, PROG)
+    root = resolve_root(args.root, PROG, allow_worktree=args.allow_worktree)
     {
         "create": cmd_create,
         "read": cmd_read,

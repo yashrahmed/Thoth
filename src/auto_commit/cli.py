@@ -329,6 +329,7 @@ def cmd_stats(root: Path, args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="auto-commit", description="Safe, path-scoped local state commit CLI.")
     p.add_argument("--root", help="Instance root directory (default: current working directory).")
+    p.add_argument("--allow-worktree", action="store_true", help="Allow running inside a linked git worktree.")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("validate", help="Validate [auto_commit] config in thoth.toml and check git readiness.")
@@ -348,7 +349,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-    root = resolve_root(args.root, "auto-commit")
+    root = resolve_root(args.root, "auto-commit", allow_worktree=args.allow_worktree)
     dispatch = {
         "validate": cmd_validate,
         "run": cmd_run,

@@ -629,7 +629,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-    root = resolve_root(args.root, "harness-route")
+    root = resolve_root(args.root, "harness-route", allow_worktree=True)
     dispatch = {
         "validate": cmd_validate,
         "list": cmd_list,

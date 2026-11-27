@@ -1966,6 +1966,7 @@ def add_entry_flags(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog=PROG, description="Thoth health-tracker CLI")
     p.add_argument("--root", help="Instance root (default: current folder; mainly for tests)")
+    p.add_argument("--allow-worktree", action="store_true", help="Allow running inside a linked git worktree")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     a = sub.add_parser("add", help="Add a typed health log entry (prefer --json <<'EOF')")
@@ -2070,7 +2071,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    root = resolve_root(args.root, PROG)
+    root = resolve_root(args.root, PROG, allow_worktree=args.allow_worktree)
     dispatch = {
         "add": cmd_add,
         "read": cmd_read,

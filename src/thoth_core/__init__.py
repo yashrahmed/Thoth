@@ -91,7 +91,48 @@ def read_json_stdin(allowed: frozenset[str], cmd: str) -> dict[str, Any]:
         raise
 
 
-def resolve_root(root_arg: str | None, prog: str) -> Path:
+def linked_worktree_main_root(root: Path) -> Path | None:
+    """If `root` is inside a linked git worktree, return the main checkout path; else None.
+
+    A linked worktree has a `.git` file whose `gitdir:` target contains a `commondir`
+    file pointing to the shared `.git` directory. Regular checkouts have a `.git`
+    directory and submodules have no `commondir` file, so neither triggers a false positive.
+    """
+    for candidate in (root, *root.parents):
+        dot_git = candidate / ".git"
+        if dot_git.is_dir():
+            return None
+        if dot_git.is_file():
+            try:
+                lines = dot_git.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                return None
+            if not lines:
+                return None
+            first = lines[0].strip()
+            if not first.lower().startswith("gitdir:"):
+                return None
+            raw_gitdir = first.split(":", 1)[1].strip()
+            if not raw_gitdir:
+                return None
+            gitdir = Path(raw_gitdir)
+            gitdir = gitdir.resolve() if gitdir.is_absolute() else (candidate / gitdir).resolve()
+            commondir_file = gitdir / "commondir"
+            if not commondir_file.is_file():
+                return None
+            try:
+                raw_common = commondir_file.read_text(encoding="utf-8", errors="replace").strip()
+            except OSError:
+                return None
+            if not raw_common:
+                return None
+            common = Path(raw_common)
+            common_dir = common.resolve() if common.is_absolute() else (gitdir / common).resolve()
+            return common_dir.parent
+    return None
+
+
+def resolve_root(root_arg: str | None, prog: str, *, allow_worktree: bool = False) -> Path:
     """The instance root is the folder the CLI is launched from (`--root` overrides, mainly for tests)."""
     root = Path(root_arg).expanduser().resolve() if root_arg else Path.cwd().resolve()
     if any((root / marker).exists() for marker in ENGINE_MARKERS):
@@ -99,6 +140,15 @@ def resolve_root(root_arg: str | None, prog: str) -> Path:
             f"Refusing to use the Thoth engine directory ({root}) as an instance root. "
             f"Run `uv run --project <thoth> {prog} ...` from your instance folder."
         )
+    env_allow = os.environ.get("THOTH_ALLOW_WORKTREE", "").strip().lower() in ("1", "true", "yes")
+    if not allow_worktree and not env_allow:
+        main_root = linked_worktree_main_root(root)
+        if main_root is not None:
+            fail(
+                f"Refusing to run {prog} inside a linked git worktree ({root}); "
+                f"instance state lives only on the main checkout ({main_root}) to prevent split-brain logs. "
+                f"Run from the main checkout, or pass --allow-worktree / THOTH_ALLOW_WORKTREE=1 if intentional."
+            )
     return root
 
 

@@ -619,6 +619,7 @@ def cmd_restore(args: argparse.Namespace, root: Path) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="thoth-mem", description="Thoth episodic memory CRUD CLI")
     p.add_argument("--root", help="Instance root (default: the current folder; mainly for tests)")
+    p.add_argument("--allow-worktree", action="store_true", help="Allow running inside a linked git worktree")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("create", help="Create a new episode (prefer --json <<'EOF' to avoid shell escaping issues)")
@@ -689,7 +690,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    root = resolve_root(args.root, "thoth-mem")
+    root = resolve_root(args.root, "thoth-mem", allow_worktree=args.allow_worktree)
     dispatch = {
         "create": cmd_create,
         "read": cmd_read,

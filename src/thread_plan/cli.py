@@ -313,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-    root = resolve_root(args.root, "thread-plan")
+    root = resolve_root(args.root, "thread-plan", allow_worktree=True)
     dispatch = {
         "validate": cmd_validate,
         "prepare": cmd_prepare,

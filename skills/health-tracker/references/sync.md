@@ -24,8 +24,9 @@ Run this procedure only when the owner asks to sync health data (e.g. `"sync hea
    - Update `push_update` rows in place by `remote_row_index`.
    - Delete `remote_delete` rows **bottom-up** by `remote_row_index`.
    - Append `push_append` rows.
-   - Refetch affected tabs and verify updated/appended rows by ID and value, and deleted IDs by absence. If any push fails, do **not** run `sync-mark`; report what applied, flag any unlanded ID writebacks (re-running `sync-apply` would duplicate them), and stop until reconciled.
-5. **Mark baseline:** only after verified readback, run:
+   - If any push fails, do **not** run `sync-mark`; report what applied, flag any unlanded ID writebacks (re-running `sync-apply` would duplicate them), and stop until reconciled.
+5. **Verify with the CLI, not the writer:** refetch all 7 tabs (read-only) and pipe them into `health-track sync-plan --json`. The writer's own readback report is not proof. Require `clean: true`; otherwise do **not** run `sync-mark`, report the remaining actions as unlanded or wrong writes, and stop until reconciled.
+6. **Mark baseline:** only after step 5 returns `clean: true`, run:
    ```sh
    health-track sync-mark
    ```

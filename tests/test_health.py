@@ -339,6 +339,24 @@ class TestHealthTrackCLI(unittest.TestCase):
         self.assertEqual(len(applied["sheet_actions"]["push_append"]), 1)
         self.assertEqual(len(applied["sheet_actions"]["remote_delete"]), 1)
 
+        # Post-push verification: refetched Sheet must replan clean before sync-mark
+        def push(remote: dict, actions: dict) -> dict:
+            out = json.loads(json.dumps(remote))
+            tabs = out["tabs"]
+            for a in actions["push_update"]:
+                tabs[a["tab"]][a["remote_row_index"] - 1] = [str(c) for c in a["row"]]
+            for a in sorted(actions["remote_delete"], key=lambda a: -a["remote_row_index"]):
+                del tabs[a["tab"]][a["remote_row_index"] - 1]
+            for a in actions["push_append"]:
+                tabs[a["tab"]].append([str(c) for c in a["row"]])
+            return out
+
+        pushed = push(remote_changed, applied["sheet_actions"])
+        self.assertTrue(j(run_cli(self.root, "sync-plan", "--json", stdin_data=json.dumps(pushed)))["clean"])
+        botched = json.loads(json.dumps(pushed))
+        botched["tabs"]["Meals"][1][4] = "999"  # writer put a wrong value in a row
+        self.assertFalse(j(run_cli(self.root, "sync-plan", "--json", stdin_data=json.dumps(botched)))["clean"])
+
         # True conflict: both local and remote edit w1 differently after mark
         run_cli(self.root, "sync-mark")
         run_cli(self.root, "fix", w1["id"], "--weight-kg", "94.2")

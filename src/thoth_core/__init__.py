@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import sys
+import tomllib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -247,3 +248,27 @@ def score_search_fields(
     if matched_tokens == 0 or (all_terms and matched_tokens < len(tokens)):
         return 0
     return matched_tokens * 100 + weighted_score
+
+
+THOTH_CONFIG_FILE = "thoth.toml"
+TELEMETRY_DIR = ".thoth-telemetry"
+
+
+def load_thoth_toml(root: Path) -> tuple[dict[str, Any] | None, str | None]:
+    """Load `<root>/thoth.toml` if present. Returns `(data_or_none, error_or_none)`."""
+    cfg_path = root / THOTH_CONFIG_FILE
+    if not cfg_path.exists():
+        return None, None
+    try:
+        return tomllib.loads(cfg_path.read_text(encoding="utf-8")), None
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        return None, f"Failed to parse {THOTH_CONFIG_FILE}: {e}"
+
+
+def append_telemetry(root: Path, filename: str, event: dict[str, Any]) -> None:
+    """Append one compact JSONL telemetry event under `<root>/.thoth-telemetry/<filename>`."""
+    log_path = root / TELEMETRY_DIR / filename
+    line = json.dumps(event, ensure_ascii=False) + "\n"
+    with write_lock(log_path.parent):
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write(line)

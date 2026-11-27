@@ -1,27 +1,23 @@
 ---
 name: create-new-thread
-description: Create a separate top-level chat or thread in the active host with optional instance title prefix, model, and reasoning settings. Use when asked to start a new thread or chat, not a delegated subagent.
+description: Create a separate top-level chat or thread in the active host with instance defaults from thoth.toml via thread-plan. Use when asked to start a new thread or chat, not a delegated subagent.
 ---
 
-# Create New Thread
+# Create New Thread (`thread-plan`)
 
-Create a separate top-level conversation with the host's thread-creation tool, discovered at runtime. A subagent, background task, or fork doesn't count.
+Prepare the normalized title, model selection, starter prompt framing, and `client_request_id` from `thoth.toml`:
 
-## Inputs
+```sh
+uv run --project <thoth> thread-plan prepare [--title "..."] [--task "..."] [--model "..."] [--effort "..."] [--host-default] [--workspace "..."]
+```
 
-- **Title:** given, or derived from the task; ask only if neither. If the instance's instructions (e.g. `AGENTS.md`) define a title prefix (e.g. `<Prefix> | <title>`), apply it once; otherwise use the plain title.
-- **Prompt:** the requested work with enough context to act independently (frame agent-launched threads as standalone top-level threads, not child delegates, so they may delegate when needed). Title only → a brief purpose and an instruction to wait for the user's task. Don't invent work or copy unrelated history.
-- **Destination:** honor a requested host, provider, project, machine, or workspace (worktree or cloud per host rules). Otherwise use the active host, the current project from context or the project catalog, and the local workspace; go projectless for non-project work. Ask if unresolvable.
+If `action` is `ask`, ask the user for a title or task before creating. Then launch one separate top-level thread via the active host's thread-creation tool (a subagent, background task, or fork doesn't count unless `--fork` was requested).
 
-## Model and effort
+## Contract (non-negotiable)
 
-- Read the destination's capabilities first; use its advertised IDs and parameter names.
-- No model requested → the instance's default if its instructions define one, else the host's configured default (an explicit request for the host default wins).
-- Resolve shorthand names against the live catalog, skipping hidden/deprecated entries. Apply effort only when requested and supported.
-- Never guess IDs or silently switch provider, family, version, or effort; if anything is unavailable or ambiguous, ask before creating.
+- **Live catalog check:** read the destination's live capabilities first; resolve shorthand names against advertised, non-deprecated IDs and parameter names. Apply effort only when requested and supported. Never guess IDs or silently switch provider, family, version, or effort — ask if unavailable or ambiguous.
+- **Create once, safely:** pass the returned `client_request_id`, fresh history (unless forked), and resolved destination (active host, current project or projectless; ask if unresolvable). If the host cannot create threads, say so without switching services.
+- **Pending vs. ready:** never treat a pending ID as a thread ID or blindly retry an ambiguous result (check the original first). Don't wait for dispatched work unless asked.
+- **Report:** state the title, status, model/effort (or "configured default"), and the returned link verbatim using only the active host's documented rendering. Never claim success without a successful result.
 
-## Create and report
-
-1. Create once with the title, prompt, destination, and settings, using fresh history unless a fork is requested. Use the host's idempotency key if offered. If the host can't create threads, say so without switching services.
-2. Distinguish pending from ready. Never treat a pending ID as a thread ID or retry an ambiguous result; check the original first. Don't wait for dispatched work unless asked.
-3. Report the title, state, and model/effort (or "configured default"), with the returned link verbatim. Use only rendering conventions the active host documents. Never claim success without a successful result.
+Instance defaults schema: `references/setup.md`.

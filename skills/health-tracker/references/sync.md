@@ -4,8 +4,8 @@ Run this procedure only when the owner asks to sync health data (e.g. `"sync hea
 
 ## Sheet Access
 
-- Read `sheets` from `health-track config show` (`spreadsheet_id`, optional `permission_rule_id`, optional `writer`).
-- Route all Sheet reads and writes through `harness-selection` (Google Drive / Sheets) when installed; otherwise use native Google Sheets tools or `sheets.writer` (if configured), obeying the instance's external write gate.
+- Read `sheets` from `health-track config show` (`spreadsheet_id`, optional `permission_rule_id`).
+- Route all Sheet reads and writes through `harness-selection` (Google Drive / Sheets) when installed; otherwise use native Google Sheets tools, obeying the instance's external write gate.
 - Fetch brief: return `{"tabs": {...}}` with raw rows for all 7 tabs. Push brief: pass `sheet_actions` as the exact payload, authorized by `sheets.permission_rule_id` if set, otherwise the owner's quoted sync request.
 - If no Sheets access is available — or `sync-plan` shows pending Sheet changes (including ID writebacks) and no authorized writer is available — stop **before** `sync-apply` without modifying local logs.
 

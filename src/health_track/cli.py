@@ -87,8 +87,7 @@ CONFIG_KEYS = frozenset({"baseline", "targets", "sheets"})
 BASELINE_KEYS = frozenset({"weight_kg", "waist_in", "date"})
 TARGET_KEYS = frozenset({"protein_g_min", "kcal_max", "cpap_hours_min", "cpap_ahi_max", "meds"})
 MED_TARGET_KEYS = frozenset({"name", "dose", "expected_per_day"})
-SHEETS_KEYS = frozenset({"spreadsheet_id", "title", "url", "permission_rule_id", "writer"})
-SHEETS_WRITER_KEYS = frozenset({"provider", "model", "options"})
+SHEETS_KEYS = frozenset({"spreadsheet_id", "title", "url", "permission_rule_id"})
 
 SHEET_HEADERS: dict[str, list[str]] = {
     "Workouts": ["Date", "Kind", "Status", "Duration (min)", "Exercises", "Fasted", "Notes", "ID"],
@@ -187,6 +186,14 @@ def parse_date_only(raw: str, field: str) -> date:
 
 def round1(val: float) -> float:
     return round(float(val), 1)
+
+
+def set_or_pop(d: dict[str, Any], key: str, value: Any) -> None:
+    """Store value under key, or remove key when value is None or empty."""
+    if value is None or value == "":
+        d.pop(key, None)
+    else:
+        d[key] = value
 
 
 def num_or_none(val: Any, field: str, *, min_val: float | None = None, max_val: float | None = None) -> float | None:
@@ -1850,7 +1857,7 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
         print(json.dumps({"ok": True, "config": cfg, "path": rel(root, config_path(root))}, ensure_ascii=False, indent=2))
         return
 
-    payload = read_json_stdin(CONFIG_KEYS, "config set") if args.json else {}
+    payload = read_json_stdin(CONFIG_KEYS, "config set")
     with write_lock(health_dir(root)):
         cfg = load_config(root)
         baseline = dict(cfg.get("baseline") or {})
@@ -1862,23 +1869,13 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
             if not isinstance(b, dict):
                 fail("config baseline must be a JSON object")
             validate_json_keys(b, BASELINE_KEYS, "config.baseline")
-            if "weight_kg" in b:
-                w = num_or_none(b["weight_kg"], "baseline.weight_kg", min_val=20, max_val=400)
-                if w is None:
-                    baseline.pop("weight_kg", None)
-                else:
-                    baseline["weight_kg"] = round1(w)
-            if "waist_in" in b:
-                ws = num_or_none(b["waist_in"], "baseline.waist_in", min_val=15, max_val=100)
-                if ws is None:
-                    baseline.pop("waist_in", None)
-                else:
-                    baseline["waist_in"] = round1(ws)
+            for k, lo, hi in (("weight_kg", 20, 400), ("waist_in", 15, 100)):
+                if k in b:
+                    val = num_or_none(b[k], f"baseline.{k}", min_val=lo, max_val=hi)
+                    set_or_pop(baseline, k, None if val is None else round1(val))
             if "date" in b:
-                if b["date"]:
-                    baseline["date"] = parse_date_only(str(b["date"]), "baseline.date").isoformat()
-                else:
-                    baseline.pop("date", None)
+                set_or_pop(baseline, "date",
+                           parse_date_only(str(b["date"]), "baseline.date").isoformat() if b["date"] else None)
 
         if "targets" in payload:
             t = payload["targets"]
@@ -1893,10 +1890,7 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
             ):
                 if k in t:
                     val = num_or_none(t[k], f"targets.{k}", min_val=lo, max_val=hi)
-                    if val is None:
-                        targets.pop(k, None)
-                    else:
-                        targets[k] = round1(val)
+                    set_or_pop(targets, k, None if val is None else round1(val))
             if "meds" in t:
                 if not isinstance(t["meds"], list):
                     fail("targets.meds must be a JSON list")
@@ -1921,66 +1915,7 @@ def cmd_config(args: argparse.Namespace, root: Path) -> None:
             validate_json_keys(sh, SHEETS_KEYS, "config.sheets")
             for k in ("spreadsheet_id", "title", "url", "permission_rule_id"):
                 if k in sh:
-                    v = clean_text(sh[k], f"sheets.{k}", single_line=True)
-                    if v:
-                        sheets[k] = v
-                    else:
-                        sheets.pop(k, None)
-            if "writer" in sh:
-                wr = sh["writer"]
-                if wr is None or wr == {}:
-                    sheets.pop("writer", None)
-                else:
-                    if not isinstance(wr, dict):
-                        fail("sheets.writer must be a JSON object")
-                    validate_json_keys(wr, SHEETS_WRITER_KEYS, "config.sheets.writer")
-                    wr_clean: dict[str, Any] = {}
-                    for wk in ("provider", "model"):
-                        if wk in wr and wr[wk] is not None:
-                            val = clean_text(wr[wk], f"sheets.writer.{wk}", single_line=True)
-                            if val:
-                                wr_clean[wk] = val
-                    if "options" in wr and wr["options"] is not None:
-                        if not isinstance(wr["options"], dict):
-                            fail("sheets.writer.options must be a JSON object")
-                        for ok, ov in wr["options"].items():
-                            check_secrets(str(ok), "sheets.writer.options")
-                            check_secrets(str(ov), "sheets.writer.options")
-                        if wr["options"]:
-                            wr_clean["options"] = wr["options"]
-                    if wr_clean:
-                        sheets["writer"] = wr_clean
-                    else:
-                        sheets.pop("writer", None)
-
-        if args.baseline_weight is not None:
-            baseline["weight_kg"] = round1(num_or_none(args.baseline_weight, "--baseline-weight", min_val=20, max_val=400))  # type: ignore[arg-type]
-        if args.baseline_waist is not None:
-            baseline["waist_in"] = round1(num_or_none(args.baseline_waist, "--baseline-waist", min_val=15, max_val=100))  # type: ignore[arg-type]
-        if args.baseline_date is not None:
-            baseline["date"] = parse_date_only(args.baseline_date, "--baseline-date").isoformat()
-        if args.protein_min is not None:
-            targets["protein_g_min"] = round1(num_or_none(args.protein_min, "--protein-min", min_val=1, max_val=500))  # type: ignore[arg-type]
-        if args.kcal_max is not None:
-            targets["kcal_max"] = round1(num_or_none(args.kcal_max, "--kcal-max", min_val=500, max_val=10000))  # type: ignore[arg-type]
-        if args.spreadsheet_id is not None:
-            v = clean_text(args.spreadsheet_id, "--spreadsheet-id", single_line=True)
-            if v:
-                sheets["spreadsheet_id"] = v
-            else:
-                sheets.pop("spreadsheet_id", None)
-        if args.sheet_title is not None:
-            v = clean_text(args.sheet_title, "--sheet-title", single_line=True)
-            if v:
-                sheets["title"] = v
-            else:
-                sheets.pop("title", None)
-        if args.sheet_url is not None:
-            v = clean_text(args.sheet_url, "--sheet-url", single_line=True)
-            if v:
-                sheets["url"] = v
-            else:
-                sheets.pop("url", None)
+                    set_or_pop(sheets, k, clean_text(sh[k], f"sheets.{k}", single_line=True))
 
         cfg = {"version": 1, "baseline": baseline, "targets": targets}
         if sheets:
@@ -2128,16 +2063,8 @@ def build_parser() -> argparse.ArgumentParser:
     cf = sub.add_parser("config", help="Read or update baseline and targets (health/config.json)")
     cf_sub = cf.add_subparsers(dest="config_cmd", required=True)
     cf_sub.add_parser("show", help="Show current config")
-    cf_set = cf_sub.add_parser("set", help="Set baseline/targets")
-    cf_set.add_argument("--baseline-weight", type=float)
-    cf_set.add_argument("--baseline-waist", type=float)
-    cf_set.add_argument("--baseline-date")
-    cf_set.add_argument("--protein-min", type=float)
-    cf_set.add_argument("--kcal-max", type=float)
-    cf_set.add_argument("--spreadsheet-id", help="Google Sheet ID for mirroring")
-    cf_set.add_argument("--sheet-title", help="Google Sheet title")
-    cf_set.add_argument("--sheet-url", help="Google Sheet URL")
-    cf_set.add_argument("--json", action="store_true")
+    cf_set = cf_sub.add_parser("set", help="Set baseline, targets, or sheets from JSON on stdin")
+    cf_set.add_argument("--json", action="store_true", required=True, help="Read the JSON payload from stdin")
     return p
 
 

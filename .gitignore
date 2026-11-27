@@ -8,3 +8,4 @@ __pycache__/
 !.env.example
 memory/.write.lock
 tasks/.write.lock
+.thoth-telemetry/

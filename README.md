@@ -2,12 +2,12 @@
 
 Minimal, reusable persistent-agent engine (v2) — clean separation between engine code (this repo, zero PII) and isolated personal/work instance repos.
 
-- **CLIs:** `thoth-mem` (`src/thoth_mem/`), `todo-list` (`src/todo_list/`), and `health-track` (`src/health_track/`), sharing helpers in `src/thoth_core/`. Each is documented in the skill that uses it.
+- **CLIs:** `thoth-mem` (`src/thoth_mem/`), `todo-list` (`src/todo_list/`), `health-track` (`src/health_track/`), and `harness-route` (`src/harness_route/`), sharing helpers in `src/thoth_core/`. Each is documented in the skill that uses it.
 - **Skills** (`skills/<name>/SKILL.md`), a plain library. Each instance links the skills it uses into its own harness folders (e.g. `.agents/skills/`, `.claude/skills/`, `.gemini/skills/`):
   - [`memory`](skills/memory/SKILL.md) — episodic CRUD, topic index, and date-range/keyword recall via `thoth-mem`
   - [`todo-list`](skills/todo-list/SKILL.md) — to-do list CRUD, actionable view, and source-key dedupe via `todo-list`
   - [`health-tracker`](skills/health-tracker/SKILL.md) — typed local health & workout log (meals, weight/waist, CPAP, meds, trainer/solo workouts, slips), staples catalog, weekly HTML check-in, and separate two-way Google Sheet sync via `health-track`
-  - [`harness-selection`](skills/harness-selection/SKILL.md) — choose the primary/fallback harness (native or delegated) for external tools and connectors using an instance's `HARNESSES.md`
+  - [`harness-selection`](skills/harness-selection/SKILL.md) — declarative primary/fallback harness routing, gates, and fallback telemetry from an instance's `harnesses.toml` via `harness-route`
   - [`watch-video`](skills/watch-video/SKILL.md) — transcript + timestamped frame capture to local `work-artifacts/` + episode logging
   - [`prune-video-captures`](skills/prune-video-captures/SKILL.md) — delete finished captures' screenshots, keep transcripts, leave a tombstone + episode
   - [`auto-commit`](skills/auto-commit/SKILL.md) — batch and locally commit touched instance state (`memory/episodes/`, `tasks/`, `health/`, `work-artifacts/`) at turn end
